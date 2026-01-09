@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
       - run: |
           npm install
       - run: |
@@ -24,6 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
       - name: Create dummy plan
         run: echo '{"projected_monthly_cost":100,"currency":"USD"}' > plan.json
       # This would fail because the binary doesn't exist yet in the repo or isn't published
