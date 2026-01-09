@@ -113,8 +113,8 @@
 **Purpose**: Improvements that affect multiple user stories
 
 - [X] T028 [P] Update `README.md` with full documentation and usage examples
-- [ ] T029 [P] Update `ROADMAP.md` based on current implementation
-- [ ] T030 Setup `@vercel/ncc` to compile `src/main.ts` into `dist/index.js`
+- [X] T029 [P] Update `ROADMAP.md` based on current implementation
+- [X] T030 Setup `@vercel/ncc` to compile `src/main.ts` into `dist/index.js`
 - [X] T031 Final validation of all success criteria in `spec.md`
 - [X] T032 Run `quickstart.md` validation on a fresh repository
 

@@ -12,9 +12,53 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      major: ${{ steps.release.outputs.major }}
+      minor: ${{ steps.release.outputs.minor }}
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  build-and-tag:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit dist to release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f dist/
+          git commit -m "chore: build dist for release" || echo "No changes to commit"
+          git tag -f ${{ needs.release-please.outputs.tag_name }}
+          git push -f origin ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Update major version tag
+        run: |
+          git tag -f v${{ needs.release-please.outputs.major }}
+          git push -f origin v${{ needs.release-please.outputs.major }}
+
+      - name: Update major.minor version tag
+        run: |
+          git tag -f v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}
+          git push -f origin v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}

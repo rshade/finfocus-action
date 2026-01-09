@@ -15,7 +15,7 @@ inputs:
     required: false
     default: 'latest'
   install-plugins:
-    description: 'Comma-separated list of plugins to install (e.g., aws-plugin)'
+    description: 'Comma-separated or multiline list of plugins to install (e.g., aws-plugin)'
     required: false
     default: ''
   behavior-on-error:
