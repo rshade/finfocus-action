@@ -1,4 +1,4 @@
-import { checkThreshold } from '../../src/guardrails';
+import { checkThreshold } from '../../src/guardrails.js';
 import * as core from '@actions/core';
 
 jest.mock('@actions/core');

@@ -1,4 +1,4 @@
-import { PulumicostReport } from './types';
+import { PulumicostReport } from './types.js';
 
 export function formatCommentBody(report: PulumicostReport): string {
   const currency = report.currency || 'USD';

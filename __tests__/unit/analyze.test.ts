@@ -1,5 +1,5 @@
 import * as exec from '@actions/exec';
-import { Analyzer } from '../../src/analyze';
+import { Analyzer } from '../../src/analyze.js';
 
 jest.mock('@actions/exec');
 // Removed global fs mock as it breaks @actions/exec internals

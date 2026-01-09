@@ -1,13 +1,12 @@
 <!--
 Sync Impact Report:
-- Version: 1.0.0 (Initial Adoption)
-- Principles Established:
-  - Code Quality & Standards
-  - Testing Standards
-  - User Experience Consistency
-  - Performance Requirements
-  - Documentation Discipline
-- Templates Checked: plan, spec, tasks (Compatible)
+- Version: 1.0.0 → 1.1.0
+- Principles Modified:
+  - Code Quality & Standards: Added prohibition of TODOs and stubs in the code.
+- Added sections: None
+- Removed sections: None
+- Templates requiring updates: ✅ updated (plan, spec, tasks - validated as dynamic)
+- Follow-up TODOs: None
 -->
 
 # finfocus-action Constitution
@@ -15,7 +14,7 @@ Sync Impact Report:
 ## Core Principles
 
 ### I. Code Quality & Standards
-Code MUST be idiomatic, readable, and maintainable. Adhere strictly to language-specific best practices (e.g., Go formatting, linting). Comments should explain 'why', not 'what', and be used sparingly where code is self-explanatory. Complexity should be minimized; prefer simple, explicit logic over clever, obscure solutions.
+Code MUST be idiomatic, readable, and maintainable. Adhere strictly to language-specific best practices (e.g., Go formatting, linting). Comments should explain 'why', not 'what', and be used sparingly where code is self-explanatory. Complexity should be minimized; prefer simple, explicit logic over clever, obscure solutions. Creating TODOs or stubs in the code is strictly forbidden; all tasks must be fully implemented to be considered complete.
 
 ### II. Testing Standards
 Comprehensive test coverage is MANDATORY. Unit tests MUST cover business logic, while integration tests MUST verify workflows. Tests must be reliable, deterministic, and independent. Test-Driven Development (TDD) is encouraged. Code without tests is considered broken.
@@ -46,4 +45,4 @@ Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUS
 
 This Constitution governs all development within the `finfocus-action` project. Amendments require a formal version bump, documented rationale, and team consensus. All pull requests and code reviews MUST verify compliance with these principles.
 
-**Version**: 1.0.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-08
+**Version**: 1.1.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-09

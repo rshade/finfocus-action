@@ -1,6 +1,6 @@
 import * as exec from '@actions/exec';
 import * as core from '@actions/core';
-import { IPluginManager } from './types';
+import { IPluginManager } from './types.js';
 
 export class PluginManager implements IPluginManager {
   async installPlugins(plugins: string[]): Promise<void> {

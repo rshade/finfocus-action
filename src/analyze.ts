@@ -3,7 +3,7 @@ import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { IAnalyzer, PulumicostReport } from './types';
+import { IAnalyzer, PulumicostReport } from './types.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string): Promise<PulumicostReport> {

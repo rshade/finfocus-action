@@ -2,7 +2,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as core from '@actions/core';
 import * as tc from '@actions/tool-cache';
-import { IInstaller } from './types';
+import { IInstaller } from './types.js';
 
 export class Installer implements IInstaller {
   async install(version: string): Promise<string> {
