@@ -19,6 +19,9 @@
       "json",
       "node"
     ],
+    "moduleNameMapper": {
+      "^(\\.\\.?/.+)\\.js$": "$1"
+    },
     "testMatch": [
       "**/__tests__/**/*.test.ts"
     ],

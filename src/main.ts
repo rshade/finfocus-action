@@ -1,9 +1,9 @@
 import * as core from '@actions/core';
-import { ActionConfiguration } from './types';
-import { Installer } from './install';
-import { PluginManager } from './plugins';
-import { Analyzer } from './analyze';
-import { Commenter } from './comment';
+import { ActionConfiguration } from './types.js';
+import { Installer } from './install.js';
+import { PluginManager } from './plugins.js';
+import { Analyzer } from './analyze.js';
+import { Commenter } from './comment.js';
 
 async function run(): Promise<void> {
   try {
@@ -54,7 +54,7 @@ async function run(): Promise<void> {
 
     // 6. Handle Guardrails
     if (config.threshold && report.diff) {
-      const { checkThreshold } = await import('./guardrails');
+      const { checkThreshold } = await import('./guardrails.js');
       const failed = checkThreshold(config.threshold, report.diff.monthly_cost_change, report.currency);
       
       if (failed) {

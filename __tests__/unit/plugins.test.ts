@@ -1,6 +1,6 @@
 import * as exec from '@actions/exec';
 import * as core from '@actions/core';
-import { PluginManager } from '../../src/plugins';
+import { PluginManager } from '../../src/plugins.js';
 
 jest.mock('@actions/exec');
 jest.mock('@actions/core');

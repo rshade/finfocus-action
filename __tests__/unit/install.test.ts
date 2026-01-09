@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as tc from '@actions/tool-cache';
 import * as core from '@actions/core';
-import { Installer } from '../../src/install';
+import { Installer } from '../../src/install.js';
 
 jest.mock('os');
 jest.mock('@actions/tool-cache');

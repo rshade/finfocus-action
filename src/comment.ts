@@ -1,7 +1,7 @@
 import * as github from '@actions/github';
 import * as core from '@actions/core';
-import { ICommenter, PulumicostReport } from './types';
-import { formatCommentBody } from './formatter';
+import { ICommenter, PulumicostReport } from './types.js';
+import { formatCommentBody } from './formatter.js';
 
 export class Commenter implements ICommenter {
   private readonly marker = '<!-- pulumicost-action-comment -->';

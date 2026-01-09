@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as core from '@actions/core';
-import { Analyzer } from '../../src/analyze';
+import { Analyzer } from '../../src/analyze.js';
 
 const actualFs = jest.requireActual('fs');
 jest.mock('fs', () => ({
