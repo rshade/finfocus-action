@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: |
           npm install
       - run: |
@@ -23,7 +23,7 @@ jobs:
   test: # Integration test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Create dummy plan
         run: echo '{"projected_monthly_cost":100,"currency":"USD"}' > plan.json
       # This would fail because the binary doesn't exist yet in the repo or isn't published
