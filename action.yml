@@ -1,0 +1,54 @@
+name: 'finfocus-action'
+description: 'Integrate pulumicost-core into CI/CD workflows for cloud cost estimates'
+author: 'rshade'
+inputs:
+  pulumi-plan-json:
+    description: 'Path to the pulumi preview --json output file'
+    required: true
+    default: 'plan.json'
+  github-token:
+    description: 'GitHub Token for posting comments'
+    required: false
+    default: ${{ github.token }}
+  pulumicost-version:
+    description: 'Version of pulumicost to install'
+    required: false
+    default: 'latest'
+  install-plugins:
+    description: 'Comma-separated list of plugins to install (e.g., aws-plugin)'
+    required: false
+    default: ''
+  behavior-on-error:
+    description: 'Behavior when an error occurs (fail, warn, silent)'
+    required: false
+    default: 'fail'
+  post-comment:
+    description: 'Whether to post a comment to the PR'
+    required: false
+    default: 'true'
+  fail-on-cost-increase:
+    description: 'Threshold string (e.g., "100USD") to fail if diff exceeds'
+    required: false
+    default: ''
+  analyzer-mode:
+    description: 'If true, sets up environment for pulumi preview to use as analyzer'
+    required: false
+    default: 'false'
+outputs:
+  total-monthly-cost:
+    description: 'The absolute projected monthly cost'
+  cost-diff:
+    description: 'The difference in cost compared to the base state'
+  currency:
+    description: 'The currency code (e.g., USD)'
+  report-json-path:
+    description: 'Path to the generated full JSON report'
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Run finfocus-action'
+      run: node ${{ github.action_path }}/dist/index.js
+      shell: bash
+branding:
+  icon: 'dollar-sign'
+  color: 'blue'
