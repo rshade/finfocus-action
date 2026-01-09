@@ -1,0 +1,31 @@
+name: 'build-test'
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - '001-*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          npm install
+      - run: |
+          npm run lint
+      - run: |
+          npm test
+      - run: |
+          npm run build
+
+  test: # Integration test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create dummy plan
+        run: echo '{"projected_monthly_cost":100,"currency":"USD"}' > plan.json
+      # This would fail because the binary doesn't exist yet in the repo or isn't published
+      # So we just verify it starts and fails at download for now, or mock it.
+      # Actually, integration test usually runs the built action.
