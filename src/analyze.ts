@@ -27,7 +27,7 @@ export class Analyzer implements IAnalyzer {
       }
       throw new Error(
         `Pulumi plan file not found: ${planPath}. ` +
-          `Make sure to run 'pulumi preview --json > ${planPath}' first.`
+          `Make sure to run 'pulumi preview --json > ${planPath}' first.`,
       );
     }
 
@@ -42,7 +42,7 @@ export class Analyzer implements IAnalyzer {
 
     const planContent = fs.readFileSync(planPath, 'utf8');
     core.info(`  Plan file content length: ${planContent.length} chars`);
-    
+
     if (planContent.length < 5000) {
       core.info(`  Plan file content:\n${planContent}`);
     } else {
@@ -55,9 +55,11 @@ export class Analyzer implements IAnalyzer {
       core.info(`  Plan file is valid JSON`);
     } catch (parseErr) {
       core.error(`  Plan file is NOT valid JSON`);
-      core.error(`  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+      core.error(
+        `  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+      );
       throw new Error(
-        `Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+        `Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
       );
     }
 
@@ -94,7 +96,7 @@ export class Analyzer implements IAnalyzer {
       throw new Error(
         `pulumicost analysis failed with exit code ${output.exitCode}.\n` +
           `Stderr: ${output.stderr}\n` +
-          `Stdout: ${output.stdout}`
+          `Stdout: ${output.stdout}`,
       );
     }
 
@@ -116,16 +118,16 @@ export class Analyzer implements IAnalyzer {
       throw new Error(
         `Failed to parse pulumicost JSON output.\n` +
           `Error: ${err instanceof Error ? err.message : String(err)}\n` +
-          `Raw output: ${output.stdout.substring(0, 500)}...`
+          `Raw output: ${output.stdout.substring(0, 500)}...`,
       );
     }
   }
 
   async setupAnalyzerMode(): Promise<void> {
     core.info(`=== Analyzer: Setting up analyzer mode ===`);
-    
+
     core.info(`  Getting pulumicost version...`);
-    const versionOutput = await exec.getExecOutput('pulumicost', ['version'], { 
+    const versionOutput = await exec.getExecOutput('pulumicost', ['version'], {
       silent: false,
       ignoreReturnCode: true,
     });
@@ -133,11 +135,16 @@ export class Analyzer implements IAnalyzer {
     if (versionOutput.stderr) {
       core.info(`  Version stderr: ${versionOutput.stderr.trim()}`);
     }
-    
+
     const version = versionOutput.stdout.trim().match(/v?[\d.]+/)?.[0] || 'v0.1.0';
     core.info(`  Extracted version: ${version}`);
 
-    const pluginDir = path.join(os.homedir(), '.pulumi', 'plugins', `analyzer-pulumicost-${version}`);
+    const pluginDir = path.join(
+      os.homedir(),
+      '.pulumi',
+      'plugins',
+      `analyzer-pulumicost-${version}`,
+    );
     core.info(`  Plugin directory: ${pluginDir}`);
 
     if (!fs.existsSync(pluginDir)) {
@@ -147,7 +154,7 @@ export class Analyzer implements IAnalyzer {
 
     const pulumicostBinary = await this.findBinary('pulumicost');
     core.info(`  Source binary: ${pulumicostBinary}`);
-    
+
     const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
     core.info(`  Target binary: ${analyzerBinaryPath}`);
 
@@ -167,9 +174,9 @@ export class Analyzer implements IAnalyzer {
         // Parse YAML to object
         const doc = YAML.parseDocument(yamlContent);
         let modified = false;
-        
-        let analyzers = doc.get('analyzers');
-        
+
+        const analyzers = doc.get('analyzers');
+
         if (!analyzers) {
           core.info(`  'analyzers' section not found. Creating...`);
           doc.set('analyzers', ['pulumicost']);
@@ -178,7 +185,7 @@ export class Analyzer implements IAnalyzer {
           // If it's not an array or sequence, we might have issues, but assuming valid Pulumi.yaml
           // YAML.parseDocument returns a Node. We can work with JS object or use direct methods.
           const analyzersJS = doc.toJS().analyzers;
-          
+
           if (Array.isArray(analyzersJS)) {
             if (!analyzersJS.includes('pulumicost')) {
               core.info(`  'pulumicost' missing from 'analyzers'. Appending...`);
@@ -188,11 +195,11 @@ export class Analyzer implements IAnalyzer {
               core.info(`  'pulumicost' already present in 'analyzers'.`);
             }
           } else {
-             // Handle case where analyzers exists but isn't an array (unlikely for valid Pulumi)
-             core.warning(`  'analyzers' section exists but is not a list. Skipping update.`);
+            // Handle case where analyzers exists but isn't an array (unlikely for valid Pulumi)
+            core.warning(`  'analyzers' section exists but is not a list. Skipping update.`);
           }
         }
-        
+
         if (modified) {
           fs.writeFileSync(pulumiYamlPath, doc.toString());
           core.info(`  Pulumi.yaml updated successfully.`);
@@ -200,22 +207,26 @@ export class Analyzer implements IAnalyzer {
           core.info(`  No changes needed for Pulumi.yaml.`);
         }
       } catch (e) {
-        core.warning(`  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`);
+        core.warning(
+          `  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     } else {
-      core.warning(`  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'analyzers: [pulumicost]' to your project configuration.`);
+      core.warning(
+        `  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'analyzers: [pulumicost]' to your project configuration.`,
+      );
     }
   }
 
   private async findBinary(name: string): Promise<string> {
     core.info(`  Finding binary: ${name}`);
-    const output = await exec.getExecOutput('which', [name], { 
+    const output = await exec.getExecOutput('which', [name], {
       silent: false,
       ignoreReturnCode: true,
     });
     core.info(`  which exit code: ${output.exitCode}`);
     core.info(`  which output: ${output.stdout.trim()}`);
-    
+
     if (output.exitCode !== 0) {
       core.error(`  Binary not found in PATH`);
       throw new Error(`Could not find ${name} binary in PATH`);
