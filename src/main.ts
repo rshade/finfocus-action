@@ -39,19 +39,19 @@ function logEnvironment(): void {
 function logInputs(): void {
   core.info('=== Action Inputs (raw) ===');
   const inputs = [
-    'pulumi-plan-json',
-    'github-token', 
-    'pulumicost-version',
-    'install-plugins',
-    'behavior-on-error',
-    'post-comment',
-    'fail-on-cost-increase',
-    'analyzer-mode'
+    'pulumi_plan_json',
+    'github_token', 
+    'pulumicost_version',
+    'install_plugins',
+    'behavior_on_error',
+    'post_comment',
+    'fail_on_cost_increase',
+    'analyzer_mode'
   ];
   
   for (const input of inputs) {
     const value = core.getInput(input);
-    if (input === 'github-token') {
+    if (input === 'github_token') {
       core.info(`  ${input}: ${value ? '[PROVIDED]' : '[EMPTY]'}`);
     } else {
       core.info(`  ${input}: "${value}"`);
@@ -71,16 +71,16 @@ async function run(): Promise<void> {
 
     core.info('=== Parsing Configuration ===');
     
-    const pulumiPlanJsonPath = core.getInput('pulumi-plan-json') || 'plan.json';
+    const pulumiPlanJsonPath = core.getInput('pulumi_plan_json') || 'plan.json';
     core.info(`  pulumi-plan-json resolved to: "${pulumiPlanJsonPath}"`);
     
-    const githubToken = core.getInput('github-token');
+    const githubToken = core.getInput('github_token');
     core.info(`  github-token: ${githubToken ? '[PROVIDED]' : '[EMPTY]'}`);
     
-    const pulumicostVersion = core.getInput('pulumicost-version') || 'latest';
+    const pulumicostVersion = core.getInput('pulumicost_version') || 'latest';
     core.info(`  pulumicost-version resolved to: "${pulumicostVersion}"`);
     
-    const installPluginsRaw = core.getInput('install-plugins');
+    const installPluginsRaw = core.getInput('install_plugins');
     core.info(`  install-plugins raw: "${installPluginsRaw}"`);
     const installPlugins = installPluginsRaw
       .split(',')
@@ -88,19 +88,19 @@ async function run(): Promise<void> {
       .filter((p) => p.length > 0);
     core.info(`  install-plugins parsed: [${installPlugins.map(p => `"${p}"`).join(', ')}]`);
     
-    const behaviorOnErrorRaw = core.getInput('behavior-on-error');
+    const behaviorOnErrorRaw = core.getInput('behavior_on_error');
     const behaviorOnError = (behaviorOnErrorRaw as 'fail' | 'warn' | 'silent') || 'fail';
     core.info(`  behavior-on-error: "${behaviorOnError}"`);
     
-    const postCommentRaw = core.getInput('post-comment');
+    const postCommentRaw = core.getInput('post_comment');
     const postComment = parseBoolean(postCommentRaw, true);
     core.info(`  post-comment raw: "${postCommentRaw}" -> parsed: ${postComment}`);
     
-    const thresholdRaw = core.getInput('fail-on-cost-increase');
+    const thresholdRaw = core.getInput('fail_on_cost_increase');
     const threshold = thresholdRaw || null;
     core.info(`  fail-on-cost-increase: "${threshold}"`);
     
-    const analyzerModeRaw = core.getInput('analyzer-mode');
+    const analyzerModeRaw = core.getInput('analyzer_mode');
     const analyzerMode = parseBoolean(analyzerModeRaw, false);
     core.info(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
 
