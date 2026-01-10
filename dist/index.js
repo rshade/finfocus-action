@@ -34669,6 +34669,8 @@ var __webpack_exports__ = {};
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js
 var core = __nccwpck_require__(7484);
+// EXTERNAL MODULE: external "fs"
+var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: external "os"
 var external_os_ = __nccwpck_require__(857);
 // EXTERNAL MODULE: external "path"
@@ -34683,91 +34685,162 @@ var exec = __nccwpck_require__(5236);
 
 
 
+
 const REPO_OWNER = 'rshade';
 const REPO_NAME = 'pulumicost-core';
 class Installer {
     async install(version) {
         const platform = this.getPlatform();
         const arch = this.getArch();
-        core.info(`Installing pulumicost version ${version} for ${platform}/${arch}`);
-        core.debug(`Detected platform: ${external_os_.platform()}, arch: ${external_os_.arch()}`);
-        core.debug(`Mapped to: ${platform}/${arch}`);
+        core.info(`=== Installer: Starting installation ===`);
+        core.info(`  Requested version: ${version}`);
+        core.info(`  Detected OS platform: ${external_os_.platform()}`);
+        core.info(`  Detected OS arch: ${external_os_.arch()}`);
+        core.info(`  Mapped platform: ${platform}`);
+        core.info(`  Mapped arch: ${arch}`);
         const resolvedVersion = await this.resolveVersion(version);
-        core.info(`Resolved version: ${resolvedVersion}`);
+        core.info(`  Resolved version: ${resolvedVersion}`);
+        core.info(`=== Checking tool cache ===`);
         const cached = tool_cache.find('pulumicost-core', resolvedVersion, arch);
         if (cached) {
-            core.info(`Cache hit: Found pulumicost at ${cached}`);
+            core.info(`  Cache HIT: Found pulumicost at ${cached}`);
             core.addPath(cached);
-            return external_path_.join(cached, this.getBinaryName());
+            const binaryPath = external_path_.join(cached, this.getBinaryName());
+            core.info(`  Binary path: ${binaryPath}`);
+            core.info(`  Binary exists: ${external_fs_.existsSync(binaryPath)}`);
+            await this.verifyInstallation();
+            return binaryPath;
         }
-        core.debug('Cache miss, downloading...');
+        core.info(`  Cache MISS: Will download`);
         const ext = platform === 'windows' ? 'zip' : 'tar.gz';
         const assetName = `pulumicost-core-v${resolvedVersion}-${platform}-${arch}.${ext}`;
         const downloadUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/v${resolvedVersion}/${assetName}`;
-        core.info(`Downloading from ${downloadUrl}`);
+        core.info(`=== Download Details ===`);
+        core.info(`  Asset name: ${assetName}`);
+        core.info(`  Download URL: ${downloadUrl}`);
         let downloadPath;
         try {
+            core.info(`  Starting download...`);
+            const downloadStart = Date.now();
             downloadPath = await tool_cache.downloadTool(downloadUrl);
-            core.debug(`Downloaded to: ${downloadPath}`);
+            core.info(`  Download completed in ${Date.now() - downloadStart}ms`);
+            core.info(`  Downloaded to: ${downloadPath}`);
+            const downloadStats = external_fs_.statSync(downloadPath);
+            core.info(`  Downloaded file size: ${downloadStats.size} bytes`);
         }
         catch (err) {
+            core.error(`  Download FAILED`);
+            core.error(`  Error type: ${err instanceof Error ? err.name : typeof err}`);
+            core.error(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
+            if (err instanceof Error && err.stack) {
+                core.error(`  Stack: ${err.stack}`);
+            }
             throw new Error(`Failed to download pulumicost from ${downloadUrl}. ` +
                 `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
                 `Error: ${err instanceof Error ? err.message : String(err)}`);
         }
         let extractPath;
         try {
+            core.info(`=== Extracting archive ===`);
+            core.info(`  Archive type: ${ext}`);
+            const extractStart = Date.now();
             if (platform === 'windows') {
                 extractPath = await tool_cache.extractZip(downloadPath);
             }
             else {
                 extractPath = await tool_cache.extractTar(downloadPath);
             }
-            core.debug(`Extracted to: ${extractPath}`);
+            core.info(`  Extraction completed in ${Date.now() - extractStart}ms`);
+            core.info(`  Extracted to: ${extractPath}`);
+            const extractedFiles = external_fs_.readdirSync(extractPath);
+            core.info(`  Extracted files: ${extractedFiles.join(', ')}`);
         }
         catch (err) {
+            core.error(`  Extraction FAILED`);
+            core.error(`  Error: ${err instanceof Error ? err.message : String(err)}`);
             throw new Error(`Failed to extract pulumicost archive. Error: ${err instanceof Error ? err.message : String(err)}`);
         }
+        core.info(`=== Caching binary ===`);
         const cachedPath = await tool_cache.cacheDir(extractPath, 'pulumicost-core', resolvedVersion, arch);
-        core.debug(`Cached to: ${cachedPath}`);
+        core.info(`  Cached to: ${cachedPath}`);
         core.addPath(cachedPath);
+        core.info(`  Added to PATH`);
         const binaryPath = external_path_.join(cachedPath, this.getBinaryName());
-        core.debug(`Binary path: ${binaryPath}`);
+        core.info(`  Binary path: ${binaryPath}`);
+        core.info(`  Binary exists: ${external_fs_.existsSync(binaryPath)}`);
         if (platform !== 'windows') {
+            core.info(`  Setting executable permission...`);
             await exec.exec('chmod', ['+x', binaryPath]);
+            core.info(`  chmod +x completed`);
         }
         await this.verifyInstallation();
-        core.info(`Successfully installed pulumicost to ${binaryPath}`);
+        core.info(`=== Installation complete ===`);
+        core.info(`  Final binary path: ${binaryPath}`);
         return binaryPath;
     }
     async verifyInstallation() {
+        core.info(`=== Verifying installation ===`);
         try {
+            core.info(`  Running: pulumicost --version`);
             const output = await exec.getExecOutput('pulumicost', ['--version'], {
-                silent: true,
+                silent: false,
+                ignoreReturnCode: true,
             });
-            core.debug(`pulumicost --version output: ${output.stdout.trim()}`);
+            core.info(`  Exit code: ${output.exitCode}`);
+            core.info(`  Stdout: ${output.stdout.trim()}`);
+            if (output.stderr) {
+                core.info(`  Stderr: ${output.stderr.trim()}`);
+            }
+            if (output.exitCode !== 0) {
+                core.warning(`  pulumicost --version returned non-zero exit code: ${output.exitCode}`);
+            }
+            else {
+                core.info(`  Verification successful`);
+            }
         }
         catch (err) {
-            core.warning(`Could not verify pulumicost installation: ${err instanceof Error ? err.message : String(err)}`);
+            core.warning(`  Verification FAILED`);
+            core.warning(`  Error: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        core.info(`  Checking PATH for pulumicost...`);
+        try {
+            const whichOutput = await exec.getExecOutput('which', ['pulumicost'], {
+                silent: true,
+                ignoreReturnCode: true,
+            });
+            core.info(`  which pulumicost: ${whichOutput.stdout.trim() || '(not found)'}`);
+        }
+        catch {
+            core.info(`  which command failed`);
         }
     }
     async resolveVersion(version) {
         if (version !== 'latest') {
-            return version.replace(/^v/, '');
+            const cleaned = version.replace(/^v/, '');
+            core.info(`  Using specified version: ${cleaned}`);
+            return cleaned;
         }
-        core.info('Fetching latest release version...');
-        const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`, {
+        core.info(`=== Resolving 'latest' version ===`);
+        const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+        core.info(`  API URL: ${apiUrl}`);
+        const response = await fetch(apiUrl, {
             headers: {
                 Accept: 'application/vnd.github.v3+json',
                 'User-Agent': 'finfocus-action',
             },
         });
+        core.info(`  Response status: ${response.status} ${response.statusText}`);
         if (!response.ok) {
+            const body = await response.text();
+            core.error(`  API response body: ${body.substring(0, 500)}`);
             throw new Error(`Failed to fetch latest release: ${response.status} ${response.statusText}`);
         }
         const data = (await response.json());
-        const tagName = data.tag_name;
-        return tagName.replace(/^v/, '');
+        core.info(`  Release tag_name: ${data.tag_name}`);
+        core.info(`  Release name: ${data.name || '(unnamed)'}`);
+        const cleanedVersion = data.tag_name.replace(/^v/, '');
+        core.info(`  Cleaned version: ${cleanedVersion}`);
+        return cleanedVersion;
     }
     getPlatform() {
         const p = external_os_.platform();
@@ -34793,50 +34866,105 @@ class Installer {
 ;// CONCATENATED MODULE: ./src/plugins.ts
 
 
+
+
+
 class PluginManager {
     async installPlugins(plugins) {
+        core.info(`=== PluginManager: Starting plugin installation ===`);
+        core.info(`  Plugins to install: [${plugins.map(p => `"${p}"`).join(', ')}]`);
         if (plugins.length === 0) {
-            core.debug('No plugins to install');
+            core.info(`  No plugins to install`);
             return;
         }
-        core.info(`Installing ${plugins.length} plugin(s): ${plugins.join(', ')}`);
-        for (const plugin of plugins) {
+        const pluginDir = external_path_.join(external_os_.homedir(), '.pulumicost', 'plugins');
+        core.info(`  Plugin directory: ${pluginDir}`);
+        core.info(`  Plugin directory exists: ${external_fs_.existsSync(pluginDir)}`);
+        for (let i = 0; i < plugins.length; i++) {
+            const plugin = plugins[i];
             const trimmedPlugin = plugin.trim();
-            if (trimmedPlugin) {
-                core.info(`Installing plugin: ${trimmedPlugin}`);
-                core.debug(`Running: pulumicost plugin install ${trimmedPlugin}`);
-                try {
-                    const output = await exec.getExecOutput('pulumicost', ['plugin', 'install', trimmedPlugin], { silent: false, ignoreReturnCode: true });
-                    if (output.exitCode !== 0) {
-                        throw new Error(`Failed to install plugin ${trimmedPlugin}.\n` +
-                            `Exit code: ${output.exitCode}\n` +
-                            `Stderr: ${output.stderr}`);
-                    }
-                    core.debug(`Plugin ${trimmedPlugin} installed successfully`);
+            core.info(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
+            if (!trimmedPlugin) {
+                core.info(`  Skipping empty plugin name`);
+                continue;
+            }
+            const args = ['plugin', 'install', trimmedPlugin];
+            core.info(`  Command: pulumicost ${args.join(' ')}`);
+            try {
+                const installStart = Date.now();
+                const output = await exec.getExecOutput('pulumicost', args, {
+                    silent: false,
+                    ignoreReturnCode: true,
+                });
+                core.info(`  Installation took: ${Date.now() - installStart}ms`);
+                core.info(`  Exit code: ${output.exitCode}`);
+                core.info(`  Stdout length: ${output.stdout.length} chars`);
+                if (output.stdout) {
+                    core.info(`  Stdout:\n${output.stdout}`);
                 }
-                catch (err) {
-                    throw new Error(`Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`);
+                if (output.stderr) {
+                    core.info(`  Stderr:\n${output.stderr}`);
+                }
+                if (output.exitCode !== 0) {
+                    core.error(`  Plugin installation FAILED with exit code ${output.exitCode}`);
+                    throw new Error(`Failed to install plugin ${trimmedPlugin}.\n` +
+                        `Exit code: ${output.exitCode}\n` +
+                        `Stderr: ${output.stderr}\n` +
+                        `Stdout: ${output.stdout}`);
+                }
+                core.info(`  Plugin "${trimmedPlugin}" installed successfully`);
+            }
+            catch (err) {
+                core.error(`  Plugin installation threw exception`);
+                core.error(`  Error type: ${err instanceof Error ? err.name : typeof err}`);
+                core.error(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
+                if (err instanceof Error && err.stack) {
+                    core.error(`  Stack: ${err.stack}`);
+                }
+                throw new Error(`Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        }
+        core.info(`=== Listing installed plugins ===`);
+        await this.listInstalledPlugins();
+        core.info(`=== Checking plugin directory contents ===`);
+        if (external_fs_.existsSync(pluginDir)) {
+            const contents = external_fs_.readdirSync(pluginDir);
+            core.info(`  Plugin directory contents: ${contents.join(', ') || '(empty)'}`);
+            for (const item of contents) {
+                const itemPath = external_path_.join(pluginDir, item);
+                const stat = external_fs_.statSync(itemPath);
+                if (stat.isDirectory()) {
+                    const subContents = external_fs_.readdirSync(itemPath);
+                    core.info(`    ${item}/ -> ${subContents.join(', ')}`);
+                }
+                else {
+                    core.info(`    ${item} (${stat.size} bytes)`);
                 }
             }
         }
-        await this.listInstalledPlugins();
+        else {
+            core.info(`  Plugin directory does not exist`);
+        }
     }
     async listInstalledPlugins() {
         try {
-            core.debug('Listing installed plugins...');
+            core.info(`  Running: pulumicost plugin list`);
             const output = await exec.getExecOutput('pulumicost', ['plugin', 'list'], {
-                silent: true,
+                silent: false,
+                ignoreReturnCode: true,
             });
-            core.debug(`Installed plugins:\n${output.stdout}`);
+            core.info(`  Exit code: ${output.exitCode}`);
+            core.info(`  Stdout:\n${output.stdout || '(empty)'}`);
+            if (output.stderr) {
+                core.info(`  Stderr:\n${output.stderr}`);
+            }
         }
         catch (err) {
-            core.debug(`Could not list plugins: ${err instanceof Error ? err.message : String(err)}`);
+            core.warning(`  Could not list plugins: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 }
 
-// EXTERNAL MODULE: external "fs"
-var external_fs_ = __nccwpck_require__(9896);
 ;// CONCATENATED MODULE: ./src/analyze.ts
 
 
@@ -34845,65 +34973,141 @@ var external_fs_ = __nccwpck_require__(9896);
 
 class Analyzer {
     async runAnalysis(planPath) {
-        core.info(`Running cost analysis for ${planPath}`);
+        core.info(`=== Analyzer: Running cost analysis ===`);
+        core.info(`  Plan file path: ${planPath}`);
+        core.info(`  Absolute path: ${external_path_.resolve(planPath)}`);
         if (!external_fs_.existsSync(planPath)) {
+            core.error(`  Plan file NOT FOUND: ${planPath}`);
+            core.info(`  Current working directory: ${process.cwd()}`);
+            core.info(`  Directory contents:`);
+            const files = external_fs_.readdirSync('.');
+            for (const file of files) {
+                try {
+                    const stat = external_fs_.statSync(file);
+                    core.info(`    ${file} (${stat.isDirectory() ? 'directory' : stat.size + ' bytes'})`);
+                }
+                catch {
+                    core.info(`    ${file} (stat failed)`);
+                }
+            }
             throw new Error(`Pulumi plan file not found: ${planPath}. ` +
                 `Make sure to run 'pulumi preview --json > ${planPath}' first.`);
         }
-        const planSize = external_fs_.statSync(planPath).size;
-        core.debug(`Plan file size: ${planSize} bytes`);
-        if (planSize === 0) {
+        const planStats = external_fs_.statSync(planPath);
+        core.info(`  Plan file size: ${planStats.size} bytes`);
+        core.info(`  Plan file modified: ${planStats.mtime.toISOString()}`);
+        if (planStats.size === 0) {
+            core.error(`  Plan file is EMPTY`);
             throw new Error(`Pulumi plan file is empty: ${planPath}`);
         }
+        const planContent = external_fs_.readFileSync(planPath, 'utf8');
+        core.info(`  Plan file content length: ${planContent.length} chars`);
+        if (planContent.length < 5000) {
+            core.info(`  Plan file content:\n${planContent}`);
+        }
+        else {
+            core.info(`  Plan file first 2000 chars:\n${planContent.substring(0, 2000)}`);
+            core.info(`  ... (truncated, total ${planContent.length} chars)`);
+        }
+        try {
+            JSON.parse(planContent);
+            core.info(`  Plan file is valid JSON`);
+        }
+        catch (parseErr) {
+            core.error(`  Plan file is NOT valid JSON`);
+            core.error(`  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            throw new Error(`Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+        }
         const args = ['cost', 'projected', '--pulumi-json', planPath, '--output', 'json'];
-        core.debug(`Running: pulumicost ${args.join(' ')}`);
+        core.info(`=== Running pulumicost command ===`);
+        core.info(`  Command: pulumicost ${args.join(' ')}`);
+        const analysisStart = Date.now();
         const output = await exec.getExecOutput('pulumicost', args, {
             silent: false,
             ignoreReturnCode: true,
         });
-        core.debug(`Exit code: ${output.exitCode}`);
-        core.debug(`Stdout length: ${output.stdout.length}`);
-        core.debug(`Stderr: ${output.stderr}`);
+        core.info(`  Execution took: ${Date.now() - analysisStart}ms`);
+        core.info(`  Exit code: ${output.exitCode}`);
+        core.info(`  Stdout length: ${output.stdout.length} chars`);
+        core.info(`  Stderr length: ${output.stderr.length} chars`);
+        if (output.stdout) {
+            if (output.stdout.length < 5000) {
+                core.info(`  Stdout:\n${output.stdout}`);
+            }
+            else {
+                core.info(`  Stdout (first 2000 chars):\n${output.stdout.substring(0, 2000)}`);
+                core.info(`  ... (truncated, total ${output.stdout.length} chars)`);
+            }
+        }
+        if (output.stderr) {
+            core.info(`  Stderr:\n${output.stderr}`);
+        }
         if (output.exitCode !== 0) {
+            core.error(`  pulumicost command FAILED with exit code ${output.exitCode}`);
             throw new Error(`pulumicost analysis failed with exit code ${output.exitCode}.\n` +
                 `Stderr: ${output.stderr}\n` +
                 `Stdout: ${output.stdout}`);
         }
+        core.info(`=== Parsing analysis output ===`);
         try {
             const report = JSON.parse(output.stdout);
-            core.debug(`Parsed report: ${JSON.stringify(report, null, 2)}`);
+            core.info(`  Parsed successfully`);
+            core.info(`  Report fields: ${Object.keys(report).join(', ')}`);
+            core.info(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
+            core.info(`  currency: ${report.currency}`);
+            if (report.diff) {
+                core.info(`  diff.monthly_cost_change: ${report.diff.monthly_cost_change}`);
+            }
             return report;
         }
         catch (err) {
+            core.error(`  Failed to parse pulumicost output as JSON`);
+            core.error(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
+            core.error(`  Raw output (first 1000 chars): ${output.stdout.substring(0, 1000)}`);
             throw new Error(`Failed to parse pulumicost JSON output.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}\n` +
                 `Raw output: ${output.stdout.substring(0, 500)}...`);
         }
     }
     async setupAnalyzerMode() {
-        const analyzerDir = external_path_.join(external_os_.homedir(), '.pulumicost', 'analyzer');
-        core.info(`Setting up analyzer mode in ${analyzerDir}`);
-        core.debug(`Home directory: ${external_os_.homedir()}`);
-        if (!external_fs_.existsSync(analyzerDir)) {
-            external_fs_.mkdirSync(analyzerDir, { recursive: true });
+        core.info(`=== Analyzer: Setting up analyzer mode ===`);
+        core.info(`  Getting pulumicost version...`);
+        const versionOutput = await exec.getExecOutput('pulumicost', ['version'], {
+            silent: false,
+            ignoreReturnCode: true,
+        });
+        core.info(`  Version output: ${versionOutput.stdout.trim()}`);
+        if (versionOutput.stderr) {
+            core.info(`  Version stderr: ${versionOutput.stderr.trim()}`);
         }
-        const policyYaml = `runtime: pulumicost
-name: pulumicost
-version: 0.1.0
-`;
-        external_fs_.writeFileSync(external_path_.join(analyzerDir, 'PulumiPolicy.yaml'), policyYaml);
+        const version = versionOutput.stdout.trim().match(/v?[\d.]+/)?.[0] || 'v0.1.0';
+        core.info(`  Extracted version: ${version}`);
+        const pluginDir = external_path_.join(external_os_.homedir(), '.pulumi', 'plugins', `analyzer-cost-${version}`);
+        core.info(`  Plugin directory: ${pluginDir}`);
+        if (!external_fs_.existsSync(pluginDir)) {
+            core.info(`  Creating plugin directory...`);
+            external_fs_.mkdirSync(pluginDir, { recursive: true });
+        }
         const pulumicostBinary = await this.findBinary('pulumicost');
-        const analyzerBinaryName = 'pulumi-analyzer-policy-pulumicost';
-        const analyzerBinaryPath = external_path_.join(analyzerDir, analyzerBinaryName);
-        core.info(`Copying ${pulumicostBinary} to ${analyzerBinaryPath}`);
+        core.info(`  Source binary: ${pulumicostBinary}`);
+        const analyzerBinaryPath = external_path_.join(pluginDir, 'pulumi-analyzer-cost');
+        core.info(`  Target binary: ${analyzerBinaryPath}`);
+        core.info(`  Copying binary...`);
         external_fs_.copyFileSync(pulumicostBinary, analyzerBinaryPath);
         external_fs_.chmodSync(analyzerBinaryPath, 0o755);
-        core.exportVariable('PULUMI_POLICY_PACK_PATH', analyzerDir);
-        core.info(`Analyzer mode configured. Use 'pulumi preview' to see cost estimates.`);
+        core.info(`  Binary copied and made executable`);
+        core.info(`  Analyzer plugin installed. Add 'analyzers: [cost]' to your Pulumi.yaml to enable.`);
     }
     async findBinary(name) {
-        const output = await exec.getExecOutput('which', [name], { silent: true });
+        core.info(`  Finding binary: ${name}`);
+        const output = await exec.getExecOutput('which', [name], {
+            silent: false,
+            ignoreReturnCode: true,
+        });
+        core.info(`  which exit code: ${output.exitCode}`);
+        core.info(`  which output: ${output.stdout.trim()}`);
         if (output.exitCode !== 0) {
+            core.error(`  Binary not found in PATH`);
             throw new Error(`Could not find ${name} binary in PATH`);
         }
         return output.stdout.trim();
@@ -34983,59 +35187,165 @@ ${formatCommentBody(report)}`;
 
 
 
+
 function parseBoolean(value, defaultValue) {
     if (!value || value.trim() === '')
         return defaultValue;
     const normalized = value.toLowerCase().trim();
     return normalized === 'true' || normalized === 'yes' || normalized === '1';
 }
+function logEnvironment() {
+    core.info('=== Environment Diagnostics ===');
+    core.info(`Node version: ${process.version}`);
+    core.info(`Platform: ${process.platform}`);
+    core.info(`Architecture: ${process.arch}`);
+    core.info(`CWD: ${process.cwd()}`);
+    core.info(`HOME: ${process.env.HOME || process.env.USERPROFILE || 'unknown'}`);
+    core.info(`PATH: ${process.env.PATH?.split(':').slice(0, 5).join(':') || 'unknown'}...`);
+    const relevantEnvVars = Object.keys(process.env)
+        .filter(k => k.startsWith('INPUT_') || k.startsWith('GITHUB_') || k.startsWith('RUNNER_'))
+        .sort();
+    core.info('=== Relevant Environment Variables ===');
+    for (const key of relevantEnvVars) {
+        const value = process.env[key];
+        if (key.includes('TOKEN') || key.includes('SECRET')) {
+            core.info(`  ${key}: [REDACTED]`);
+        }
+        else {
+            core.info(`  ${key}: ${value}`);
+        }
+    }
+}
+function logInputs() {
+    core.info('=== Action Inputs (raw) ===');
+    const inputs = [
+        'pulumi-plan-json',
+        'github-token',
+        'pulumicost-version',
+        'install-plugins',
+        'behavior-on-error',
+        'post-comment',
+        'fail-on-cost-increase',
+        'analyzer-mode'
+    ];
+    for (const input of inputs) {
+        const value = core.getInput(input);
+        if (input === 'github-token') {
+            core.info(`  ${input}: ${value ? '[PROVIDED]' : '[EMPTY]'}`);
+        }
+        else {
+            core.info(`  ${input}: "${value}"`);
+        }
+    }
+}
 async function run() {
+    const startTime = Date.now();
     try {
         core.info('🚀 Starting finfocus-action');
+        core.info(`Timestamp: ${new Date().toISOString()}`);
+        logEnvironment();
+        logInputs();
+        core.info('=== Parsing Configuration ===');
+        const pulumiPlanJsonPath = core.getInput('pulumi-plan-json') || 'plan.json';
+        core.info(`  pulumi-plan-json resolved to: "${pulumiPlanJsonPath}"`);
+        const githubToken = core.getInput('github-token');
+        core.info(`  github-token: ${githubToken ? '[PROVIDED]' : '[EMPTY]'}`);
+        const pulumicostVersion = core.getInput('pulumicost-version') || 'latest';
+        core.info(`  pulumicost-version resolved to: "${pulumicostVersion}"`);
+        const installPluginsRaw = core.getInput('install-plugins');
+        core.info(`  install-plugins raw: "${installPluginsRaw}"`);
+        const installPlugins = installPluginsRaw
+            .split(',')
+            .map((p) => p.trim())
+            .filter((p) => p.length > 0);
+        core.info(`  install-plugins parsed: [${installPlugins.map(p => `"${p}"`).join(', ')}]`);
+        const behaviorOnErrorRaw = core.getInput('behavior-on-error');
+        const behaviorOnError = behaviorOnErrorRaw || 'fail';
+        core.info(`  behavior-on-error: "${behaviorOnError}"`);
+        const postCommentRaw = core.getInput('post-comment');
+        const postComment = parseBoolean(postCommentRaw, true);
+        core.info(`  post-comment raw: "${postCommentRaw}" -> parsed: ${postComment}`);
+        const thresholdRaw = core.getInput('fail-on-cost-increase');
+        const threshold = thresholdRaw || null;
+        core.info(`  fail-on-cost-increase: "${threshold}"`);
+        const analyzerModeRaw = core.getInput('analyzer-mode');
+        const analyzerMode = parseBoolean(analyzerModeRaw, false);
+        core.info(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
         const config = {
-            pulumiPlanJsonPath: core.getInput('pulumi-plan-json') || 'plan.json',
-            githubToken: core.getInput('github-token'),
-            pulumicostVersion: core.getInput('pulumicost-version') || 'latest',
-            installPlugins: core.getInput('install-plugins')
-                .split(',')
-                .map((p) => p.trim())
-                .filter((p) => p.length > 0),
-            behaviorOnError: core.getInput('behavior-on-error') || 'fail',
-            postComment: parseBoolean(core.getInput('post-comment'), true),
-            threshold: core.getInput('fail-on-cost-increase') || null,
-            analyzerMode: parseBoolean(core.getInput('analyzer-mode'), false),
+            pulumiPlanJsonPath,
+            githubToken,
+            pulumicostVersion,
+            installPlugins,
+            behaviorOnError,
+            postComment,
+            threshold,
+            analyzerMode,
         };
-        core.debug('Configuration loaded:');
-        core.debug(`  pulumi-plan-json: ${config.pulumiPlanJsonPath}`);
-        core.debug(`  pulumicost-version: ${config.pulumicostVersion}`);
-        core.debug(`  install-plugins: ${config.installPlugins.join(', ') || '(none)'}`);
-        core.debug(`  behavior-on-error: ${config.behaviorOnError}`);
-        core.debug(`  post-comment: ${config.postComment}`);
-        core.debug(`  fail-on-cost-increase: ${config.threshold || '(none)'}`);
-        core.debug(`  analyzer-mode: ${config.analyzerMode}`);
+        core.info('=== Checking Plan File ===');
+        if (external_fs_.existsSync(config.pulumiPlanJsonPath)) {
+            const stats = external_fs_.statSync(config.pulumiPlanJsonPath);
+            core.info(`  Plan file exists: ${config.pulumiPlanJsonPath}`);
+            core.info(`  Plan file size: ${stats.size} bytes`);
+            if (stats.size > 0 && stats.size < 10000) {
+                const content = external_fs_.readFileSync(config.pulumiPlanJsonPath, 'utf8');
+                core.info(`  Plan file content (first 1000 chars):\n${content.substring(0, 1000)}`);
+            }
+            else if (stats.size === 0) {
+                core.warning('  Plan file is EMPTY!');
+            }
+            else {
+                core.info(`  Plan file too large to display (${stats.size} bytes)`);
+            }
+        }
+        else {
+            core.warning(`  Plan file NOT FOUND: ${config.pulumiPlanJsonPath}`);
+            core.info(`  Current directory contents:`);
+            const files = external_fs_.readdirSync('.');
+            for (const file of files) {
+                const stat = external_fs_.statSync(file);
+                core.info(`    ${file} (${stat.isDirectory() ? 'dir' : stat.size + ' bytes'})`);
+            }
+        }
         const installer = new Installer();
         const pluginManager = new PluginManager();
         const analyzer = new Analyzer();
         const commenter = new Commenter();
+        core.info('');
         core.startGroup('📦 Installing pulumicost');
+        const installStartTime = Date.now();
         const binaryPath = await installer.install(config.pulumicostVersion);
         core.info(`Installed pulumicost at: ${binaryPath}`);
+        core.info(`Installation took: ${Date.now() - installStartTime}ms`);
         core.endGroup();
         if (config.installPlugins.length > 0) {
+            core.info('');
             core.startGroup('🔌 Installing plugins');
+            const pluginStartTime = Date.now();
             await pluginManager.installPlugins(config.installPlugins);
+            core.info(`Plugin installation took: ${Date.now() - pluginStartTime}ms`);
             core.endGroup();
         }
+        else {
+            core.info('No plugins to install (install-plugins is empty)');
+        }
         if (config.analyzerMode) {
+            core.info('');
             core.startGroup('🔍 Setting up Analyzer Mode');
             await analyzer.setupAnalyzerMode();
             core.endGroup();
             core.info('✅ Analyzer mode configured. Run "pulumi preview" to see cost estimates.');
+            core.info(`Total execution time: ${Date.now() - startTime}ms`);
             return;
         }
+        core.info('');
         core.startGroup('💰 Running cost analysis');
+        const analysisStartTime = Date.now();
         const report = await analyzer.runAnalysis(config.pulumiPlanJsonPath);
-        core.debug(`Analysis result: ${JSON.stringify(report, null, 2)}`);
+        core.info(`Analysis took: ${Date.now() - analysisStartTime}ms`);
+        core.info(`Analysis result summary:`);
+        core.info(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
+        core.info(`  currency: ${report.currency}`);
+        core.info(`  diff: ${report.diff ? JSON.stringify(report.diff) : 'null'}`);
         core.endGroup();
         core.setOutput('total-monthly-cost', report.projected_monthly_cost.toString());
         core.setOutput('currency', report.currency);
@@ -35045,11 +35355,18 @@ async function run() {
             core.info(`📈 Cost change: ${report.diff.monthly_cost_change} ${report.currency}`);
         }
         if (config.postComment && config.githubToken) {
+            core.info('');
             core.startGroup('💬 Posting PR comment');
+            const commentStartTime = Date.now();
             await commenter.upsertComment(report, config.githubToken);
+            core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             core.endGroup();
         }
+        else {
+            core.info(`Skipping PR comment (postComment=${config.postComment}, githubToken=${config.githubToken ? 'provided' : 'missing'})`);
+        }
         if (config.threshold && report.diff) {
+            core.info('');
             core.startGroup('🛡️ Checking cost guardrails');
             const { checkThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
             const failed = checkThreshold(config.threshold, report.diff.monthly_cost_change, report.currency);
@@ -35059,23 +35376,33 @@ async function run() {
             core.info(`✅ Cost within threshold: ${config.threshold}`);
             core.endGroup();
         }
+        core.info('');
         core.info('✅ finfocus-action completed successfully');
+        core.info(`Total execution time: ${Date.now() - startTime}ms`);
     }
     catch (error) {
+        core.info('');
+        core.info('=== ERROR OCCURRED ===');
+        core.info(`Total execution time before error: ${Date.now() - startTime}ms`);
         const behavior = core.getInput('behavior-on-error') || 'fail';
+        core.info(`Error behavior setting: ${behavior}`);
         if (error instanceof Error) {
-            core.debug(`Error stack trace: ${error.stack}`);
+            core.info(`Error name: ${error.name}`);
+            core.info(`Error message: ${error.message}`);
+            core.info(`Error stack:\n${error.stack}`);
             if (behavior === 'warn') {
                 core.warning(`⚠️ ${error.message}`);
             }
             else if (behavior === 'silent') {
-                core.debug(`Silent error: ${error.message}`);
+                core.info(`Silent error (not failing): ${error.message}`);
             }
             else {
                 core.setFailed(`❌ ${error.message}`);
             }
         }
         else {
+            core.info(`Unknown error type: ${typeof error}`);
+            core.info(`Error value: ${String(error)}`);
             core.setFailed(`❌ Unknown error: ${String(error)}`);
         }
     }
