@@ -5,22 +5,28 @@ import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
 import { Commenter } from './comment.js';
 
+function parseBoolean(value: string, defaultValue: boolean): boolean {
+  if (!value || value.trim() === '') return defaultValue;
+  const normalized = value.toLowerCase().trim();
+  return normalized === 'true' || normalized === 'yes' || normalized === '1';
+}
+
 async function run(): Promise<void> {
   try {
     core.info('🚀 Starting finfocus-action');
 
     const config: ActionConfiguration = {
-      pulumiPlanJsonPath: core.getInput('pulumi-plan-json'),
+      pulumiPlanJsonPath: core.getInput('pulumi-plan-json') || 'plan.json',
       githubToken: core.getInput('github-token'),
-      pulumicostVersion: core.getInput('pulumicost-version'),
-      installPlugins: core.getMultilineInput('install-plugins')
-        .flatMap((p) => p.split(','))
+      pulumicostVersion: core.getInput('pulumicost-version') || 'latest',
+      installPlugins: core.getInput('install-plugins')
+        .split(',')
         .map((p) => p.trim())
         .filter((p) => p.length > 0),
       behaviorOnError: (core.getInput('behavior-on-error') as 'fail' | 'warn' | 'silent') || 'fail',
-      postComment: core.getBooleanInput('post-comment'),
+      postComment: parseBoolean(core.getInput('post-comment'), true),
       threshold: core.getInput('fail-on-cost-increase') || null,
-      analyzerMode: core.getBooleanInput('analyzer-mode'),
+      analyzerMode: parseBoolean(core.getInput('analyzer-mode'), false),
     };
 
     core.debug('Configuration loaded:');
