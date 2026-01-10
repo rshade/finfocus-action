@@ -2,12 +2,19 @@ import * as os from 'os';
 import * as tc from '@actions/tool-cache';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
+import * as fs from 'fs';
 import { Installer } from '../../src/install.js';
 
 jest.mock('os');
 jest.mock('@actions/tool-cache');
 jest.mock('@actions/core');
 jest.mock('@actions/exec');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  statSync: jest.fn(),
+  readdirSync: jest.fn(),
+  existsSync: jest.fn(),
+}));
 
 global.fetch = jest.fn();
 
@@ -23,6 +30,11 @@ describe('Installer', () => {
       ok: true,
       json: async () => ({ tag_name: 'v0.1.3' }),
     });
+    
+    // Mock fs calls
+    (fs.statSync as jest.Mock).mockReturnValue({ size: 1000 });
+    (fs.readdirSync as jest.Mock).mockReturnValue(['pulumicost']);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
   });
 
   it('should detect linux x64 correctly', async () => {

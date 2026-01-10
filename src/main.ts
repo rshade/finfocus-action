@@ -178,19 +178,32 @@ async function run(): Promise<void> {
     const analysisStartTime = Date.now();
     const report = await analyzer.runAnalysis(config.pulumiPlanJsonPath);
     core.info(`Analysis took: ${Date.now() - analysisStartTime}ms`);
+    
+    // Extract values from report - handle both new and legacy formats
+    const totalMonthlyCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
+    const currency = report.summary?.currency ?? report.currency ?? 'USD';
+    const resourceCount = report.resources?.length ?? report.summary?.resources?.length ?? 0;
+    
     core.info(`Analysis result summary:`);
-    core.info(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
-    core.info(`  currency: ${report.currency}`);
+    core.info(`  totalMonthly: ${totalMonthlyCost}`);
+    core.info(`  currency: ${currency}`);
+    core.info(`  resourceCount: ${resourceCount}`);
+    if (report.summary?.byProvider) {
+      core.info(`  byProvider: ${JSON.stringify(report.summary.byProvider)}`);
+    }
+    if (report.summary?.byService) {
+      core.info(`  byService: ${JSON.stringify(report.summary.byService)}`);
+    }
     core.info(`  diff: ${report.diff ? JSON.stringify(report.diff) : 'null'}`);
     core.endGroup();
 
-    core.setOutput('total-monthly-cost', report.projected_monthly_cost.toString());
-    core.setOutput('currency', report.currency);
-    core.info(`📊 Projected monthly cost: ${report.projected_monthly_cost} ${report.currency}`);
+    core.setOutput('total-monthly-cost', totalMonthlyCost.toString());
+    core.setOutput('currency', currency);
+    core.info(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
 
     if (report.diff) {
       core.setOutput('cost-diff', report.diff.monthly_cost_change.toString());
-      core.info(`📈 Cost change: ${report.diff.monthly_cost_change} ${report.currency}`);
+      core.info(`📈 Cost change: ${report.diff.monthly_cost_change} ${currency}`);
     }
 
     if (config.postComment && config.githubToken) {
@@ -211,12 +224,12 @@ async function run(): Promise<void> {
       const failed = checkThreshold(
         config.threshold,
         report.diff.monthly_cost_change,
-        report.currency
+        currency
       );
 
       if (failed) {
         throw new Error(
-          `Cost increase of ${report.diff.monthly_cost_change} ${report.currency} exceeds threshold ${config.threshold}`
+          `Cost increase of ${report.diff.monthly_cost_change} ${currency} exceeds threshold ${config.threshold}`
         );
       }
       core.info(`✅ Cost within threshold: ${config.threshold}`);

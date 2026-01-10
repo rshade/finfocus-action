@@ -9,6 +9,7 @@ jest.mock('fs', () => ({
   ...jest.requireActual('fs'),
   existsSync: jest.fn(),
   statSync: jest.fn(),
+  readFileSync: jest.fn(),
 }));
 
 describe('Analyzer', () => {
@@ -18,7 +19,11 @@ describe('Analyzer', () => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
     (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.statSync as jest.Mock).mockReturnValue({ size: 1000 });
+    (fs.statSync as jest.Mock).mockReturnValue({
+      size: 1000,
+      mtime: new Date('2025-01-01T00:00:00Z'),
+    });
+    (fs.readFileSync as jest.Mock).mockReturnValue('{}');
   });
 
   it('should run analysis and return report', async () => {
@@ -57,7 +62,10 @@ describe('Analyzer', () => {
 
   it('should throw error if plan file is empty', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.statSync as jest.Mock).mockReturnValue({ size: 0 });
+    (fs.statSync as jest.Mock).mockReturnValue({ 
+      size: 0, 
+      mtime: new Date('2025-01-01T00:00:00Z') 
+    });
 
     await expect(analyzer.runAnalysis('empty.json')).rejects.toThrow(
       'Pulumi plan file is empty: empty.json'

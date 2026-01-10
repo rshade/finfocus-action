@@ -1,9 +1,16 @@
 import * as exec from '@actions/exec';
 import * as core from '@actions/core';
+import * as fs from 'fs';
 import { PluginManager } from '../../src/plugins.js';
 
 jest.mock('@actions/exec');
 jest.mock('@actions/core');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  readdirSync: jest.fn(),
+  statSync: jest.fn(),
+}));
 
 describe('PluginManager', () => {
   let pluginManager: PluginManager;
@@ -16,6 +23,9 @@ describe('PluginManager', () => {
       stdout: 'installed',
       stderr: '',
     });
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (fs.readdirSync as jest.Mock).mockReturnValue(['aws-plugin']);
+    (fs.statSync as jest.Mock).mockReturnValue({ isDirectory: () => false, size: 100 });
   });
 
   it('should skip if no plugins provided', async () => {
@@ -25,7 +35,7 @@ describe('PluginManager', () => {
       expect.arrayContaining(['plugin', 'install']),
       expect.anything()
     );
-    expect(core.debug).toHaveBeenCalledWith('No plugins to install');
+    expect(core.info).toHaveBeenCalledWith('  No plugins to install');
   });
 
   it('should install plugins correctly', async () => {
@@ -71,7 +81,7 @@ describe('PluginManager', () => {
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',
       ['plugin', 'list'],
-      expect.objectContaining({ silent: true })
+      expect.objectContaining({ silent: false, ignoreReturnCode: true })
     );
   });
 });

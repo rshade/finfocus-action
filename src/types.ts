@@ -9,17 +9,39 @@ export interface ActionConfiguration {
   analyzerMode: boolean;
 }
 
-export interface PulumicostReport {
-  projected_monthly_cost: number;
+export interface PulumicostResource {
+  resourceType: string;
+  resourceId: string;
+  adapter: string;
   currency: string;
+  monthly: number;
+  hourly: number;
+  notes?: string;
+  breakdown?: unknown;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface PulumicostSummary {
+  totalMonthly: number;
+  totalHourly: number;
+  currency: string;
+  byProvider?: Record<string, number>;
+  byService?: Record<string, number>;
+  byAdapter?: Record<string, number>;
+  resources?: PulumicostResource[];
+}
+
+export interface PulumicostReport {
+  summary: PulumicostSummary;
+  resources?: PulumicostResource[];
+  // Legacy fields for backward compatibility
+  projected_monthly_cost?: number;
+  currency?: string;
   diff?: {
     monthly_cost_change: number;
     percent_change: number;
   };
-  resources?: Array<{
-    urn: string;
-    monthly_cost: number;
-  }>;
 }
 
 export interface CostAssessment {

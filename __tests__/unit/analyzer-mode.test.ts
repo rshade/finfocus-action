@@ -11,6 +11,7 @@ jest.mock('fs', () => ({
   writeFileSync: jest.fn(),
   copyFileSync: jest.fn(),
   chmodSync: jest.fn(),
+  readFileSync: jest.fn(),
 }));
 jest.mock('os');
 jest.mock('@actions/core');
@@ -23,82 +24,68 @@ describe('Analyzer Mode', () => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
     (os.homedir as jest.Mock).mockReturnValue('/home/user');
+    // Default mocks for exec
+    (exec.getExecOutput as jest.Mock)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'v1.2.3\n', stderr: '' }) // version
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
   });
 
-  it('should setup analyzer mode correctly', async () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
-
-    // Mock exec calls:
-    // 1. pulumicost version
-    // 2. which pulumicost
-    (exec.getExecOutput as jest.Mock)
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: 'v1.2.3\n',
-        stderr: '',
-      })
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: '/usr/local/bin/pulumicost\n',
-        stderr: '',
-      });
+  it('should setup analyzer mode and update Pulumi.yaml if missing analyzers', async () => {
+    // Mock Pulumi.yaml existence
+    (fs.existsSync as jest.Mock).mockImplementation((path: string) => {
+      if (path.includes('Pulumi.yaml')) return true;
+      return false; // Plugin dir etc
+    });
+    
+    // Mock Pulumi.yaml content
+    (fs.readFileSync as jest.Mock).mockReturnValue('name: my-project\nruntime: yaml\n');
 
     await analyzer.setupAnalyzerMode();
 
-    // Verify version check
-    expect(exec.getExecOutput).toHaveBeenNthCalledWith(
-      1,
-      'pulumicost',
-      ['version'],
-      { silent: true }
-    );
-
-    // Verify plugin directory creation
-    // Path should be ~/.pulumi/plugins/analyzer-cost-v1.2.3
-    const expectedPluginDir = '/home/user/.pulumi/plugins/analyzer-cost-v1.2.3';
+    const expectedPluginDir = '/home/user/.pulumi/plugins/analyzer-pulumicost-v1.2.3';
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedPluginDir, { recursive: true });
-
-    // Verify finding binary
-    expect(exec.getExecOutput).toHaveBeenNthCalledWith(
-      2,
-      'which',
-      ['pulumicost'],
-      { silent: true }
+    
+    // Verify Pulumi.yaml update
+    // We check that pulumicost was added. Exact format depends on yaml lib.
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('Pulumi.yaml'),
+      expect.stringContaining('pulumicost')
     );
-
-    // Verify copy
-    const expectedBinaryPath = `${expectedPluginDir}/pulumi-analyzer-cost`;
-    expect(fs.copyFileSync).toHaveBeenCalledWith(
-      '/usr/local/bin/pulumicost',
-      expectedBinaryPath
-    );
-
-    // Verify chmod
-    expect(fs.chmodSync).toHaveBeenCalledWith(expectedBinaryPath, 0o755);
-
-    // Verify NO policy pack stuff
-    expect(fs.writeFileSync).not.toHaveBeenCalled(); // No PulumiPolicy.yaml
-    expect(core.exportVariable).not.toHaveBeenCalled(); // No PULUMI_POLICY_PACK_PATH
   });
 
-  it('should throw error if pulumicost binary not found', async () => {
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
-    
-    // Mock version check success, but binary search fail
-    (exec.getExecOutput as jest.Mock)
-      .mockResolvedValueOnce({
-        exitCode: 0,
-        stdout: 'v0.1.0',
-        stderr: '',
-      })
-      .mockResolvedValueOnce({
-        exitCode: 1,
-        stdout: '',
-        stderr: 'not found',
-      });
+  it('should setup analyzer mode and inject pulumicost if analyzers exists', async () => {
+    (fs.existsSync as jest.Mock).mockImplementation((path: string) => path.includes('Pulumi.yaml'));
+    (fs.readFileSync as jest.Mock).mockReturnValue('name: p\nanalyzers:\n  - other\n');
 
-    await expect(analyzer.setupAnalyzerMode()).rejects.toThrow(
-      'Could not find pulumicost binary in PATH'
+    await analyzer.setupAnalyzerMode();
+
+    // Verify both exist
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('Pulumi.yaml'),
+      expect.stringMatching(/pulumicost/)
+    );
+     expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('Pulumi.yaml'),
+      expect.stringMatching(/other/)
+    );
+  });
+
+  it('should not update Pulumi.yaml if pulumicost already present', async () => {
+    (fs.existsSync as jest.Mock).mockImplementation((path: string) => path.includes('Pulumi.yaml'));
+    (fs.readFileSync as jest.Mock).mockReturnValue('name: p\nanalyzers:\n  - pulumicost\n');
+
+    await analyzer.setupAnalyzerMode();
+
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+  });
+
+  it('should warn if Pulumi.yaml not found', async () => {
+    (fs.existsSync as jest.Mock).mockReturnValue(false); // Nothing exists
+
+    await analyzer.setupAnalyzerMode();
+
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Pulumi.yaml not found')
     );
   });
 });

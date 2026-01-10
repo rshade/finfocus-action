@@ -41,12 +41,12 @@ core.exportVariable('PULUMI_POLICY_PACK_PATH', analyzerDir);
 The analyzer binary should be installed to the standard Pulumi plugin directory:
 
 ```
-~/.pulumi/plugins/analyzer-cost-<version>/pulumi-analyzer-cost
+~/.pulumi/plugins/analyzer-pulumicost-<version>/pulumi-analyzer-pulumicost
 ```
 
 Example:
 ```
-~/.pulumi/plugins/analyzer-cost-v0.1.0/pulumi-analyzer-cost
+~/.pulumi/plugins/analyzer-pulumicost-v0.1.0/pulumi-analyzer-pulumicost
 ```
 
 Then users configure their `Pulumi.yaml`:
@@ -56,7 +56,7 @@ name: my-project
 runtime: yaml
 
 analyzers:
-  - cost
+  - pulumicost
 ```
 
 ### Option 2: Use plugins.analyzers in Pulumi.yaml (For Development/CI)
@@ -92,6 +92,7 @@ if strings.Contains(exeName, "pulumi-analyzer-policy-pulumicost") ||
 This means:
 - When binary is named `pulumicost` → Normal CLI operation
 - When binary is named `pulumi-analyzer-pulumicost` → Automatic gRPC server start
+- **CRITICAL**: The binary MUST contain `pulumi-analyzer-pulumicost` in its name to trigger analyzer mode. `pulumi-analyzer-cost` will NOT work.
 
 ## Fix Required in finfocus-action
 
@@ -106,20 +107,20 @@ async setupAnalyzerMode(): Promise<void> {
   const version = versionOutput.stdout.trim().match(/v?[\d.]+/)?.[0] || 'v0.1.0';
 
   // Install to Pulumi's plugin directory
-  const pluginDir = path.join(os.homedir(), '.pulumi', 'plugins', `analyzer-cost-${version}`);
+  const pluginDir = path.join(os.homedir(), '.pulumi', 'plugins', `analyzer-pulumicost-${version}`);
 
   if (!fs.existsSync(pluginDir)) {
     fs.mkdirSync(pluginDir, { recursive: true });
   }
 
   const pulumicostBinary = await this.findBinary('pulumicost');
-  const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-cost');
+  const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
 
   core.info(`Installing analyzer plugin to ${analyzerBinaryPath}`);
   fs.copyFileSync(pulumicostBinary, analyzerBinaryPath);
   fs.chmodSync(analyzerBinaryPath, 0o755);
 
-  core.info(`Analyzer plugin installed. Add 'analyzers: [cost]' to your Pulumi.yaml to enable.`);
+  core.info(`Analyzer plugin installed. Add 'analyzers: [pulumicost]' to your Pulumi.yaml to enable.`);
 }
 ```
 
@@ -132,7 +133,7 @@ name: my-infrastructure
 runtime: yaml  # or nodejs, python, go, etc.
 
 analyzers:
-  - cost
+  - pulumicost
 ```
 
 ## Alternative: CI-Specific Approach

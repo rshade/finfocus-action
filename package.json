@@ -52,7 +52,8 @@
     "@actions/exec": "^2.0.0",
     "@actions/github": "^7.0.0",
     "@actions/tool-cache": "^3.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@babel/core": "^7.28.5",
