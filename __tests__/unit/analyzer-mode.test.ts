@@ -23,48 +23,79 @@ describe('Analyzer Mode', () => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
     (os.homedir as jest.Mock).mockReturnValue('/home/user');
-    (exec.getExecOutput as jest.Mock).mockResolvedValue({
-      exitCode: 0,
-      stdout: '/usr/local/bin/pulumicost\n',
-      stderr: '',
-    });
   });
 
   it('should setup analyzer mode correctly', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
 
+    // Mock exec calls:
+    // 1. pulumicost version
+    // 2. which pulumicost
+    (exec.getExecOutput as jest.Mock)
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'v1.2.3\n',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: '/usr/local/bin/pulumicost\n',
+        stderr: '',
+      });
+
     await analyzer.setupAnalyzerMode();
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith(
-      expect.stringContaining('.pulumicost/analyzer'),
-      { recursive: true }
+    // Verify version check
+    expect(exec.getExecOutput).toHaveBeenNthCalledWith(
+      1,
+      'pulumicost',
+      ['version'],
+      { silent: true }
     );
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('PulumiPolicy.yaml'),
-      expect.stringContaining('runtime: pulumicost')
+
+    // Verify plugin directory creation
+    // Path should be ~/.pulumi/plugins/analyzer-cost-v1.2.3
+    const expectedPluginDir = '/home/user/.pulumi/plugins/analyzer-cost-v1.2.3';
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expectedPluginDir, { recursive: true });
+
+    // Verify finding binary
+    expect(exec.getExecOutput).toHaveBeenNthCalledWith(
+      2,
+      'which',
+      ['pulumicost'],
+      { silent: true }
     );
-    expect(exec.getExecOutput).toHaveBeenCalledWith('which', ['pulumicost'], { silent: true });
+
+    // Verify copy
+    const expectedBinaryPath = `${expectedPluginDir}/pulumi-analyzer-cost`;
     expect(fs.copyFileSync).toHaveBeenCalledWith(
       '/usr/local/bin/pulumicost',
-      expect.stringContaining('pulumi-analyzer-policy-pulumicost')
+      expectedBinaryPath
     );
-    expect(fs.chmodSync).toHaveBeenCalledWith(
-      expect.stringContaining('pulumi-analyzer-policy-pulumicost'),
-      0o755
-    );
-    expect(core.exportVariable).toHaveBeenCalledWith(
-      'PULUMI_POLICY_PACK_PATH',
-      expect.stringContaining('.pulumicost/analyzer')
-    );
+
+    // Verify chmod
+    expect(fs.chmodSync).toHaveBeenCalledWith(expectedBinaryPath, 0o755);
+
+    // Verify NO policy pack stuff
+    expect(fs.writeFileSync).not.toHaveBeenCalled(); // No PulumiPolicy.yaml
+    expect(core.exportVariable).not.toHaveBeenCalled(); // No PULUMI_POLICY_PACK_PATH
   });
 
   it('should throw error if pulumicost binary not found', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
-    (exec.getExecOutput as jest.Mock).mockResolvedValue({
-      exitCode: 1,
-      stdout: '',
-      stderr: 'not found',
-    });
+    
+    // Mock version check success, but binary search fail
+    (exec.getExecOutput as jest.Mock)
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: 'v0.1.0',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'not found',
+      });
 
     await expect(analyzer.setupAnalyzerMode()).rejects.toThrow(
       'Could not find pulumicost binary in PATH'
