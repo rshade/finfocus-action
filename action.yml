@@ -55,14 +55,14 @@ runs:
       run: node ${{ github.action_path }}/dist/index.js
       shell: bash
       env:
-        INPUT_PULUMI-PLAN-JSON: ${{ inputs.pulumi-plan-json }}
-        INPUT_GITHUB-TOKEN: ${{ inputs.github-token }}
-        INPUT_PULUMICOST-VERSION: ${{ inputs.pulumicost-version }}
-        INPUT_INSTALL-PLUGINS: ${{ inputs.install-plugins }}
-        INPUT_BEHAVIOR-ON-ERROR: ${{ inputs.behavior-on-error }}
-        INPUT_POST-COMMENT: ${{ inputs.post-comment }}
-        INPUT_FAIL-ON-COST-INCREASE: ${{ inputs.fail-on-cost-increase }}
-        INPUT_ANALYZER-MODE: ${{ inputs.analyzer-mode }}
+        INPUT_PULUMI_PLAN_JSON: ${{ inputs.pulumi-plan-json }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_PULUMICOST_VERSION: ${{ inputs.pulumicost-version }}
+        INPUT_INSTALL_PLUGINS: ${{ inputs.install-plugins }}
+        INPUT_BEHAVIOR_ON_ERROR: ${{ inputs.behavior-on-error }}
+        INPUT_POST_COMMENT: ${{ inputs.post-comment }}
+        INPUT_FAIL_ON_COST_INCREASE: ${{ inputs.fail-on-cost-increase }}
+        INPUT_ANALYZER_MODE: ${{ inputs.analyzer-mode }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'
