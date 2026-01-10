@@ -43624,12 +43624,25 @@ class Analyzer {
         const pulumicostBinary = await this.findBinary('pulumicost');
         core.info(`  Source binary: ${pulumicostBinary}`);
         const analyzerBinaryPath = external_path_.join(pluginDir, 'pulumi-analyzer-pulumicost');
-        core.info(`  Target binary: ${analyzerBinaryPath}`);
-        core.info(`  Copying binary...`);
-        external_fs_.copyFileSync(pulumicostBinary, analyzerBinaryPath);
+        const realBinaryPath = external_path_.join(pluginDir, 'pulumicost-real');
+        core.info(`  Installing real binary to: ${realBinaryPath}`);
+        external_fs_.copyFileSync(pulumicostBinary, realBinaryPath);
+        external_fs_.chmodSync(realBinaryPath, 0o755);
+        core.info(`  Creating analyzer wrapper script at: ${analyzerBinaryPath}`);
+        // The wrapper script passes all arguments to the real binary, 
+        // but redirects stderr to a log file for troubleshooting.
+        // We use 'tee -a' so we can see it in the console IF Pulumi lets it through,
+        // and also keep it in a file we can cat later.
+        const wrapperScript = `#!/bin/sh
+    echo "--- $(date) ---" >> /tmp/pulumicost-analyzer.log
+    echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.log
+    # We redirect stderr to our log file. Stdout MUST remain clean for gRPC port discovery.
+    "${realBinaryPath}" "$@" 2>> /tmp/pulumicost-analyzer.log
+    `;
+        external_fs_.writeFileSync(analyzerBinaryPath, wrapperScript);
         external_fs_.chmodSync(analyzerBinaryPath, 0o755);
-        core.info(`  Binary copied and made executable`);
-        core.info(`  Analyzer plugin installed.`);
+        core.info(`  Wrapper script created and made executable`);
+        core.info(`  Analyzer plugin installed successfully.`);
         // Automatically update Pulumi.yaml if it exists
         const pulumiYamlPath = external_path_.join(process.cwd(), 'Pulumi.yaml');
         if (external_fs_.existsSync(pulumiYamlPath)) {
@@ -43667,9 +43680,11 @@ class Analyzer {
                 if (modified) {
                     external_fs_.writeFileSync(pulumiYamlPath, doc.toString());
                     core.info(`  Pulumi.yaml updated successfully.`);
+                    core.info(`  New Pulumi.yaml content:\n${doc.toString()}`);
                 }
                 else {
                     core.info(`  No changes needed for Pulumi.yaml.`);
+                    core.info(`  Current Pulumi.yaml content:\n${external_fs_.readFileSync(pulumiYamlPath, 'utf8')}`);
                 }
             }
             catch (e) {
@@ -43865,6 +43880,20 @@ function logInputs() {
         }
     }
 }
+function logAnalyzerOutput() {
+    const logPath = '/tmp/pulumicost-analyzer.log';
+    if (external_fs_.existsSync(logPath)) {
+        core.startGroup('🔍 Pulumicost Analyzer Logs');
+        try {
+            const logs = external_fs_.readFileSync(logPath, 'utf8');
+            core.info(logs);
+        }
+        catch (err) {
+            core.info(`Failed to read analyzer logs: ${err}`);
+        }
+        core.endGroup();
+    }
+}
 async function run() {
     const startTime = Date.now();
     try {
@@ -44043,6 +44072,9 @@ async function run() {
             core.info(`Error value: ${String(error)}`);
             core.setFailed(`❌ Unknown error: ${String(error)}`);
         }
+    }
+    finally {
+        logAnalyzerOutput();
     }
 }
 run();
