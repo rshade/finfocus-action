@@ -152,19 +152,32 @@ export class Analyzer implements IAnalyzer {
       fs.mkdirSync(pluginDir, { recursive: true });
     }
 
-    const pulumicostBinary = await this.findBinary('pulumicost');
-    core.info(`  Source binary: ${pulumicostBinary}`);
-
-    const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
-    core.info(`  Target binary: ${analyzerBinaryPath}`);
-
-    core.info(`  Copying binary...`);
-    fs.copyFileSync(pulumicostBinary, analyzerBinaryPath);
-    fs.chmodSync(analyzerBinaryPath, 0o755);
-    core.info(`  Binary copied and made executable`);
-
-    core.info(`  Analyzer plugin installed.`);
-
+        const pulumicostBinary = await this.findBinary('pulumicost');
+        core.info(`  Source binary: ${pulumicostBinary}`);
+        
+        const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
+        const realBinaryPath = path.join(pluginDir, 'pulumicost-real');
+        
+        core.info(`  Installing real binary to: ${realBinaryPath}`);
+        fs.copyFileSync(pulumicostBinary, realBinaryPath);
+        fs.chmodSync(realBinaryPath, 0o755);
+    
+        core.info(`  Creating analyzer wrapper script at: ${analyzerBinaryPath}`);
+        // The wrapper script passes all arguments to the real binary, 
+        // but redirects stderr to a log file for troubleshooting.
+        // We use 'tee -a' so we can see it in the console IF Pulumi lets it through,
+        // and also keep it in a file we can cat later.
+        const wrapperScript = `#!/bin/sh
+    echo "--- $(date) ---" >> /tmp/pulumicost-analyzer.log
+    echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.log
+    # We redirect stderr to our log file. Stdout MUST remain clean for gRPC port discovery.
+    "${realBinaryPath}" "$@" 2>> /tmp/pulumicost-analyzer.log
+    `;
+        fs.writeFileSync(analyzerBinaryPath, wrapperScript);
+        fs.chmodSync(analyzerBinaryPath, 0o755);
+        core.info(`  Wrapper script created and made executable`);
+    
+        core.info(`  Analyzer plugin installed successfully.`);
     // Automatically update Pulumi.yaml if it exists
     const pulumiYamlPath = path.join(process.cwd(), 'Pulumi.yaml');
     if (fs.existsSync(pulumiYamlPath)) {
@@ -200,24 +213,22 @@ export class Analyzer implements IAnalyzer {
           }
         }
 
-        if (modified) {
-          fs.writeFileSync(pulumiYamlPath, doc.toString());
-          core.info(`  Pulumi.yaml updated successfully.`);
-        } else {
-          core.info(`  No changes needed for Pulumi.yaml.`);
-        }
-      } catch (e) {
-        core.warning(
-          `  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    } else {
-      core.warning(
-        `  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'analyzers: [pulumicost]' to your project configuration.`,
-      );
-    }
-  }
-
+                
+                if (modified) {
+                  fs.writeFileSync(pulumiYamlPath, doc.toString());
+                  core.info(`  Pulumi.yaml updated successfully.`);
+                  core.info(`  New Pulumi.yaml content:\n${doc.toString()}`);
+                } else {
+                  core.info(`  No changes needed for Pulumi.yaml.`);
+                  core.info(`  Current Pulumi.yaml content:\n${fs.readFileSync(pulumiYamlPath, 'utf8')}`);
+                }
+              } catch (e) {
+                core.warning(`  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            } else {
+              core.warning(`  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'analyzers: [pulumicost]' to your project configuration.`);
+            }
+          }
   private async findBinary(name: string): Promise<string> {
     core.info(`  Finding binary: ${name}`);
     const output = await exec.getExecOutput('which', [name], {

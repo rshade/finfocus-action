@@ -59,6 +59,20 @@ function logInputs(): void {
   }
 }
 
+function logAnalyzerOutput(): void {
+  const logPath = '/tmp/pulumicost-analyzer.log';
+  if (fs.existsSync(logPath)) {
+    core.startGroup('🔍 Pulumicost Analyzer Logs');
+    try {
+      const logs = fs.readFileSync(logPath, 'utf8');
+      core.info(logs);
+    } catch (err) {
+      core.info(`Failed to read analyzer logs: ${err}`);
+    }
+    core.endGroup();
+  }
+}
+
 async function run(): Promise<void> {
   const startTime = Date.now();
   
@@ -264,6 +278,8 @@ async function run(): Promise<void> {
       core.info(`Error value: ${String(error)}`);
       core.setFailed(`❌ Unknown error: ${String(error)}`);
     }
+  } finally {
+    logAnalyzerOutput();
   }
 }
 
