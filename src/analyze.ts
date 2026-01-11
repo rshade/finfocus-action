@@ -127,7 +127,7 @@ export class Analyzer implements IAnalyzer {
     core.info(`=== Analyzer: Setting up analyzer mode ===`);
 
     core.info(`  Getting pulumicost version...`);
-    const versionOutput = await exec.getExecOutput('pulumicost', ['version'], {
+    const versionOutput = await exec.getExecOutput('pulumicost', ['--version'], {
       silent: false,
       ignoreReturnCode: true,
     });
@@ -179,12 +179,12 @@ echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.lo
 
     core.info(`  Analyzer plugin installed successfully.`);
     // Automatically update Pulumi.yaml if it exists
-    // CRITICAL: We must use plugins.analyzers with explicit path to the BINARY, NOT just analyzers:
-    // See ANALYZER_SETUP_NOTES.md for details
+    // CRITICAL: We must use plugins.analyzers with explicit path to the DIRECTORY.
+    // Pulumi expects the directory containing the analyzer binary (pulumi-analyzer-<name>).
     const pulumiYamlPath = path.join(process.cwd(), 'Pulumi.yaml');
     if (fs.existsSync(pulumiYamlPath)) {
       core.info(`  Updating Pulumi.yaml at ${pulumiYamlPath}...`);
-      core.info(`  Using plugins.analyzers with explicit path: ${analyzerBinaryPath}`);
+      core.info(`  Using plugins.analyzers with explicit path: ${pluginDir}`);
       try {
         const yamlContent = fs.readFileSync(pulumiYamlPath, 'utf8');
         const doc = YAML.parseDocument(yamlContent);
@@ -210,7 +210,7 @@ echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.lo
         const plugins = doc.get('plugins');
         const analyzerConfig = {
           name: 'pulumicost',
-          path: analyzerBinaryPath,
+          path: pluginDir,
         };
 
         if (!plugins) {
@@ -237,7 +237,7 @@ echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.lo
               modified = true;
             } else {
               core.info(`  'pulumicost' already configured in plugins.analyzers. Updating path...`);
-              doc.setIn(['plugins', 'analyzers', index, 'path'], analyzerBinaryPath);
+              doc.setIn(['plugins', 'analyzers', index, 'path'], pluginDir);
               modified = true;
             }
           } else {

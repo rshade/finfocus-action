@@ -26,9 +26,10 @@ The code had two remaining issues even after fixing the YAML section:
 1.  **Renamed Real Binary**: The real binary is now renamed to `pulumi-analyzer-pulumicost-real`. This satisfies the `strings.Contains(exeName, "pulumi-analyzer-pulumicost")` check in the Go source.
 2.  **Updated Wrapper**: The wrapper script (at `pulumi-analyzer-pulumicost`) now invokes `pulumi-analyzer-pulumicost-real`.
 3.  **Updated Pulumi.yaml Logic**:
-    *   Points `path` to the binary itself: `/.../pulumi-analyzer-pulumicost`.
+    *   Points `path` to the **plugin directory**: `/.../analyzer-pulumicost-vX.Y.Z`.
     *   Automatically **removes** any legacy top-level `analyzers: [pulumicost]` entry to prevent configuration conflicts.
     *   Updates the `path` if `pulumicost` is already present in `plugins.analyzers`.
+4.  **Version Check Fix**: Changed `pulumicost version` to `pulumicost --version` in `analyze.ts`.
 
 ### Code Changes Made
 
@@ -43,7 +44,7 @@ const realBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost-real');
 
 const analyzerConfig = {
   name: 'pulumicost',
-  path: analyzerBinaryPath, // Pointing to binary, not directory
+  path: pluginDir, // Pointing to DIRECTORY, not binary
 };
 ```
 

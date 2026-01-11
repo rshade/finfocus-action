@@ -63,7 +63,7 @@ describe('Analyzer Mode', () => {
 
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('Pulumi.yaml'),
-      expect.stringContaining('plugins:\n  analyzers:\n    - name: pulumicost\n      path: /home/user/.pulumi/plugins/analyzer-pulumicost-v1.2.3/pulumi-analyzer-pulumicost')
+      expect.stringContaining('plugins:\n  analyzers:\n    - name: pulumicost\n      path: /home/user/.pulumi/plugins/analyzer-pulumicost-v1.2.3')
     );
   });
 
