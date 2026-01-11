@@ -1,171 +1,165 @@
 # Analyzer Plugin Setup Notes
 
 **Created**: 2025-01-10
-**Updated**: 2025-01-10
+**Updated**: 2025-01-11 (Session 2 - Fix Applied)
 **Purpose**: Track the correct setup process for the PulumiCost Analyzer plugin
 
-## Issue Summary
+## Session 2 Summary (2025-01-11)
 
-The analyzer plugin installation in `finfocus-action` was incorrectly treating the analyzer as a **Policy Pack** instead of an **Analyzer Plugin**. These are different Pulumi concepts with different installation and configuration mechanisms.
+### Problem Identified
 
-## Root Cause Analysis
+Workflow run 20879348290 showed:
 
-### Current (Wrong) Approach in `analyze.ts`
+- Plugin installed correctly to `~/.pulumi/plugins/analyzer-pulumicost-v0.1.3/`
+- `Pulumi.yaml` was updated with `analyzers: [pulumicost]`
+- `pulumi preview` ran but **NO cost diagnostics appeared**
 
-```typescript
-// WRONG: Creates PulumiPolicy.yaml (policy pack format)
-const policyYaml = `runtime: pulumicost
-name: pulumicost
-version: 0.1.0
-`;
+### Root Cause
 
-// WRONG: Uses policy pack directory
-const analyzerDir = path.join(os.homedir(), '.pulumicost', 'analyzer');
-
-// WRONG: Binary name includes "policy" prefix
-const analyzerBinaryName = 'pulumi-analyzer-policy-pulumicost';
-
-// WRONG: Sets policy pack environment variable
-core.exportVariable('PULUMI_POLICY_PACK_PATH', analyzerDir);
-```
-
-### What This Causes
-
-1. Pulumi doesn't find the analyzer because it's looking in the wrong location
-2. The `PULUMI_POLICY_PACK_PATH` is for policy packs, not analyzers
-3. The `PulumiPolicy.yaml` format is for policy packs, not analyzers
-
-## Correct Approach
-
-### Option 1: Install to Pulumi Plugin Directory (Recommended for Production)
-
-The analyzer binary should be installed to the standard Pulumi plugin directory:
-
-```
-~/.pulumi/plugins/analyzer-pulumicost-<version>/pulumi-analyzer-pulumicost
-```
-
-Example:
-```
-~/.pulumi/plugins/analyzer-pulumicost-v0.1.0/pulumi-analyzer-pulumicost
-```
-
-Then users configure their `Pulumi.yaml`:
+The code was adding the **wrong YAML syntax**:
 
 ```yaml
-name: my-project
-runtime: yaml
-
+# WRONG - relies on auto-discovery which doesn't work for local plugins
 analyzers:
   - pulumicost
 ```
 
-### Option 2: Use plugins.analyzers in Pulumi.yaml (For Development/CI)
+### Fix Applied
 
-For local development or CI where you want to use a binary at a specific path:
+Changed `src/analyze.ts` to use `plugins.analyzers` with explicit path:
 
 ```yaml
-name: my-project
-runtime: yaml
-
+# CORRECT - explicit path for CI/local plugins
 plugins:
   analyzers:
     - name: pulumicost
-      path: /path/to/binary/directory  # Directory containing pulumi-analyzer-pulumicost
-      version: 0.0.0-dev
+      path: /home/runner/.pulumi/plugins/analyzer-pulumicost-v0.1.3
 ```
 
-The `path` should point to a **directory** containing the binary named `pulumi-analyzer-pulumicost`.
+### Code Changes Made
 
-## Smart Binary Behavior
+**File: `src/analyze.ts` (lines 181-249)**
 
-The `pulumicost` binary is already "smart" (see `cmd/pulumicost/main.go`):
+The `setupAnalyzerMode()` function now:
+
+1. Creates `plugins.analyzers` section if it doesn't exist
+2. Adds analyzer config with `name` and `path` fields
+3. Uses the actual `pluginDir` variable for the path
+4. Handles existing `plugins` section gracefully
+
+```typescript
+const analyzerConfig = {
+  name: 'pulumicost',
+  path: pluginDir,  // e.g., /home/runner/.pulumi/plugins/analyzer-pulumicost-v0.1.3
+};
+
+if (!plugins) {
+  doc.set('plugins', { analyzers: [analyzerConfig] });
+} else if (!pluginsJS.analyzers) {
+  doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
+} else {
+  // Check if pulumicost already configured, add if not
+}
+```
+
+### Build Status
+
+- `npm run lint` - PASSED
+- `npm run build` - PASSED
+- Changes on `main` branch, needs merge to `v1`
+
+---
+
+## Background: Why `analyzers:` vs `plugins.analyzers:`
+
+### `analyzers:` (Top-level)
+
+```yaml
+analyzers:
+  - pulumicost
+```
+
+- Relies on Pulumi's plugin auto-discovery
+- Expects analyzer to be installed via `pulumi plugin install analyzer pulumicost`
+- Searches in `~/.pulumi/plugins/` with specific naming conventions
+- **Does NOT work** for locally-installed custom analyzers in CI
+
+### `plugins.analyzers:` (Explicit Path)
+
+```yaml
+plugins:
+  analyzers:
+    - name: pulumicost
+      path: /absolute/path/to/plugin/directory
+```
+
+- Designed for development and CI environments
+- Bypasses auto-discovery, uses explicit path
+- Path points to **directory** containing `pulumi-analyzer-<name>` binary
+- **Required** for finfocus-action since we install the plugin ourselves
+
+---
+
+## Session 1 Summary (2025-01-10)
+
+### Initial Issues Fixed
+
+1. **Policy Pack vs Analyzer confusion** - Original code was treating analyzer
+   as a policy pack
+2. **Input mapping** - `action.yml` needed underscores for env var mapping
+   (`INPUT_ANALYZER_MODE` not `INPUT_ANALYZER-MODE`)
+
+### Binary Naming
+
+The `pulumicost` binary auto-detects when invoked as an analyzer:
 
 ```go
-exeName := filepath.Base(os.Args[0])
-if strings.Contains(exeName, "pulumi-analyzer-policy-pulumicost") ||
-    strings.Contains(exeName, "pulumi-analyzer-pulumicost") {
-    // Automatically start gRPC server when invoked as analyzer
+// cmd/pulumicost/main.go
+if strings.Contains(exeName, "pulumi-analyzer-pulumicost") {
     return cli.RunAnalyzerServe(dummyCmd)
 }
 ```
 
-This means:
-- When binary is named `pulumicost` → Normal CLI operation
-- When binary is named `pulumi-analyzer-pulumicost` → Automatic gRPC server start
-- **CRITICAL**: The binary MUST contain `pulumi-analyzer-pulumicost` in its name to trigger analyzer mode. `pulumi-analyzer-cost` will NOT work.
+Binary must be named `pulumi-analyzer-pulumicost` (not `pulumi-analyzer-cost`).
 
-## Fix Implementation in finfocus-action
+---
 
-### 1. Analyzer Setup Logic (`src/analyze.ts`)
+## Debugging Tips
 
-We implemented the `setupAnalyzerMode` function to:
-1.  Fetch the `pulumicost` version.
-2.  Create the directory `~/.pulumi/plugins/analyzer-pulumicost-<version>`.
-3.  Copy the `pulumicost` binary to `pulumi-analyzer-pulumicost` in that directory.
-4.  **Automatically update `Pulumi.yaml`** in the workspace to include `analyzers: [pulumicost]`.
-
-### 2. Composite Action Input Fix (`action.yml` & `src/main.ts`)
-
-**Issue**: Inputs like `analyzer-mode` were being ignored.
-**Cause**: `action.yml` mapped inputs to env vars using hyphens (e.g., `INPUT_ANALYZER-MODE`), but `@actions/core` expects underscores (e.g., `INPUT_ANALYZER_MODE`). Composite actions running Node.js scripts must manually handle env var mapping.
-**Fix**:
--   Updated `action.yml` to use underscores in `env` keys: `INPUT_ANALYZER_MODE: ${{ inputs.analyzer-mode }}`.
--   Updated `src/main.ts` to request inputs with underscores: `core.getInput('analyzer_mode')`.
-
-## Troubleshooting & Debugging
-
-If the analyzer still doesn't appear in `pulumi preview` output:
-
-### 1. Verify `Pulumi.yaml` Update
-The action logs the content of `Pulumi.yaml` after modification. Check the action logs to ensure `analyzers: [pulumicost]` is present.
-
-### 2. Check Plugin Installation
-Verify the binary exists and is executable:
-```bash
-ls -l ~/.pulumi/plugins/analyzer-pulumicost-*/pulumi-analyzer-pulumicost
-```
-
-### 3. Enable Zerolog Debugging
-The `pulumicost` binary uses `zerolog`. To capture its internal logs during `pulumi preview`, we can redirect its output. Since Pulumi invokes the binary, standard redirection is tricky.
-
-**Technique**: Replace the binary with a wrapper script.
-
-Modify `setupAnalyzerMode` to write a wrapper script instead of copying the binary directly:
+### Check Plugin Installation
 
 ```bash
-#!/bin/sh
-# Wrapper to capture pulumicost logs
-/path/to/real/pulumicost "$@" 2> /tmp/pulumicost.log
+ls -la ~/.pulumi/plugins/analyzer-pulumicost-*/
 ```
 
-Or better, use `tee` if we want to try to pipe it back to stderr (though Pulumi might swallow it):
+### Check Pulumi.yaml Content
 
-```bash
-/path/to/real/pulumicost "$@" | tee -a /tmp/pulumicost.log
+The action logs the full `Pulumi.yaml` after modification. Look for:
+
+```yaml
+plugins:
+  analyzers:
+    - name: pulumicost
+      path: /home/runner/.pulumi/plugins/analyzer-pulumicost-v0.1.3
 ```
 
-Then, in a subsequent workflow step, `cat /tmp/pulumicost.log`.
+### Enable Pulumi Debug Output
 
-### 4. Pulumi Verbosity
-Run `pulumi preview` with debug flags:
 ```bash
 pulumi preview --debug --logtostderr -v=9
 ```
-This might show if Pulumi is finding and loading the analyzer.
 
-## Workflow Configuration Example
+### Check Analyzer Logs
 
-```yaml
-# .github/workflows/analyzer-mode.yml
-- name: Setup FinFocus Analyzer Mode
-  uses: rshade/finfocus-action@v1
-  with:
-    analyzer-mode: true
-    install-plugins: aws-public
+The action creates a wrapper script that logs to `/tmp/pulumicost-analyzer.log`:
 
-- name: Run Pulumi Preview with Cost Analysis
-  run: pulumi preview
-  env:
-    PULUMI_CONFIG_PASSPHRASE: ""
+```bash
+cat /tmp/pulumicost-analyzer.log
 ```
+
+---
+
+## References
+
+- pulumicost-core research: `specs/012-analyzer-e2e-tests/research.md`
+- Pulumi Project File docs: https://www.pulumi.com/docs/iac/concepts/projects/project-file/

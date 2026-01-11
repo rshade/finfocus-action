@@ -179,56 +179,75 @@ export class Analyzer implements IAnalyzer {
     
         core.info(`  Analyzer plugin installed successfully.`);
     // Automatically update Pulumi.yaml if it exists
+    // CRITICAL: We must use plugins.analyzers with explicit path, NOT just analyzers:
+    // See ANALYZER_SETUP_NOTES.md for details
     const pulumiYamlPath = path.join(process.cwd(), 'Pulumi.yaml');
     if (fs.existsSync(pulumiYamlPath)) {
       core.info(`  Updating Pulumi.yaml at ${pulumiYamlPath}...`);
+      core.info(`  Using plugins.analyzers with explicit path: ${pluginDir}`);
       try {
         const yamlContent = fs.readFileSync(pulumiYamlPath, 'utf8');
-        // Parse YAML to object
         const doc = YAML.parseDocument(yamlContent);
         let modified = false;
 
-        const analyzers = doc.get('analyzers');
+        // Check if plugins.analyzers already exists
+        const plugins = doc.get('plugins');
+        const analyzerConfig = {
+          name: 'pulumicost',
+          path: pluginDir,
+        };
 
-        if (!analyzers) {
-          core.info(`  'analyzers' section not found. Creating...`);
-          doc.set('analyzers', ['pulumicost']);
+        if (!plugins) {
+          core.info(`  'plugins' section not found. Creating plugins.analyzers...`);
+          doc.set('plugins', {
+            analyzers: [analyzerConfig],
+          });
           modified = true;
         } else {
-          // If it's not an array or sequence, we might have issues, but assuming valid Pulumi.yaml
-          // YAML.parseDocument returns a Node. We can work with JS object or use direct methods.
-          const analyzersJS = doc.toJS().analyzers;
+          const pluginsJS = doc.toJS().plugins;
 
-          if (Array.isArray(analyzersJS)) {
-            if (!analyzersJS.includes('pulumicost')) {
-              core.info(`  'pulumicost' missing from 'analyzers'. Appending...`);
-              doc.addIn(['analyzers'], 'pulumicost');
+          if (!pluginsJS.analyzers) {
+            core.info(`  'plugins.analyzers' not found. Creating...`);
+            doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
+            modified = true;
+          } else if (Array.isArray(pluginsJS.analyzers)) {
+            // Check if pulumicost is already configured
+            const hasPulumicost = pluginsJS.analyzers.some(
+              (a: { name?: string }) => a.name === 'pulumicost',
+            );
+            if (!hasPulumicost) {
+              core.info(`  'pulumicost' not in plugins.analyzers. Adding...`);
+              doc.addIn(['plugins', 'analyzers'], analyzerConfig);
               modified = true;
             } else {
-              core.info(`  'pulumicost' already present in 'analyzers'.`);
+              core.info(`  'pulumicost' already configured in plugins.analyzers.`);
             }
           } else {
-            // Handle case where analyzers exists but isn't an array (unlikely for valid Pulumi)
-            core.warning(`  'analyzers' section exists but is not a list. Skipping update.`);
+            core.warning(`  'plugins.analyzers' exists but is not a list. Overwriting...`);
+            doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
+            modified = true;
           }
         }
 
-                
-                if (modified) {
-                  fs.writeFileSync(pulumiYamlPath, doc.toString());
-                  core.info(`  Pulumi.yaml updated successfully.`);
-                  core.info(`  New Pulumi.yaml content:\n${doc.toString()}`);
-                } else {
-                  core.info(`  No changes needed for Pulumi.yaml.`);
-                  core.info(`  Current Pulumi.yaml content:\n${fs.readFileSync(pulumiYamlPath, 'utf8')}`);
-                }
-              } catch (e) {
-                core.warning(`  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`);
-              }
-            } else {
-              core.warning(`  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'analyzers: [pulumicost]' to your project configuration.`);
-            }
-          }
+        if (modified) {
+          fs.writeFileSync(pulumiYamlPath, doc.toString());
+          core.info(`  Pulumi.yaml updated successfully.`);
+          core.info(`  New Pulumi.yaml content:\n${doc.toString()}`);
+        } else {
+          core.info(`  No changes needed for Pulumi.yaml.`);
+          core.info(`  Current Pulumi.yaml content:\n${fs.readFileSync(pulumiYamlPath, 'utf8')}`);
+        }
+      } catch (e) {
+        core.warning(
+          `  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    } else {
+      core.warning(
+        `  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'plugins.analyzers' section.`,
+      );
+    }
+  }
   private async findBinary(name: string): Promise<string> {
     core.info(`  Finding binary: ${name}`);
     const output = await exec.getExecOutput('which', [name], {
