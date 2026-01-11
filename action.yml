@@ -34,6 +34,14 @@ inputs:
     description: 'If true, sets up environment for pulumi preview to use as analyzer'
     required: false
     default: 'false'
+  detailed-comment:
+    description: 'If true, provides a detailed breakdown of all resources and metadata in the PR comment'
+    required: false
+    default: 'false'
+  log-level:
+    description: 'Log level for pulumicost (debug, info, warn, error)'
+    required: false
+    default: 'info'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -66,6 +74,8 @@ runs:
         INPUT_POST_COMMENT: ${{ inputs.post-comment }}
         INPUT_FAIL_ON_COST_INCREASE: ${{ inputs.fail-on-cost-increase }}
         INPUT_ANALYZER_MODE: ${{ inputs.analyzer-mode }}
+        INPUT_DETAILED_COMMENT: ${{ inputs.detailed-comment }}
+        INPUT_LOG_LEVEL: ${{ inputs.log-level }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

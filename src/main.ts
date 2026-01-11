@@ -46,7 +46,8 @@ function logInputs(): void {
     'behavior_on_error',
     'post_comment',
     'fail_on_cost_increase',
-    'analyzer_mode'
+    'analyzer_mode',
+    'detailed_comment'
   ];
   
   for (const input of inputs) {
@@ -118,6 +119,13 @@ async function run(): Promise<void> {
     const analyzerMode = parseBoolean(analyzerModeRaw, false);
     core.info(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
 
+    const detailedCommentRaw = core.getInput('detailed_comment');
+    const detailedComment = parseBoolean(detailedCommentRaw, false);
+    core.info(`  detailed-comment raw: "${detailedCommentRaw}" -> parsed: ${detailedComment}`);
+
+    const logLevel = core.getInput('log_level') || 'info';
+    core.info(`  log-level: "${logLevel}"`);
+
     const config: ActionConfiguration = {
       pulumiPlanJsonPath,
       githubToken,
@@ -127,6 +135,8 @@ async function run(): Promise<void> {
       postComment,
       threshold,
       analyzerMode,
+      detailedComment,
+      logLevel,
     };
 
     core.info('=== Checking Plan File ===');
@@ -180,7 +190,7 @@ async function run(): Promise<void> {
     if (config.analyzerMode) {
       core.info('');
       core.startGroup('🔍 Setting up Analyzer Mode');
-      await analyzer.setupAnalyzerMode();
+      await analyzer.setupAnalyzerMode(config);
       core.endGroup();
       core.info('✅ Analyzer mode configured. Run "pulumi preview" to see cost estimates.');
       core.info(`Total execution time: ${Date.now() - startTime}ms`);
@@ -224,7 +234,7 @@ async function run(): Promise<void> {
       core.info('');
       core.startGroup('💬 Posting PR comment');
       const commentStartTime = Date.now();
-      await commenter.upsertComment(report, config.githubToken);
+      await commenter.upsertComment(report, config.githubToken, config);
       core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
       core.endGroup();
     } else {

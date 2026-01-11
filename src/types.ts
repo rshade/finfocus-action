@@ -7,6 +7,8 @@ export interface ActionConfiguration {
   postComment: boolean;
   threshold: string | null;
   analyzerMode: boolean;
+  detailedComment: boolean;
+  logLevel: string;
 }
 
 export interface PulumicostResource {
@@ -62,9 +64,9 @@ export interface IPluginManager {
 
 export interface IAnalyzer {
   runAnalysis(planPath: string): Promise<PulumicostReport>;
-  setupAnalyzerMode(): Promise<void>;
+  setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
 }
 
 export interface ICommenter {
-  upsertComment(report: PulumicostReport, token: string): Promise<void>;
+  upsertComment(report: PulumicostReport, token: string, config?: ActionConfiguration): Promise<void>;
 }

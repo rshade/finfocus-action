@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import YAML from 'yaml';
-import { IAnalyzer, PulumicostReport } from './types.js';
+import { IAnalyzer, PulumicostReport, ActionConfiguration } from './types.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string): Promise<PulumicostReport> {
@@ -123,7 +123,7 @@ export class Analyzer implements IAnalyzer {
     }
   }
 
-  async setupAnalyzerMode(): Promise<void> {
+  async setupAnalyzerMode(config?: ActionConfiguration): Promise<void> {
     core.info(`=== Analyzer: Setting up analyzer mode ===`);
 
     // 1. Get pulumicost version for metadata
@@ -177,6 +177,12 @@ export class Analyzer implements IAnalyzer {
     core.exportVariable('PULUMI_POLICY_PACK', policyPackDir);
     core.exportVariable('PULUMI_POLICY_PACKS', policyPackDir);
     core.exportVariable('PULUMI_POLICY_PACK_PATH', policyPackDir);
+
+    // - Export log level if provided
+    if (config?.logLevel) {
+      core.info(`  Exporting PULUMICOST_LOG_LEVEL=${config.logLevel}`);
+      core.exportVariable('PULUMICOST_LOG_LEVEL', config.logLevel);
+    }
 
     // Set output for use in subsequent steps
     core.setOutput('policy-pack-path', policyPackDir);

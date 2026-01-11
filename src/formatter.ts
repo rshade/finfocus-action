@@ -1,6 +1,6 @@
-import { PulumicostReport } from './types.js';
+import { PulumicostReport, ActionConfiguration } from './types.js';
 
-export function formatCommentBody(report: PulumicostReport): string {
+export function formatCommentBody(report: PulumicostReport, config?: ActionConfiguration): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
   const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
@@ -22,19 +22,43 @@ export function formatCommentBody(report: PulumicostReport): string {
   const resources = report.resources ?? report.summary?.resources ?? [];
   let resourceTable = '';
   
-  if (resources.length > 0 && resources.length <= 20) {
-    const resourceRows = resources
-      .filter(r => r.monthly > 0)
-      .sort((a, b) => b.monthly - a.monthly)
-      .slice(0, 10)
-      .map(r => {
-        const name = r.resourceId.split('::').pop() || r.resourceId;
-        return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-      })
-      .join('\n');
+  const isDetailed = config?.detailedComment === true;
+  const resourceLimit = isDetailed ? 100 : 10;
+  
+  if (resources.length > 0) {
+    const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
     
-    if (resourceRows) {
+    if (isDetailed) {
+      // Detailed view: All resources with notes and breakdown
+      const resourceRows = sortedResources
+        .map(r => {
+          const name = r.resourceId.split('::').pop() || r.resourceId;
+          const notes = r.notes ? `<br/>*${r.notes}*` : '';
+          return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+        })
+        .join('\n');
+
       resourceTable = `
+
+### 📋 Full Resource Breakdown
+
+| Resource | Type | Monthly Cost | Notes |
+| :--- | :--- | ---: | :--- |
+${resourceRows}
+`;
+    } else if (resources.length <= 20) {
+      // Standard view: Top 10 resources
+      const resourceRows = sortedResources
+        .filter(r => r.monthly > 0)
+        .slice(0, 10)
+        .map(r => {
+          const name = r.resourceId.split('::').pop() || r.resourceId;
+          return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+        })
+        .join('\n');
+      
+      if (resourceRows) {
+        resourceTable = `
 
 ### Top Resources by Cost
 
@@ -42,6 +66,7 @@ export function formatCommentBody(report: PulumicostReport): string {
 | :--- | :--- | ---: |
 ${resourceRows}
 `;
+      }
     }
   }
 
@@ -66,12 +91,15 @@ ${providerRows}
     }
   }
 
+  const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
+
   return `## 💰 Cloud Cost Estimate
 
 | Total Monthly Cost | Cost Diff | % Change |
 | :--- | :--- | :--- |
 | **${total} ${currency}** | ${diffText} | ${percent}% |
-${resourceTable}${providerBreakdown}
+${resourceTable}${providerBreakdown}${detailNote}
+
 *Estimates calculated by [pulumicost](https://github.com/rshade/pulumicost-core)*
 `;
 }

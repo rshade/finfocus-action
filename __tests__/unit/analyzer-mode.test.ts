@@ -24,8 +24,6 @@ describe('Analyzer Mode (Policy Pack)', () => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
     (os.homedir as jest.Mock).mockReturnValue('/home/user');
-    (exec.getExecOutput as jest.Mock)
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
   });
 
   it('should setup policy pack correctly', async () => {
@@ -74,5 +72,18 @@ describe('Analyzer Mode (Policy Pack)', () => {
 
     // 6. Verify output
     expect(core.setOutput).toHaveBeenCalledWith('policy-pack-path', expectedPolicyDir);
+  });
+
+  it('should export PULUMICOST_LOG_LEVEL if provided', async () => {
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (exec.getExecOutput as jest.Mock)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'v0.1.2\n', stderr: '' }) // version
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
+
+    await analyzer.setupAnalyzerMode({
+      logLevel: 'debug',
+    } as any);
+
+    expect(core.exportVariable).toHaveBeenCalledWith('PULUMICOST_LOG_LEVEL', 'debug');
   });
 });
