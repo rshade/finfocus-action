@@ -14,59 +14,43 @@ Workflow run 20879348290 showed:
 - `Pulumi.yaml` was updated with `analyzers: [pulumicost]`
 - `pulumi preview` ran but **NO cost diagnostics appeared**
 
-### Root Cause
+### Root Cause (Session 2 Update)
 
-The code was adding the **wrong YAML syntax**:
+The code had two remaining issues even after fixing the YAML section:
 
-```yaml
-# WRONG - relies on auto-discovery which doesn't work for local plugins
-analyzers:
-  - pulumicost
-```
+1.  **Binary Naming**: The wrapper script called `pulumicost-real`. The `pulumicost` binary checks its own name (via `os.Args[0]`) to decide if it should run in analyzer (gRPC) mode. If it doesn't find `pulumi-analyzer-pulumicost` in its name, it just runs as a normal CLI and exits immediately, causing Pulumi to fail to connect.
+2.  **YAML Path**: The `plugins.analyzers[].path` in `Pulumi.yaml` was pointing to the plugin **directory** instead of the **executable**. While some plugins work with directory paths (if they have a `PulumiPlugin.yaml`), simple executable analyzers should point directly to the binary.
 
-### Fix Applied
+### Fix Applied (Session 3 - 2025-01-11)
 
-Changed `src/analyze.ts` to use `plugins.analyzers` with explicit path:
-
-```yaml
-# CORRECT - explicit path for CI/local plugins
-plugins:
-  analyzers:
-    - name: pulumicost
-      path: /home/runner/.pulumi/plugins/analyzer-pulumicost-v0.1.3
-```
+1.  **Renamed Real Binary**: The real binary is now renamed to `pulumi-analyzer-pulumicost-real`. This satisfies the `strings.Contains(exeName, "pulumi-analyzer-pulumicost")` check in the Go source.
+2.  **Updated Wrapper**: The wrapper script (at `pulumi-analyzer-pulumicost`) now invokes `pulumi-analyzer-pulumicost-real`.
+3.  **Updated Pulumi.yaml Logic**:
+    *   Points `path` to the binary itself: `/.../pulumi-analyzer-pulumicost`.
+    *   Automatically **removes** any legacy top-level `analyzers: [pulumicost]` entry to prevent configuration conflicts.
+    *   Updates the `path` if `pulumicost` is already present in `plugins.analyzers`.
 
 ### Code Changes Made
 
-**File: `src/analyze.ts` (lines 181-249)**
-
-The `setupAnalyzerMode()` function now:
-
-1. Creates `plugins.analyzers` section if it doesn't exist
-2. Adds analyzer config with `name` and `path` fields
-3. Uses the actual `pluginDir` variable for the path
-4. Handles existing `plugins` section gracefully
+**File: `src/analyze.ts`**
 
 ```typescript
+const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
+const realBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost-real');
+
+// ... copy to realBinaryPath ...
+// ... wrapper at analyzerBinaryPath calls realBinaryPath ...
+
 const analyzerConfig = {
   name: 'pulumicost',
-  path: pluginDir,  // e.g., /home/runner/.pulumi/plugins/analyzer-pulumicost-v0.1.3
+  path: analyzerBinaryPath, // Pointing to binary, not directory
 };
-
-if (!plugins) {
-  doc.set('plugins', { analyzers: [analyzerConfig] });
-} else if (!pluginsJS.analyzers) {
-  doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
-} else {
-  // Check if pulumicost already configured, add if not
-}
 ```
 
 ### Build Status
 
 - `npm run lint` - PASSED
 - `npm run build` - PASSED
-- Changes on `main` branch, needs merge to `v1`
 
 ---
 

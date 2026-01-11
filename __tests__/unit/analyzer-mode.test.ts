@@ -41,17 +41,17 @@ describe('Analyzer Mode', () => {
     // Verify real binary copy
     expect(fs.copyFileSync).toHaveBeenCalledWith(
       '/bin/pulumicost',
-      `${expectedPluginDir}/pulumicost-real`
+      `${expectedPluginDir}/pulumi-analyzer-pulumicost-real`
     );
 
     // Verify wrapper script creation
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       `${expectedPluginDir}/pulumi-analyzer-pulumicost`,
-      expect.stringContaining('pulumicost-real')
+      expect.stringContaining('pulumi-analyzer-pulumicost-real')
     );
     
     // Verify chmod for both
-    expect(fs.chmodSync).toHaveBeenCalledWith(`${expectedPluginDir}/pulumicost-real`, 0o755);
+    expect(fs.chmodSync).toHaveBeenCalledWith(`${expectedPluginDir}/pulumi-analyzer-pulumicost-real`, 0o755);
     expect(fs.chmodSync).toHaveBeenCalledWith(`${expectedPluginDir}/pulumi-analyzer-pulumicost`, 0o755);
   });
 
@@ -63,20 +63,21 @@ describe('Analyzer Mode', () => {
 
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('Pulumi.yaml'),
-      expect.stringContaining('analyzers:\n  - pulumicost')
+      expect.stringContaining('plugins:\n  analyzers:\n    - name: pulumicost\n      path: /home/user/.pulumi/plugins/analyzer-pulumicost-v1.2.3/pulumi-analyzer-pulumicost')
     );
   });
 
-  it('should not update Pulumi.yaml if pulumicost already present', async () => {
+  it('should remove legacy top-level analyzers and add plugins.analyzers', async () => {
     (fs.existsSync as jest.Mock).mockImplementation((path: string) => path.includes('Pulumi.yaml'));
     (fs.readFileSync as jest.Mock).mockReturnValue('name: p\nanalyzers:\n  - pulumicost\n');
 
     await analyzer.setupAnalyzerMode();
 
-    // writeFileSync might be called for the plugin files, but not for Pulumi.yaml
     const yamlCalls = (fs.writeFileSync as jest.Mock).mock.calls.filter(call => 
       call[0].includes('Pulumi.yaml')
     );
-    expect(yamlCalls).toHaveLength(0);
+    expect(yamlCalls).toHaveLength(1);
+    expect(yamlCalls[0][1]).not.toContain('analyzers:\n  - pulumicost');
+    expect(yamlCalls[0][1]).toContain('plugins:\n  analyzers:');
   });
 });

@@ -152,49 +152,65 @@ export class Analyzer implements IAnalyzer {
       fs.mkdirSync(pluginDir, { recursive: true });
     }
 
-        const pulumicostBinary = await this.findBinary('pulumicost');
-        core.info(`  Source binary: ${pulumicostBinary}`);
-        
-        const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
-        const realBinaryPath = path.join(pluginDir, 'pulumicost-real');
-        
-        core.info(`  Installing real binary to: ${realBinaryPath}`);
-        fs.copyFileSync(pulumicostBinary, realBinaryPath);
-        fs.chmodSync(realBinaryPath, 0o755);
-    
-        core.info(`  Creating analyzer wrapper script at: ${analyzerBinaryPath}`);
-        // The wrapper script passes all arguments to the real binary, 
-        // but redirects stderr to a log file for troubleshooting.
-        // We use 'tee -a' so we can see it in the console IF Pulumi lets it through,
-        // and also keep it in a file we can cat later.
-        const wrapperScript = `#!/bin/sh
-    echo "--- $(date) ---" >> /tmp/pulumicost-analyzer.log
-    echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.log
-    # We redirect stderr to our log file. Stdout MUST remain clean for gRPC port discovery.
-    "${realBinaryPath}" "$@" 2>> /tmp/pulumicost-analyzer.log
-    `;
-        fs.writeFileSync(analyzerBinaryPath, wrapperScript);
-        fs.chmodSync(analyzerBinaryPath, 0o755);
-        core.info(`  Wrapper script created and made executable`);
-    
-        core.info(`  Analyzer plugin installed successfully.`);
+    const pulumicostBinary = await this.findBinary('pulumicost');
+    core.info(`  Source binary: ${pulumicostBinary}`);
+
+    const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
+    const realBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost-real');
+
+    core.info(`  Installing real binary to: ${realBinaryPath}`);
+    fs.copyFileSync(pulumicostBinary, realBinaryPath);
+    fs.chmodSync(realBinaryPath, 0o755);
+
+    core.info(`  Creating analyzer wrapper script at: ${analyzerBinaryPath}`);
+    // The wrapper script passes all arguments to the real binary, 
+    // but redirects stderr to a log file for troubleshooting.
+    // We use 'tee -a' so we can see it in the console IF Pulumi lets it through,
+    // and also keep it in a file we can cat later.
+    const wrapperScript = `#!/bin/sh
+echo "--- $(date) ---" >> /tmp/pulumicost-analyzer.log
+echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.log
+# We redirect stderr to our log file. Stdout MUST remain clean for gRPC port discovery.
+"${realBinaryPath}" "$@" 2>> /tmp/pulumicost-analyzer.log
+`;
+    fs.writeFileSync(analyzerBinaryPath, wrapperScript);
+    fs.chmodSync(analyzerBinaryPath, 0o755);
+    core.info(`  Wrapper script created and made executable`);
+
+    core.info(`  Analyzer plugin installed successfully.`);
     // Automatically update Pulumi.yaml if it exists
-    // CRITICAL: We must use plugins.analyzers with explicit path, NOT just analyzers:
+    // CRITICAL: We must use plugins.analyzers with explicit path to the BINARY, NOT just analyzers:
     // See ANALYZER_SETUP_NOTES.md for details
     const pulumiYamlPath = path.join(process.cwd(), 'Pulumi.yaml');
     if (fs.existsSync(pulumiYamlPath)) {
       core.info(`  Updating Pulumi.yaml at ${pulumiYamlPath}...`);
-      core.info(`  Using plugins.analyzers with explicit path: ${pluginDir}`);
+      core.info(`  Using plugins.analyzers with explicit path: ${analyzerBinaryPath}`);
       try {
         const yamlContent = fs.readFileSync(pulumiYamlPath, 'utf8');
         const doc = YAML.parseDocument(yamlContent);
         let modified = false;
 
-        // Check if plugins.analyzers already exists
+        // 1. Remove legacy top-level analyzers if present to avoid conflicts
+        if (doc.has('analyzers')) {
+          const analyzers = doc.get('analyzers');
+          if (YAML.isSeq(analyzers)) {
+            const index = analyzers.items.findIndex((item) => String(item) === 'pulumicost');
+            if (index !== -1) {
+              core.info(`  Removing legacy 'pulumicost' from top-level 'analyzers' list.`);
+              analyzers.items.splice(index, 1);
+              if (analyzers.items.length === 0) {
+                doc.delete('analyzers');
+              }
+              modified = true;
+            }
+          }
+        }
+
+        // 2. Configure plugins.analyzers
         const plugins = doc.get('plugins');
         const analyzerConfig = {
           name: 'pulumicost',
-          path: pluginDir,
+          path: analyzerBinaryPath,
         };
 
         if (!plugins) {
@@ -206,21 +222,23 @@ export class Analyzer implements IAnalyzer {
         } else {
           const pluginsJS = doc.toJS().plugins;
 
-          if (!pluginsJS.analyzers) {
+          if (!pluginsJS || !pluginsJS.analyzers) {
             core.info(`  'plugins.analyzers' not found. Creating...`);
             doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
             modified = true;
           } else if (Array.isArray(pluginsJS.analyzers)) {
             // Check if pulumicost is already configured
-            const hasPulumicost = pluginsJS.analyzers.some(
+            const index = pluginsJS.analyzers.findIndex(
               (a: { name?: string }) => a.name === 'pulumicost',
             );
-            if (!hasPulumicost) {
+            if (index === -1) {
               core.info(`  'pulumicost' not in plugins.analyzers. Adding...`);
               doc.addIn(['plugins', 'analyzers'], analyzerConfig);
               modified = true;
             } else {
-              core.info(`  'pulumicost' already configured in plugins.analyzers.`);
+              core.info(`  'pulumicost' already configured in plugins.analyzers. Updating path...`);
+              doc.setIn(['plugins', 'analyzers', index, 'path'], analyzerBinaryPath);
+              modified = true;
             }
           } else {
             core.warning(`  'plugins.analyzers' exists but is not a list. Overwriting...`);
