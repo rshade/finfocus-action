@@ -43644,37 +43644,52 @@ class Analyzer {
         core.info(`  Wrapper script created and made executable`);
         core.info(`  Analyzer plugin installed successfully.`);
         // Automatically update Pulumi.yaml if it exists
+        // CRITICAL: We must use plugins.analyzers with explicit path, NOT just analyzers:
+        // See ANALYZER_SETUP_NOTES.md for details
         const pulumiYamlPath = external_path_.join(process.cwd(), 'Pulumi.yaml');
         if (external_fs_.existsSync(pulumiYamlPath)) {
             core.info(`  Updating Pulumi.yaml at ${pulumiYamlPath}...`);
+            core.info(`  Using plugins.analyzers with explicit path: ${pluginDir}`);
             try {
                 const yamlContent = external_fs_.readFileSync(pulumiYamlPath, 'utf8');
-                // Parse YAML to object
                 const doc = dist.parseDocument(yamlContent);
                 let modified = false;
-                const analyzers = doc.get('analyzers');
-                if (!analyzers) {
-                    core.info(`  'analyzers' section not found. Creating...`);
-                    doc.set('analyzers', ['pulumicost']);
+                // Check if plugins.analyzers already exists
+                const plugins = doc.get('plugins');
+                const analyzerConfig = {
+                    name: 'pulumicost',
+                    path: pluginDir,
+                };
+                if (!plugins) {
+                    core.info(`  'plugins' section not found. Creating plugins.analyzers...`);
+                    doc.set('plugins', {
+                        analyzers: [analyzerConfig],
+                    });
                     modified = true;
                 }
                 else {
-                    // If it's not an array or sequence, we might have issues, but assuming valid Pulumi.yaml
-                    // YAML.parseDocument returns a Node. We can work with JS object or use direct methods.
-                    const analyzersJS = doc.toJS().analyzers;
-                    if (Array.isArray(analyzersJS)) {
-                        if (!analyzersJS.includes('pulumicost')) {
-                            core.info(`  'pulumicost' missing from 'analyzers'. Appending...`);
-                            doc.addIn(['analyzers'], 'pulumicost');
+                    const pluginsJS = doc.toJS().plugins;
+                    if (!pluginsJS.analyzers) {
+                        core.info(`  'plugins.analyzers' not found. Creating...`);
+                        doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
+                        modified = true;
+                    }
+                    else if (Array.isArray(pluginsJS.analyzers)) {
+                        // Check if pulumicost is already configured
+                        const hasPulumicost = pluginsJS.analyzers.some((a) => a.name === 'pulumicost');
+                        if (!hasPulumicost) {
+                            core.info(`  'pulumicost' not in plugins.analyzers. Adding...`);
+                            doc.addIn(['plugins', 'analyzers'], analyzerConfig);
                             modified = true;
                         }
                         else {
-                            core.info(`  'pulumicost' already present in 'analyzers'.`);
+                            core.info(`  'pulumicost' already configured in plugins.analyzers.`);
                         }
                     }
                     else {
-                        // Handle case where analyzers exists but isn't an array (unlikely for valid Pulumi)
-                        core.warning(`  'analyzers' section exists but is not a list. Skipping update.`);
+                        core.warning(`  'plugins.analyzers' exists but is not a list. Overwriting...`);
+                        doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
+                        modified = true;
                     }
                 }
                 if (modified) {
@@ -43692,7 +43707,7 @@ class Analyzer {
             }
         }
         else {
-            core.warning(`  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'analyzers: [pulumicost]' to your project configuration.`);
+            core.warning(`  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'plugins.analyzers' section.`);
         }
     }
     async findBinary(name) {
