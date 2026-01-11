@@ -1,6 +1,6 @@
-import { IAnalyzer, PulumicostReport } from './types.js';
+import { IAnalyzer, PulumicostReport, ActionConfiguration } from './types.js';
 export declare class Analyzer implements IAnalyzer {
     runAnalysis(planPath: string): Promise<PulumicostReport>;
-    setupAnalyzerMode(): Promise<void>;
+    setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
     private findBinary;
 }

@@ -35069,7 +35069,7 @@ class Analyzer {
                 `Raw output: ${output.stdout.substring(0, 500)}...`);
         }
     }
-    async setupAnalyzerMode() {
+    async setupAnalyzerMode(config) {
         core.info(`=== Analyzer: Setting up analyzer mode ===`);
         // 1. Get pulumicost version for metadata
         let version = '0.0.0-dev';
@@ -35115,6 +35115,11 @@ class Analyzer {
         core.exportVariable('PULUMI_POLICY_PACK', policyPackDir);
         core.exportVariable('PULUMI_POLICY_PACKS', policyPackDir);
         core.exportVariable('PULUMI_POLICY_PACK_PATH', policyPackDir);
+        // - Export log level if provided
+        if (config?.logLevel) {
+            core.info(`  Exporting PULUMICOST_LOG_LEVEL=${config.logLevel}`);
+            core.exportVariable('PULUMICOST_LOG_LEVEL', config.logLevel);
+        }
         // Set output for use in subsequent steps
         core.setOutput('policy-pack-path', policyPackDir);
         core.info(`  Analyzer (Policy Pack) setup complete.`);
@@ -35138,7 +35143,7 @@ class Analyzer {
 // EXTERNAL MODULE: ./node_modules/@actions/github/lib/github.js
 var github = __nccwpck_require__(3228);
 ;// CONCATENATED MODULE: ./src/formatter.ts
-function formatCommentBody(report) {
+function formatCommentBody(report, config) {
     // Handle both new and legacy report formats
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
     const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
@@ -35157,18 +35162,40 @@ function formatCommentBody(report) {
     // Build resource breakdown if available
     const resources = report.resources ?? report.summary?.resources ?? [];
     let resourceTable = '';
-    if (resources.length > 0 && resources.length <= 20) {
-        const resourceRows = resources
-            .filter(r => r.monthly > 0)
-            .sort((a, b) => b.monthly - a.monthly)
-            .slice(0, 10)
-            .map(r => {
-            const name = r.resourceId.split('::').pop() || r.resourceId;
-            return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-        })
-            .join('\n');
-        if (resourceRows) {
+    const isDetailed = config?.detailedComment === true;
+    const resourceLimit = isDetailed ? 100 : 10;
+    if (resources.length > 0) {
+        const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
+        if (isDetailed) {
+            // Detailed view: All resources with notes and breakdown
+            const resourceRows = sortedResources
+                .map(r => {
+                const name = r.resourceId.split('::').pop() || r.resourceId;
+                const notes = r.notes ? `<br/>*${r.notes}*` : '';
+                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+            })
+                .join('\n');
             resourceTable = `
+
+### 📋 Full Resource Breakdown
+
+| Resource | Type | Monthly Cost | Notes |
+| :--- | :--- | ---: | :--- |
+${resourceRows}
+`;
+        }
+        else if (resources.length <= 20) {
+            // Standard view: Top 10 resources
+            const resourceRows = sortedResources
+                .filter(r => r.monthly > 0)
+                .slice(0, 10)
+                .map(r => {
+                const name = r.resourceId.split('::').pop() || r.resourceId;
+                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+            })
+                .join('\n');
+            if (resourceRows) {
+                resourceTable = `
 
 ### Top Resources by Cost
 
@@ -35176,6 +35203,7 @@ function formatCommentBody(report) {
 | :--- | :--- | ---: |
 ${resourceRows}
 `;
+            }
         }
     }
     // Build provider breakdown if available
@@ -35197,12 +35225,14 @@ ${providerRows}
 `;
         }
     }
+    const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
     return `## 💰 Cloud Cost Estimate
 
 | Total Monthly Cost | Cost Diff | % Change |
 | :--- | :--- | :--- |
 | **${total} ${currency}** | ${diffText} | ${percent}% |
-${resourceTable}${providerBreakdown}
+${resourceTable}${providerBreakdown}${detailNote}
+
 *Estimates calculated by [pulumicost](https://github.com/rshade/pulumicost-core)*
 `;
 }
@@ -35213,7 +35243,7 @@ ${resourceTable}${providerBreakdown}
 
 class Commenter {
     marker = '<!-- pulumicost-action-comment -->';
-    async upsertComment(report, token) {
+    async upsertComment(report, token, config) {
         const octokit = github.getOctokit(token);
         const context = github.context;
         if (!context.payload.pull_request) {
@@ -35222,7 +35252,7 @@ class Commenter {
         }
         const prNumber = context.payload.pull_request.number;
         const body = `${this.marker}
-${formatCommentBody(report)}`;
+${formatCommentBody(report, config)}`;
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
             issue_number: prNumber
@@ -35292,7 +35322,8 @@ function logInputs() {
         'behavior_on_error',
         'post_comment',
         'fail_on_cost_increase',
-        'analyzer_mode'
+        'analyzer_mode',
+        'detailed_comment'
     ];
     for (const input of inputs) {
         const value = core.getInput(input);
@@ -35351,6 +35382,11 @@ async function run() {
         const analyzerModeRaw = core.getInput('analyzer_mode');
         const analyzerMode = parseBoolean(analyzerModeRaw, false);
         core.info(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
+        const detailedCommentRaw = core.getInput('detailed_comment');
+        const detailedComment = parseBoolean(detailedCommentRaw, false);
+        core.info(`  detailed-comment raw: "${detailedCommentRaw}" -> parsed: ${detailedComment}`);
+        const logLevel = core.getInput('log_level') || 'info';
+        core.info(`  log-level: "${logLevel}"`);
         const config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -35360,6 +35396,8 @@ async function run() {
             postComment,
             threshold,
             analyzerMode,
+            detailedComment,
+            logLevel,
         };
         core.info('=== Checking Plan File ===');
         if (external_fs_.existsSync(config.pulumiPlanJsonPath)) {
@@ -35411,7 +35449,7 @@ async function run() {
         if (config.analyzerMode) {
             core.info('');
             core.startGroup('🔍 Setting up Analyzer Mode');
-            await analyzer.setupAnalyzerMode();
+            await analyzer.setupAnalyzerMode(config);
             core.endGroup();
             core.info('✅ Analyzer mode configured. Run "pulumi preview" to see cost estimates.');
             core.info(`Total execution time: ${Date.now() - startTime}ms`);
@@ -35449,7 +35487,7 @@ async function run() {
             core.info('');
             core.startGroup('💬 Posting PR comment');
             const commentStartTime = Date.now();
-            await commenter.upsertComment(report, config.githubToken);
+            await commenter.upsertComment(report, config.githubToken, config);
             core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             core.endGroup();
         }

@@ -1,2 +1,2 @@
-import { PulumicostReport } from './types.js';
-export declare function formatCommentBody(report: PulumicostReport): string;
+import { PulumicostReport, ActionConfiguration } from './types.js';
+export declare function formatCommentBody(report: PulumicostReport, config?: ActionConfiguration): string;
