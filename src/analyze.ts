@@ -126,145 +126,62 @@ export class Analyzer implements IAnalyzer {
   async setupAnalyzerMode(): Promise<void> {
     core.info(`=== Analyzer: Setting up analyzer mode ===`);
 
-    core.info(`  Getting pulumicost version...`);
-    const versionOutput = await exec.getExecOutput('pulumicost', ['--version'], {
-      silent: false,
-      ignoreReturnCode: true,
-    });
-    core.info(`  Version output: ${versionOutput.stdout.trim()}`);
-    if (versionOutput.stderr) {
-      core.info(`  Version stderr: ${versionOutput.stderr.trim()}`);
+    // 1. Get pulumicost version for metadata
+    let version = '0.0.0-dev';
+    try {
+      const versionOutput = await exec.getExecOutput('pulumicost', ['--version'], {
+        silent: true,
+        ignoreReturnCode: true,
+      });
+      version = versionOutput.stdout.trim().match(/v?[\d.]+/)?.[0] || version;
+    } catch (e) {
+      core.debug(`Failed to get version: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    core.info(`  Using version: ${version}`);
+
+    // 2. Define Policy Pack Directory
+    const policyPackDir = path.join(os.homedir(), '.pulumicost', 'analyzer');
+    core.info(`  Policy Pack directory: ${policyPackDir}`);
+
+    if (!fs.existsSync(policyPackDir)) {
+      core.info(`  Creating policy pack directory...`);
+      fs.mkdirSync(policyPackDir, { recursive: true });
     }
 
-    const version = versionOutput.stdout.trim().match(/v?[\d.]+/)?.[0] || 'v0.1.0';
-    core.info(`  Extracted version: ${version}`);
+    // 3. Create PulumiPolicy.yaml
+    const policyYamlPath = path.join(policyPackDir, 'PulumiPolicy.yaml');
+    core.info(`  Writing PulumiPolicy.yaml to: ${policyYamlPath}`);
+    // The runtime 'pulumicost' tells Pulumi to look for 'pulumi-analyzer-policy-pulumicost'
+    const policyYamlContent = `runtime: pulumicost\nname: pulumicost\nversion: ${version}\n`;
+    fs.writeFileSync(policyYamlPath, policyYamlContent);
 
-    const pluginDir = path.join(
-      os.homedir(),
-      '.pulumi',
-      'plugins',
-      `analyzer-pulumicost-${version}`,
-    );
-    core.info(`  Plugin directory: ${pluginDir}`);
-
-    if (!fs.existsSync(pluginDir)) {
-      core.info(`  Creating plugin directory...`);
-      fs.mkdirSync(pluginDir, { recursive: true });
-    }
-
+    // 4. Locate and Copy Binary
     const pulumicostBinary = await this.findBinary('pulumicost');
     core.info(`  Source binary: ${pulumicostBinary}`);
 
-    const analyzerBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost');
-    const realBinaryPath = path.join(pluginDir, 'pulumi-analyzer-pulumicost-real');
+    // The binary MUST be named 'pulumi-analyzer-policy-pulumicost' for the 'pulumicost' runtime
+    const policyBinaryPath = path.join(policyPackDir, 'pulumi-analyzer-policy-pulumicost');
+    
+    core.info(`  Installing policy binary to: ${policyBinaryPath}`);
+    fs.copyFileSync(pulumicostBinary, policyBinaryPath);
+    fs.chmodSync(policyBinaryPath, 0o755);
 
-    core.info(`  Installing real binary to: ${realBinaryPath}`);
-    fs.copyFileSync(pulumicostBinary, realBinaryPath);
-    fs.chmodSync(realBinaryPath, 0o755);
+    // 5. Configure Environment
+    // - Add to PATH so Pulumi can find the binary named 'pulumi-analyzer-policy-pulumicost'
+    core.info(`  Adding ${policyPackDir} to PATH`);
+    core.addPath(policyPackDir);
 
-    core.info(`  Creating analyzer wrapper script at: ${analyzerBinaryPath}`);
-    // The wrapper script passes all arguments to the real binary, 
-    // but redirects stderr to a log file for troubleshooting.
-    // We use 'tee -a' so we can see it in the console IF Pulumi lets it through,
-    // and also keep it in a file we can cat later.
-    const wrapperScript = `#!/bin/sh
-echo "--- $(date) ---" >> /tmp/pulumicost-analyzer.log
-echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.log
-# We redirect stderr to our log file. Stdout MUST remain clean for gRPC port discovery.
-"${realBinaryPath}" "$@" 2>> /tmp/pulumicost-analyzer.log
-`;
-    fs.writeFileSync(analyzerBinaryPath, wrapperScript);
-    fs.chmodSync(analyzerBinaryPath, 0o755);
-    core.info(`  Wrapper script created and made executable`);
+    // - Export environment variables to trigger automatic loading in subsequent steps
+    // PULUMI_POLICY_PACK is the environment variable equivalent of the --policy-pack flag
+    core.info(`  Exporting PULUMI_POLICY_PACK=${policyPackDir}`);
+    core.exportVariable('PULUMI_POLICY_PACK', policyPackDir);
+    core.exportVariable('PULUMI_POLICY_PACKS', policyPackDir);
+    core.exportVariable('PULUMI_POLICY_PACK_PATH', policyPackDir);
 
-    core.info(`  Analyzer plugin installed successfully.`);
-    // Automatically update Pulumi.yaml if it exists
-    // CRITICAL: We must use plugins.analyzers with explicit path to the DIRECTORY.
-    // Pulumi expects the directory containing the analyzer binary (pulumi-analyzer-<name>).
-    const pulumiYamlPath = path.join(process.cwd(), 'Pulumi.yaml');
-    if (fs.existsSync(pulumiYamlPath)) {
-      core.info(`  Updating Pulumi.yaml at ${pulumiYamlPath}...`);
-      core.info(`  Using plugins.analyzers with explicit path: ${pluginDir}`);
-      try {
-        const yamlContent = fs.readFileSync(pulumiYamlPath, 'utf8');
-        const doc = YAML.parseDocument(yamlContent);
-        let modified = false;
+    // Set output for use in subsequent steps
+    core.setOutput('policy-pack-path', policyPackDir);
 
-        // 1. Remove legacy top-level analyzers if present to avoid conflicts
-        if (doc.has('analyzers')) {
-          const analyzers = doc.get('analyzers');
-          if (YAML.isSeq(analyzers)) {
-            const index = analyzers.items.findIndex((item) => String(item) === 'pulumicost');
-            if (index !== -1) {
-              core.info(`  Removing legacy 'pulumicost' from top-level 'analyzers' list.`);
-              analyzers.items.splice(index, 1);
-              if (analyzers.items.length === 0) {
-                doc.delete('analyzers');
-              }
-              modified = true;
-            }
-          }
-        }
-
-        // 2. Configure plugins.analyzers
-        const plugins = doc.get('plugins');
-        const analyzerConfig = {
-          name: 'pulumicost',
-          path: pluginDir,
-        };
-
-        if (!plugins) {
-          core.info(`  'plugins' section not found. Creating plugins.analyzers...`);
-          doc.set('plugins', {
-            analyzers: [analyzerConfig],
-          });
-          modified = true;
-        } else {
-          const pluginsJS = doc.toJS().plugins;
-
-          if (!pluginsJS || !pluginsJS.analyzers) {
-            core.info(`  'plugins.analyzers' not found. Creating...`);
-            doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
-            modified = true;
-          } else if (Array.isArray(pluginsJS.analyzers)) {
-            // Check if pulumicost is already configured
-            const index = pluginsJS.analyzers.findIndex(
-              (a: { name?: string }) => a.name === 'pulumicost',
-            );
-            if (index === -1) {
-              core.info(`  'pulumicost' not in plugins.analyzers. Adding...`);
-              doc.addIn(['plugins', 'analyzers'], analyzerConfig);
-              modified = true;
-            } else {
-              core.info(`  'pulumicost' already configured in plugins.analyzers. Updating path...`);
-              doc.setIn(['plugins', 'analyzers', index, 'path'], pluginDir);
-              modified = true;
-            }
-          } else {
-            core.warning(`  'plugins.analyzers' exists but is not a list. Overwriting...`);
-            doc.setIn(['plugins', 'analyzers'], [analyzerConfig]);
-            modified = true;
-          }
-        }
-
-        if (modified) {
-          fs.writeFileSync(pulumiYamlPath, doc.toString());
-          core.info(`  Pulumi.yaml updated successfully.`);
-          core.info(`  New Pulumi.yaml content:\n${doc.toString()}`);
-        } else {
-          core.info(`  No changes needed for Pulumi.yaml.`);
-          core.info(`  Current Pulumi.yaml content:\n${fs.readFileSync(pulumiYamlPath, 'utf8')}`);
-        }
-      } catch (e) {
-        core.warning(
-          `  Failed to parse or update Pulumi.yaml: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
-    } else {
-      core.warning(
-        `  Pulumi.yaml not found at ${pulumiYamlPath}. Please manually add 'plugins.analyzers' section.`,
-      );
-    }
+    core.info(`  Analyzer (Policy Pack) setup complete.`);
   }
   private async findBinary(name: string): Promise<string> {
     core.info(`  Finding binary: ${name}`);

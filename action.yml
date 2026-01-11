@@ -47,6 +47,9 @@ outputs:
   report-json-path:
     description: 'Path to the generated full JSON report'
     value: ${{ steps.run.outputs.report-json-path }}
+  policy-pack-path:
+    description: 'Path to the set up policy pack directory'
+    value: ${{ steps.run.outputs.policy-pack-path }}
 runs:
   using: 'composite'
   steps:

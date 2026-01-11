@@ -17,67 +17,62 @@ jest.mock('os');
 jest.mock('@actions/core');
 jest.mock('@actions/exec');
 
-describe('Analyzer Mode', () => {
+describe('Analyzer Mode (Policy Pack)', () => {
   let analyzer: Analyzer;
 
   beforeEach(() => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
     (os.homedir as jest.Mock).mockReturnValue('/home/user');
-    // Default mocks for exec
     (exec.getExecOutput as jest.Mock)
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'v1.2.3\n', stderr: '' }) // version
       .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
   });
 
-  it('should setup analyzer mode with wrapper script', async () => {
+  it('should setup policy pack correctly', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
-    (fs.readFileSync as jest.Mock).mockReturnValue('name: p\n');
+    (exec.getExecOutput as jest.Mock)
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'pulumicost version 0.1.2\n', stderr: '' }) // version
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
 
     await analyzer.setupAnalyzerMode();
 
-    const expectedPluginDir = '/home/user/.pulumi/plugins/analyzer-pulumicost-v1.2.3';
-    
-    // Verify real binary copy
+    const expectedPolicyDir = '/home/user/.pulumicost/analyzer';
+    const expectedBinaryPath = `${expectedPolicyDir}/pulumi-analyzer-policy-pulumicost`;
+    const expectedPolicyYamlPath = `${expectedPolicyDir}/PulumiPolicy.yaml`;
+
+    // 1. Verify directory creation
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expectedPolicyDir, { recursive: true });
+
+    // 2. Verify PulumiPolicy.yaml creation with metadata
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expectedPolicyYamlPath,
+      expect.stringContaining('runtime: pulumicost')
+    );
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expectedPolicyYamlPath,
+      expect.stringContaining('name: pulumicost')
+    );
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expectedPolicyYamlPath,
+      expect.stringContaining('version: 0.1.2')
+    );
+
+    // 3. Verify binary copy and chmod
     expect(fs.copyFileSync).toHaveBeenCalledWith(
       '/bin/pulumicost',
-      `${expectedPluginDir}/pulumi-analyzer-pulumicost-real`
+      expectedBinaryPath
     );
+    expect(fs.chmodSync).toHaveBeenCalledWith(expectedBinaryPath, 0o755);
 
-    // Verify wrapper script creation
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
-      `${expectedPluginDir}/pulumi-analyzer-pulumicost`,
-      expect.stringContaining('pulumi-analyzer-pulumicost-real')
-    );
-    
-    // Verify chmod for both
-    expect(fs.chmodSync).toHaveBeenCalledWith(`${expectedPluginDir}/pulumi-analyzer-pulumicost-real`, 0o755);
-    expect(fs.chmodSync).toHaveBeenCalledWith(`${expectedPluginDir}/pulumi-analyzer-pulumicost`, 0o755);
-  });
+    // 4. Verify PATH update
+    expect(core.addPath).toHaveBeenCalledWith(expectedPolicyDir);
 
-  it('should update Pulumi.yaml using yaml package', async () => {
-    (fs.existsSync as jest.Mock).mockImplementation((path: string) => path.includes('Pulumi.yaml'));
-    (fs.readFileSync as jest.Mock).mockReturnValue('name: my-project\n');
+    // 5. Verify env var exports
+    expect(core.exportVariable).toHaveBeenCalledWith('PULUMI_POLICY_PACK', expectedPolicyDir);
+    expect(core.exportVariable).toHaveBeenCalledWith('PULUMI_POLICY_PACKS', expectedPolicyDir);
+    expect(core.exportVariable).toHaveBeenCalledWith('PULUMI_POLICY_PACK_PATH', expectedPolicyDir);
 
-    await analyzer.setupAnalyzerMode();
-
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('Pulumi.yaml'),
-      expect.stringContaining('plugins:\n  analyzers:\n    - name: pulumicost\n      path: /home/user/.pulumi/plugins/analyzer-pulumicost-v1.2.3')
-    );
-  });
-
-  it('should remove legacy top-level analyzers and add plugins.analyzers', async () => {
-    (fs.existsSync as jest.Mock).mockImplementation((path: string) => path.includes('Pulumi.yaml'));
-    (fs.readFileSync as jest.Mock).mockReturnValue('name: p\nanalyzers:\n  - pulumicost\n');
-
-    await analyzer.setupAnalyzerMode();
-
-    const yamlCalls = (fs.writeFileSync as jest.Mock).mock.calls.filter(call => 
-      call[0].includes('Pulumi.yaml')
-    );
-    expect(yamlCalls).toHaveLength(1);
-    expect(yamlCalls[0][1]).not.toContain('analyzers:\n  - pulumicost');
-    expect(yamlCalls[0][1]).toContain('plugins:\n  analyzers:');
+    // 6. Verify output
+    expect(core.setOutput).toHaveBeenCalledWith('policy-pack-path', expectedPolicyDir);
   });
 });
