@@ -43605,7 +43605,7 @@ class Analyzer {
     async setupAnalyzerMode() {
         core.info(`=== Analyzer: Setting up analyzer mode ===`);
         core.info(`  Getting pulumicost version...`);
-        const versionOutput = await exec.getExecOutput('pulumicost', ['version'], {
+        const versionOutput = await exec.getExecOutput('pulumicost', ['--version'], {
             silent: false,
             ignoreReturnCode: true,
         });
@@ -43644,12 +43644,12 @@ echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.lo
         core.info(`  Wrapper script created and made executable`);
         core.info(`  Analyzer plugin installed successfully.`);
         // Automatically update Pulumi.yaml if it exists
-        // CRITICAL: We must use plugins.analyzers with explicit path to the BINARY, NOT just analyzers:
-        // See ANALYZER_SETUP_NOTES.md for details
+        // CRITICAL: We must use plugins.analyzers with explicit path to the DIRECTORY.
+        // Pulumi expects the directory containing the analyzer binary (pulumi-analyzer-<name>).
         const pulumiYamlPath = external_path_.join(process.cwd(), 'Pulumi.yaml');
         if (external_fs_.existsSync(pulumiYamlPath)) {
             core.info(`  Updating Pulumi.yaml at ${pulumiYamlPath}...`);
-            core.info(`  Using plugins.analyzers with explicit path: ${analyzerBinaryPath}`);
+            core.info(`  Using plugins.analyzers with explicit path: ${pluginDir}`);
             try {
                 const yamlContent = external_fs_.readFileSync(pulumiYamlPath, 'utf8');
                 const doc = dist.parseDocument(yamlContent);
@@ -43673,7 +43673,7 @@ echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.lo
                 const plugins = doc.get('plugins');
                 const analyzerConfig = {
                     name: 'pulumicost',
-                    path: analyzerBinaryPath,
+                    path: pluginDir,
                 };
                 if (!plugins) {
                     core.info(`  'plugins' section not found. Creating plugins.analyzers...`);
@@ -43699,7 +43699,7 @@ echo "Invoking pulumicost analyzer with args: $@" >> /tmp/pulumicost-analyzer.lo
                         }
                         else {
                             core.info(`  'pulumicost' already configured in plugins.analyzers. Updating path...`);
-                            doc.setIn(['plugins', 'analyzers', index, 'path'], analyzerBinaryPath);
+                            doc.setIn(['plugins', 'analyzers', index, 'path'], pluginDir);
                             modified = true;
                         }
                     }
