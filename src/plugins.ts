@@ -37,11 +37,8 @@ export class PluginManager implements IPluginManager {
         continue;
       }
 
-      // We always add --quiet to avoid the progress bar in logs, unless in debug mode
+      // We avoid the progress bar in logs by using silent mode in exec
       const args = ['plugin', 'install', trimmedPlugin];
-      if (!debug) {
-        args.push('--quiet');
-      }
       
       if (debug) core.info(`  Command: pulumicost ${args.join(' ')}`);
 

@@ -42,12 +42,12 @@ describe('PluginManager', () => {
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',
-      ['plugin', 'install', 'aws-plugin', '--quiet'],
+      ['plugin', 'install', 'aws-plugin'],
       expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',
-      ['plugin', 'install', 'kubecost', '--quiet'],
+      ['plugin', 'install', 'kubecost'],
       expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
   });
