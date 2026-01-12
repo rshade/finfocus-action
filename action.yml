@@ -41,7 +41,7 @@ inputs:
   log-level:
     description: 'Log level for pulumicost (debug, info, warn, error)'
     required: false
-    default: 'warn'
+    default: 'error'
   debug:
     description: 'If true, enables detailed debug logging for the action itself'
     required: false

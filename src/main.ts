@@ -101,7 +101,7 @@ async function run(): Promise<void> {
     const analyzerMode = parseBoolean(analyzerModeRaw, false);
     const detailedCommentRaw = core.getInput('detailed_comment');
     const detailedComment = parseBoolean(detailedCommentRaw, false);
-    const logLevel = core.getInput('log_level') || 'warn';
+    const logLevel = core.getInput('log_level') || 'error';
     const debugRaw = core.getInput('debug');
     const debug = parseBoolean(debugRaw, false);
 
