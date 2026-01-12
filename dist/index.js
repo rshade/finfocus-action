@@ -34904,11 +34904,8 @@ class PluginManager {
                     core.info(`  Skipping empty plugin name`);
                 continue;
             }
-            // We always add --quiet to avoid the progress bar in logs, unless in debug mode
+            // We avoid the progress bar in logs by using silent mode in exec
             const args = ['plugin', 'install', trimmedPlugin];
-            if (!debug) {
-                args.push('--quiet');
-            }
             if (debug)
                 core.info(`  Command: pulumicost ${args.join(' ')}`);
             try {
