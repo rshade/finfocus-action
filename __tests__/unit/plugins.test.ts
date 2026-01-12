@@ -35,7 +35,6 @@ describe('PluginManager', () => {
       expect.arrayContaining(['plugin', 'install']),
       expect.anything()
     );
-    expect(core.info).toHaveBeenCalledWith('  No plugins to install');
   });
 
   it('should install plugins correctly', async () => {
@@ -43,13 +42,13 @@ describe('PluginManager', () => {
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',
-      ['plugin', 'install', 'aws-plugin'],
-      expect.objectContaining({ silent: false, ignoreReturnCode: true })
+      ['plugin', 'install', 'aws-plugin', '--quiet'],
+      expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',
-      ['plugin', 'install', 'kubecost'],
-      expect.objectContaining({ silent: false, ignoreReturnCode: true })
+      ['plugin', 'install', 'kubecost', '--quiet'],
+      expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
   });
 
@@ -76,7 +75,7 @@ describe('PluginManager', () => {
   });
 
   it('should list installed plugins after installation', async () => {
-    await pluginManager.installPlugins(['aws-plugin']);
+    await pluginManager.installPlugins(['aws-plugin'], { debug: true } as any);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',

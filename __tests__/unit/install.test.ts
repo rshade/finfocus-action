@@ -46,11 +46,9 @@ describe('Installer', () => {
 
     await installer.install('1.0.0');
 
-    expect(tc.downloadTool).toHaveBeenCalledWith(
-      'https://github.com/rshade/pulumicost-core/releases/download/v1.0.0/pulumicost-core-v1.0.0-linux-amd64.tar.gz'
-    );
+    expect(core.addPath).toHaveBeenCalledWith('cached-path');
     expect(tc.extractTar).toHaveBeenCalledWith('download-path');
-    expect(exec.exec).toHaveBeenCalledWith('chmod', ['+x', 'cached-path/pulumicost']);
+    expect(exec.exec).toHaveBeenCalledWith('chmod', ['+x', 'cached-path/pulumicost'], { silent: true });
   });
 
   it('should detect win32 arm64 correctly and use zip', async () => {

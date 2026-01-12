@@ -47,7 +47,7 @@ describe('Analyzer', () => {
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'pulumicost',
       ['cost', 'projected', '--pulumi-json', 'plan.json', '--output', 'json'],
-      expect.objectContaining({ silent: false, ignoreReturnCode: true })
+      expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
     expect(report).toEqual(mockReport);
   });

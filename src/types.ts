@@ -9,6 +9,7 @@ export interface ActionConfiguration {
   analyzerMode: boolean;
   detailedComment: boolean;
   logLevel: string;
+  debug: boolean;
 }
 
 export interface PulumicostResource {
@@ -55,15 +56,15 @@ export interface CostAssessment {
 }
 
 export interface IInstaller {
-  install(version: string): Promise<string>;
+  install(version: string, config?: ActionConfiguration): Promise<string>;
 }
 
 export interface IPluginManager {
-  installPlugins(plugins: string[]): Promise<void>;
+  installPlugins(plugins: string[], config?: ActionConfiguration): Promise<void>;
 }
 
 export interface IAnalyzer {
-  runAnalysis(planPath: string): Promise<PulumicostReport>;
+  runAnalysis(planPath: string, config?: ActionConfiguration): Promise<PulumicostReport>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
 }
 
