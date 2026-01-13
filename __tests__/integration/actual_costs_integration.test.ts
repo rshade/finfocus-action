@@ -1,10 +1,15 @@
 import * as exec from '@actions/exec';
 import * as core from '@actions/core';
+import * as fs from 'fs';
 import { Analyzer } from '../../src/analyze.js';
 import { ActionConfiguration } from '../../src/types.js';
 
 jest.mock('@actions/exec');
 jest.mock('@actions/core');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+}));
 
 describe('Analyzer - Actual Costs Integration', () => {
   let analyzer: Analyzer;
@@ -30,6 +35,7 @@ describe('Analyzer - Actual Costs Integration', () => {
   beforeEach(() => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
   });
 
   it('should execute pulumicost cost actual command with correct arguments', async () => {

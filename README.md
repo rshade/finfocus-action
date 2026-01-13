@@ -31,7 +31,7 @@ This mode runs after you've generated a Pulumi plan JSON. It parses the plan, ca
     install-plugins: |
       aws-plugin
       kubecost
-     fail-on-cost-increase: '100USD' # Fail if increase > $100
+      fail-on-cost-increase: '100USD' # Fail if increase > $100
 ```
 
 ### Configuration with Actual Costs

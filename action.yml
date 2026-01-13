@@ -84,12 +84,6 @@ outputs:
   actual-cost-period:
     description: 'The date range for actual costs (e.g., 2025-01-01 to 2025-01-07)'
     value: ${{ steps.run.outputs.actual-cost-period }}
-  actual-total-cost:
-    description: 'Total actual cost for the specified period'
-    value: ${{ steps.run.outputs.actual-total-cost }}
-  actual-cost-period:
-    description: 'The date range for actual costs (e.g., 2025-01-01 to 2025-01-07)'
-    value: ${{ steps.run.outputs.actual-cost-period }}
 
 runs:
   using: 'composite'
@@ -110,10 +104,6 @@ runs:
         INPUT_DETAILED_COMMENT: ${{ inputs.detailed-comment }}
         INPUT_LOG_LEVEL: ${{ inputs.log-level }}
         INPUT_DEBUG: ${{ inputs.debug }}
-        INPUT_INCLUDE_ACTUAL_COSTS: ${{ inputs.include-actual-costs }}
-        INPUT_ACTUAL_COSTS_PERIOD: ${{ inputs.actual-costs-period }}
-        INPUT_PULUMI_STATE_JSON: ${{ inputs.pulumi-state-json }}
-        INPUT_ACTUAL_COSTS_GROUP_BY: ${{ inputs.actual-costs-group-by }}
         INPUT_INCLUDE_ACTUAL_COSTS: ${{ inputs.include-actual-costs }}
         INPUT_ACTUAL_COSTS_PERIOD: ${{ inputs.actual-costs-period }}
         INPUT_PULUMI_STATE_JSON: ${{ inputs.pulumi-state-json }}

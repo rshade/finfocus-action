@@ -6,6 +6,12 @@ import { ActionConfiguration } from '../../src/types.js';
 
 jest.mock('@actions/exec');
 jest.mock('@actions/core');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  existsSync: jest.fn(),
+  statSync: jest.fn(),
+  readFileSync: jest.fn(),
+}));
 
 describe('Analyzer - Error Handling Integration Tests', () => {
   let analyzer: Analyzer;
@@ -31,7 +37,9 @@ describe('Analyzer - Error Handling Integration Tests', () => {
   beforeEach(() => {
     analyzer = new Analyzer();
     jest.clearAllMocks();
-    (fs.existsSync as jest.Mock).mockImplementation(() => true);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (fs.statSync as jest.Mock).mockReturnValue({ size: 1000, mtime: new Date() });
+    (fs.readFileSync as jest.Mock).mockReturnValue('{}');
   });
 
   it('should handle plugin not configured error gracefully', async () => {
@@ -100,8 +108,10 @@ describe('Analyzer - Error Handling Integration Tests', () => {
       pulumiStateJsonPath: 'missing-state.json',
     };
 
-    // Mock fs.existsSync to return false for state file
-    (fs.existsSync as jest.Mock).mockImplementation((path) => path !== 'missing-state.json');
+    // Mock fs.existsSync to return false for both state file and plan file
+    (fs.existsSync as jest.Mock).mockImplementation(
+      (path) => path !== 'missing-state.json' && path !== 'plan.json',
+    );
 
     await expect(analyzer.runActualCosts(configWithState)).rejects.toThrow(
       'Pulumi state file not found: missing-state.json',
@@ -112,10 +122,9 @@ describe('Analyzer - Error Handling Integration Tests', () => {
     const configWithBoth = {
       ...mockConfig,
       pulumiStateJsonPath: 'missing-state.json',
-      // plan file exists
     };
 
-    // Mock fs.existsSync to return false for state file but true for others
+    // Mock fs.existsSync to return false for state file but true for plan file
     (fs.existsSync as jest.Mock).mockImplementation((path) => path !== 'missing-state.json');
 
     (exec.getExecOutput as jest.Mock).mockResolvedValue({
