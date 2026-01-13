@@ -11,6 +11,24 @@ export interface ActionConfiguration {
   includeRecommendations: boolean;
   logLevel: string;
   debug: boolean;
+  includeActualCosts: boolean;
+  actualCostsPeriod: string;
+  pulumiStateJsonPath: string;
+  actualCostsGroupBy: string;
+}
+
+export interface ActualCostItem {
+  name: string;
+  cost: number;
+  currency: string;
+}
+
+export interface ActualCostReport {
+  total: number;
+  currency: string;
+  startDate: string;
+  endDate: string;
+  items: ActualCostItem[];
 }
 
 export interface PulumicostResource {
@@ -70,6 +88,7 @@ export interface IAnalyzer {
     planPath: string,
     config?: ActionConfiguration,
   ): Promise<RecommendationsReport>;
+  runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
 }
 
@@ -99,5 +118,6 @@ export interface ICommenter {
     token: string,
     config?: ActionConfiguration,
     recommendationsReport?: RecommendationsReport,
+    actualCostReport?: ActualCostReport,
   ): Promise<void>;
 }

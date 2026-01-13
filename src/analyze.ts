@@ -9,6 +9,7 @@ import {
   PulumicostReport,
   ActionConfiguration,
   RecommendationsReport,
+  ActualCostReport,
 } from './types.js';
 
 export class Analyzer implements IAnalyzer {
@@ -220,6 +221,174 @@ export class Analyzer implements IAnalyzer {
         recommendations: [],
       };
     }
+  }
+
+  async runActualCosts(config: ActionConfiguration): Promise<ActualCostReport> {
+    const debug = config?.debug === true;
+    if (debug) {
+      core.info(`=== Analyzer: Running actual costs ===`);
+    }
+
+    // Validate group-by parameter
+    const validGroupByOptions = ['resource', 'type', 'provider', 'service', 'region', 'tag'];
+    if (config.actualCostsGroupBy && !validGroupByOptions.includes(config.actualCostsGroupBy)) {
+      throw new Error(
+        `Invalid actual-costs-group-by value: "${config.actualCostsGroupBy}". Supported: ${validGroupByOptions.join(', ')}`,
+      );
+    }
+
+    const args = ['cost', 'actual', '--output', 'json'];
+
+    // Handle input file selection for cost estimation
+    // Priority: state file (if exists) > plan file (if exists)
+    // State files provide actual resource creation timestamps for cost estimation
+    // when billing APIs are not available
+    if (config.pulumiStateJsonPath) {
+      if (fs.existsSync(config.pulumiStateJsonPath)) {
+        args.push('--pulumi-state', config.pulumiStateJsonPath);
+      } else if (config.pulumiPlanJsonPath && fs.existsSync(config.pulumiPlanJsonPath)) {
+        // Fall back to plan file if state file doesn't exist but plan does
+        args.push('--pulumi-json', config.pulumiPlanJsonPath);
+      } else {
+        throw new Error(`Pulumi state file not found: ${config.pulumiStateJsonPath}`);
+      }
+    } else if (config.pulumiPlanJsonPath) {
+      if (fs.existsSync(config.pulumiPlanJsonPath)) {
+        args.push('--pulumi-json', config.pulumiPlanJsonPath);
+      } else {
+        throw new Error(`Pulumi plan file not found: ${config.pulumiPlanJsonPath}`);
+      }
+    }
+
+    const { from, to } = this.getDateRange(config.actualCostsPeriod);
+    args.push('--from', from);
+    args.push('--to', to);
+
+    if (config.actualCostsGroupBy) {
+      args.push('--group-by', config.actualCostsGroupBy);
+    }
+
+    if (debug) {
+      core.info(`  Command: pulumicost ${args.join(' ')}`);
+    }
+
+    const output = await exec.getExecOutput('pulumicost', args, {
+      silent: !debug,
+      ignoreReturnCode: true,
+    });
+
+    if (output.exitCode !== 0) {
+      core.warning(
+        `pulumicost cost actual failed with exit code ${output.exitCode}: ${output.stderr}`,
+      );
+      return {
+        total: 0,
+        currency: 'USD',
+        startDate: from,
+        endDate: to,
+        items: [],
+      };
+    }
+
+    try {
+      const raw = JSON.parse(output.stdout);
+      if (debug) {
+        core.info(`  Parsed actual costs successfully`);
+      }
+
+      // Map raw output to ActualCostReport
+      const total = raw.total ?? raw.summary?.total ?? raw.totalCost ?? 0;
+      const currency = raw.currency ?? raw.summary?.currency ?? 'USD';
+      const items = (raw.items ?? raw.resources ?? []).map((item: any) => ({
+        name: item.name ?? item.resourceId ?? item.provider ?? 'Unknown',
+        cost: item.cost ?? item.total ?? item.monthly ?? 0,
+        currency: item.currency ?? currency,
+      }));
+
+      return {
+        total,
+        currency,
+        startDate: from,
+        endDate: to,
+        items,
+      };
+    } catch (err) {
+      core.warning(
+        `Failed to parse actual cost output: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return {
+        total: 0,
+        currency: 'USD',
+        startDate: from,
+        endDate: to,
+        items: [],
+      };
+    }
+  }
+
+  private getDateRange(period: string): { from: string; to: string } {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const to = today.toISOString().split('T')[0];
+
+    // Validate period format
+    if (!this.isValidPeriodFormat(period)) {
+      throw new Error(
+        `Invalid actual-costs-period format: "${period}". Supported: 7d, 30d, mtd, or YYYY-MM-DD`,
+      );
+    }
+
+    let fromDate: Date;
+
+    if (period === '7d') {
+      fromDate = new Date(today);
+      fromDate.setDate(today.getDate() - 7);
+    } else if (period === '30d') {
+      fromDate = new Date(today);
+      fromDate.setDate(today.getDate() - 30);
+    } else if (period === 'mtd') {
+      fromDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else {
+      // Custom YYYY-MM-DD date
+      fromDate = this.parseAndValidateCustomDate(period);
+      if (fromDate > today) {
+        throw new Error(`Custom date cannot be in the future: ${period}`);
+      }
+    }
+
+    const from = fromDate.toISOString().split('T')[0];
+    return { from, to };
+  }
+
+  private isValidPeriodFormat(period: string): boolean {
+    if (['7d', '30d', 'mtd'].includes(period)) {
+      return true;
+    }
+
+    // Check YYYY-MM-DD format
+    const dateMatch = period.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!dateMatch) return false;
+
+    // Validate it's a real date
+    const [, year, month, day] = dateMatch;
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return (
+      date.getFullYear() === parseInt(year) &&
+      date.getMonth() === parseInt(month) - 1 &&
+      date.getDate() === parseInt(day)
+    );
+  }
+
+  private parseAndValidateCustomDate(dateStr: string): Date {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+
+    // Additional validation
+    if (year < 2020) {
+      throw new Error(`Custom date too far in the past: ${dateStr}. Minimum year: 2020`);
+    }
+
+    return date;
   }
 
   async setupAnalyzerMode(config?: ActionConfiguration): Promise<void> {

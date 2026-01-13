@@ -8,12 +8,12 @@ import { IPluginManager, ActionConfiguration } from './types.js';
 export class PluginManager implements IPluginManager {
   async installPlugins(plugins: string[], config?: ActionConfiguration): Promise<void> {
     const debug = config?.debug === true;
-    
+
     if (debug) {
       core.info(`=== PluginManager: Starting plugin installation ===`);
-      core.info(`  Plugins to install: [${plugins.map(p => `"${p}"`).join(', ')}]`);
+      core.info(`  Plugins to install: [${plugins.map((p) => `"${p}"`).join(', ')}]`);
     }
-    
+
     if (plugins.length === 0) {
       if (debug) core.info(`  No plugins to install`);
       return;
@@ -28,10 +28,11 @@ export class PluginManager implements IPluginManager {
     for (let i = 0; i < plugins.length; i++) {
       const plugin = plugins[i];
       const trimmedPlugin = plugin.trim();
-      
-      if (debug) core.info(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
+
+      if (debug)
+        core.info(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
       else core.info(`Installing pulumicost plugin: "${trimmedPlugin}"`);
-      
+
       if (!trimmedPlugin) {
         if (debug) core.info(`  Skipping empty plugin name`);
         continue;
@@ -39,7 +40,7 @@ export class PluginManager implements IPluginManager {
 
       // We avoid the progress bar in logs by using silent mode in exec
       const args = ['plugin', 'install', trimmedPlugin];
-      
+
       if (debug) core.info(`  Command: pulumicost ${args.join(' ')}`);
 
       try {
@@ -53,11 +54,11 @@ export class PluginManager implements IPluginManager {
           core.info(`  Installation took: ${Date.now() - installStart}ms`);
           core.info(`  Exit code: ${output.exitCode}`);
           core.info(`  Stdout length: ${output.stdout.length} chars`);
-          
+
           if (output.stdout) {
             core.info(`  Stdout:\n${output.stdout}`);
           }
-          
+
           if (output.stderr) {
             core.info(`  Stderr:\n${output.stderr}`);
           }
@@ -69,7 +70,7 @@ export class PluginManager implements IPluginManager {
             `Failed to install plugin ${trimmedPlugin}.\n` +
               `Exit code: ${output.exitCode}\n` +
               `Stderr: ${output.stderr}\n` +
-              `Stdout: ${output.stdout}`
+              `Stdout: ${output.stdout}`,
           );
         }
 
@@ -78,7 +79,7 @@ export class PluginManager implements IPluginManager {
         core.error(`  Plugin installation threw exception`);
         core.error(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
         throw new Error(
-          `Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`
+          `Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
@@ -86,7 +87,7 @@ export class PluginManager implements IPluginManager {
     if (debug) {
       core.info(`=== Listing installed plugins ===`);
       await this.listInstalledPlugins(debug);
-      
+
       core.info(`=== Checking plugin directory contents ===`);
       if (fs.existsSync(pluginDir)) {
         const contents = fs.readdirSync(pluginDir);
@@ -107,7 +108,10 @@ export class PluginManager implements IPluginManager {
         core.info(`  Stdout:\n${output.stdout || '(empty)'}`);
       }
     } catch (err) {
-      if (debug) core.warning(`  Could not list plugins: ${err instanceof Error ? err.message : String(err)}`);
+      if (debug)
+        core.warning(
+          `  Could not list plugins: ${err instanceof Error ? err.message : String(err)}`,
+        );
     }
   }
 }
