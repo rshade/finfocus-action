@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ActionConfiguration, RecommendationsReport } from './types.js';
+import { ActionConfiguration, RecommendationsReport, ActualCostReport } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
@@ -50,6 +50,10 @@ function logInputs(): void {
     'detailed_comment',
     'include_recommendations',
     'debug',
+    'include_actual_costs',
+    'actual_costs_period',
+    'pulumi_state_json',
+    'actual_costs_group_by',
   ];
 
   for (const input of inputs) {
@@ -108,6 +112,12 @@ async function run(): Promise<void> {
     const debugRaw = core.getInput('debug');
     const debug = parseBoolean(debugRaw, false);
 
+    const includeActualCostsRaw = core.getInput('include_actual_costs');
+    const includeActualCosts = parseBoolean(includeActualCostsRaw, false);
+    const actualCostsPeriod = core.getInput('actual_costs_period') || '7d';
+    const pulumiStateJsonPath = core.getInput('pulumi_state_json') || '';
+    const actualCostsGroupBy = core.getInput('actual_costs_group_by') || 'provider';
+
     config = {
       pulumiPlanJsonPath,
       githubToken,
@@ -121,6 +131,10 @@ async function run(): Promise<void> {
       includeRecommendations,
       logLevel,
       debug,
+      includeActualCosts,
+      actualCostsPeriod,
+      pulumiStateJsonPath,
+      actualCostsGroupBy,
     };
 
     if (config.debug) {
@@ -143,6 +157,12 @@ async function run(): Promise<void> {
       );
       core.info(`  log-level: "${logLevel}"`);
       core.info(`  debug raw: "${debugRaw}" -> parsed: ${debug}`);
+      core.info(
+        `  include-actual-costs raw: "${includeActualCostsRaw}" -> parsed: ${includeActualCosts}`,
+      );
+      core.info(`  actual-costs-period: "${actualCostsPeriod}"`);
+      core.info(`  pulumi-state-json: "${pulumiStateJsonPath}"`);
+      core.info(`  actual-costs-group-by: "${actualCostsGroupBy}"`);
     }
 
     if (config.debug) {
@@ -264,11 +284,37 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
+    let actualCostReport: ActualCostReport | undefined;
+    if (config.includeActualCosts) {
+      core.info('');
+      core.startGroup('📉 Running actual cost analysis');
+      const actualStart = Date.now();
+      actualCostReport = await analyzer.runActualCosts(config);
+      if (config.debug) {
+        core.info(`Actual costs took: ${Date.now() - actualStart}ms`);
+      }
+      core.setOutput('actual-total-cost', actualCostReport.total.toString());
+      core.setOutput(
+        'actual-cost-period',
+        `${actualCostReport.startDate} to ${actualCostReport.endDate}`,
+      );
+      core.info(
+        `📉 Actual Cost (${actualCostReport.startDate} to ${actualCostReport.endDate}): ${actualCostReport.total} ${actualCostReport.currency}`,
+      );
+      core.endGroup();
+    }
+
     if (config.postComment && config.githubToken) {
       core.info('');
       core.startGroup('💬 Posting PR comment');
       const commentStartTime = Date.now();
-      await commenter.upsertComment(report, config.githubToken, config, recommendationsReport);
+      await commenter.upsertComment(
+        report,
+        config.githubToken,
+        config,
+        recommendationsReport,
+        actualCostReport,
+      );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
       }

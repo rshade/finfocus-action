@@ -7,7 +7,9 @@ export function checkThreshold(threshold: string | null, diff: number, currency:
   const match = threshold.match(regex);
 
   if (!match) {
-    core.warning(`Malformed threshold input: "${threshold}". Expected format like "100USD". Skipping guardrail.`);
+    core.warning(
+      `Malformed threshold input: "${threshold}". Expected format like "100USD". Skipping guardrail.`,
+    );
     return false;
   }
 
@@ -15,7 +17,9 @@ export function checkThreshold(threshold: string | null, diff: number, currency:
   const limitCurrency = match[3];
 
   if (limitCurrency !== currency) {
-    core.warning(`Currency mismatch in threshold. Threshold: ${limitCurrency}, Report: ${currency}. Skipping guardrail.`);
+    core.warning(
+      `Currency mismatch in threshold. Threshold: ${limitCurrency}, Report: ${currency}. Skipping guardrail.`,
+    );
     return false;
   }
 

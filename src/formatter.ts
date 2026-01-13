@@ -1,9 +1,15 @@
-import { PulumicostReport, ActionConfiguration, RecommendationsReport } from './types.js';
+import {
+  PulumicostReport,
+  ActionConfiguration,
+  RecommendationsReport,
+  ActualCostReport,
+} from './types.js';
 
 export function formatCommentBody(
   report: PulumicostReport,
   config?: ActionConfiguration,
   recommendationsReport?: RecommendationsReport,
+  actualCostReport?: ActualCostReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -94,6 +100,32 @@ ${providerRows}
     }
   }
 
+  // Build Actual Cost Section
+  let actualCostSection = '';
+  let actualCostRow = '';
+
+  if (actualCostReport && actualCostReport.total > 0) {
+    const actualTotal = actualCostReport.total.toFixed(2);
+    actualCostRow = `| **Actual (${config?.actualCostsPeriod || '7d'})** | ${actualTotal} ${actualCostReport.currency} |`;
+
+    // Actual Costs Breakdown Table
+    if (actualCostReport.items.length > 0) {
+      const actualRows = actualCostReport.items
+        .sort((a, b) => b.cost - a.cost)
+        .map((item) => `| ${item.name} | ${item.cost.toFixed(2)} ${item.currency} |`)
+        .join('\n');
+
+      actualCostSection = `
+### Actual Costs by ${config?.actualCostsGroupBy || 'provider'} (${actualCostReport.startDate} to ${actualCostReport.endDate})
+
+| Name | Cost |
+| :--- | ---: |
+| **Total** | **${actualTotal} ${actualCostReport.currency}** |
+${actualRows}
+`;
+    }
+  }
+
   const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
 
   let recommendationsSection = '';
@@ -119,10 +151,12 @@ ${recRows}
 
   return `## 💰 Cloud Cost Estimate
 
-| Total Monthly Cost | Cost Diff | % Change |
-| :--- | :--- | :--- |
-| **${total} ${currency}** | ${diffText} | ${percent}% |
-${resourceTable}${providerBreakdown}${recommendationsSection}${detailNote}
+| Metric | Value |
+| :--- | ---: |
+| **Projected Monthly** | ${total} ${currency} |
+${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
+| **% Change** | ${percent}% |
+${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${detailNote}
 
 *Estimates calculated by [pulumicost](https://github.com/rshade/pulumicost-core)*
 `;

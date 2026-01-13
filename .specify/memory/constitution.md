@@ -1,11 +1,11 @@
 <!--
 Sync Impact Report:
-- Version: 1.0.0 → 1.1.0
+- Version: 1.1.0 → 1.2.0
 - Principles Modified:
-  - Code Quality & Standards: Added prohibition of TODOs and stubs in the code.
+  - Documentation Discipline: Added requirement to update both Standard Configuration (PR Commenter) and Analyzer Mode with each new spec.
 - Added sections: None
 - Removed sections: None
-- Templates requiring updates: ✅ updated (plan, spec, tasks - validated as dynamic)
+- Templates requiring updates: ✅ updated (plan, spec, tasks - validated as generic/dynamic)
 - Follow-up TODOs: None
 -->
 
@@ -14,19 +14,24 @@ Sync Impact Report:
 ## Core Principles
 
 ### I. Code Quality & Standards
+
 Code MUST be idiomatic, readable, and maintainable. Adhere strictly to language-specific best practices (e.g., Go formatting, linting). Comments should explain 'why', not 'what', and be used sparingly where code is self-explanatory. Complexity should be minimized; prefer simple, explicit logic over clever, obscure solutions. Creating TODOs or stubs in the code is strictly forbidden; all tasks must be fully implemented to be considered complete.
 
 ### II. Testing Standards
+
 Comprehensive test coverage is MANDATORY. Unit tests MUST cover business logic, while integration tests MUST verify workflows. Tests must be reliable, deterministic, and independent. Test-Driven Development (TDD) is encouraged. Code without tests is considered broken.
 
 ### III. User Experience Consistency
+
 Interfaces (whether CLI or API) MUST be predictable, intuitive, and consistent. Output formats must be uniform across commands/endpoints. Error messages MUST be actionable, clear, and distinct from standard output. Avoid exposing internal implementation details to the user.
 
 ### IV. Performance Requirements
+
 Code MUST be optimized for execution speed and resource efficiency. Critical paths MUST be profiled and optimized. Avoid unnecessary allocations, blocking operations, or O(n^2) algorithms where better alternatives exist. Performance regressions are treated as bugs.
 
 ### V. Documentation Discipline
-Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUST be updated synchronously with code changes. API changes require immediate documentation updates. Documentation MUST be clear, concise, and up-to-date with the current state of the codebase.
+
+Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUST be updated synchronously with code changes. API changes require immediate documentation updates. Documentation MUST be clear, concise, and up-to-date with the current state of the codebase. With each new specification or spec update, both Standard Configuration (PR Commenter) and Analyzer Mode documentation MUST be synchronized and updated accordingly.
 
 ## Technology Stack & Constraints
 
@@ -45,4 +50,4 @@ Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUS
 
 This Constitution governs all development within the `finfocus-action` project. Amendments require a formal version bump, documented rationale, and team consensus. All pull requests and code reviews MUST verify compliance with these principles.
 
-**Version**: 1.1.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-09
+**Version**: 1.2.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-13

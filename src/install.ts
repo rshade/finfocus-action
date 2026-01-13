@@ -68,7 +68,7 @@ export class Installer implements IInstaller {
       throw new Error(
         `Failed to download pulumicost from ${downloadUrl}. ` +
           `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
-          `Error: ${err instanceof Error ? err.message : String(err)}`
+          `Error: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
@@ -79,13 +79,13 @@ export class Installer implements IInstaller {
         core.info(`  Archive type: ${ext}`);
       }
       const extractStart = Date.now();
-      
+
       if (platform === 'windows') {
         extractPath = await tc.extractZip(downloadPath);
       } else {
         extractPath = await tc.extractTar(downloadPath);
       }
-      
+
       if (debug) {
         core.info(`  Extraction completed in ${Date.now() - extractStart}ms`);
         core.info(`  Extracted to: ${extractPath}`);
@@ -95,7 +95,7 @@ export class Installer implements IInstaller {
     } catch (err) {
       core.error(`  Extraction FAILED`);
       throw new Error(
-        `Failed to extract pulumicost archive. Error: ${err instanceof Error ? err.message : String(err)}`
+        `Failed to extract pulumicost archive. Error: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
@@ -130,16 +130,17 @@ export class Installer implements IInstaller {
         core.info(`  Exit code: ${output.exitCode}`);
         core.info(`  Stdout: ${output.stdout.trim()}`);
       }
-      
+
       if (output.exitCode !== 0) {
         core.warning(`  pulumicost --version returned non-zero exit code: ${output.exitCode}`);
       } else if (debug) {
         core.info(`  Verification successful`);
       }
     } catch (err) {
-      if (debug) core.warning(`  Verification FAILED: ${err instanceof Error ? err.message : String(err)}`);
+      if (debug)
+        core.warning(`  Verification FAILED: ${err instanceof Error ? err.message : String(err)}`);
     }
-    
+
     if (debug) {
       core.info(`  Checking PATH for pulumicost...`);
       try {
@@ -161,7 +162,7 @@ export class Installer implements IInstaller {
 
     if (debug) core.info(`=== Resolving 'latest' version ===`);
     const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-    
+
     const response = await fetch(apiUrl, {
       headers: {
         Accept: 'application/vnd.github.v3+json',

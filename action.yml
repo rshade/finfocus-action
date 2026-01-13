@@ -46,6 +46,22 @@ inputs:
     description: 'If true, enables detailed debug logging for the action itself'
     required: false
     default: 'false'
+  include-actual-costs:
+    description: 'Include actual/historical costs in PR comment (true/false)'
+    required: false
+    default: 'false'
+  actual-costs-period:
+    description: 'Time period for actual costs: 7d, 30d, mtd (month-to-date), or custom YYYY-MM-DD'
+    required: false
+    default: '7d'
+  pulumi-state-json:
+    description: 'Path to Pulumi state JSON for state-based cost estimation'
+    required: false
+    default: ''
+  actual-costs-group-by:
+    description: 'Group actual costs by: resource, type, provider, daily, monthly'
+    required: false
+    default: 'provider'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -62,6 +78,13 @@ outputs:
   policy-pack-path:
     description: 'Path to the set up policy pack directory'
     value: ${{ steps.run.outputs.policy-pack-path }}
+  actual-total-cost:
+    description: 'Total actual cost for the specified period'
+    value: ${{ steps.run.outputs.actual-total-cost }}
+  actual-cost-period:
+    description: 'The date range for actual costs (e.g., 2025-01-01 to 2025-01-07)'
+    value: ${{ steps.run.outputs.actual-cost-period }}
+
 runs:
   using: 'composite'
   steps:
@@ -81,6 +104,10 @@ runs:
         INPUT_DETAILED_COMMENT: ${{ inputs.detailed-comment }}
         INPUT_LOG_LEVEL: ${{ inputs.log-level }}
         INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_INCLUDE_ACTUAL_COSTS: ${{ inputs.include-actual-costs }}
+        INPUT_ACTUAL_COSTS_PERIOD: ${{ inputs.actual-costs-period }}
+        INPUT_PULUMI_STATE_JSON: ${{ inputs.pulumi-state-json }}
+        INPUT_ACTUAL_COSTS_GROUP_BY: ${{ inputs.actual-costs-group-by }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'
