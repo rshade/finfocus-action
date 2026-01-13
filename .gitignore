@@ -2,8 +2,8 @@
 node_modules/
 
 # Build
-dist/
 # Note: dist/ is built and committed only in release branches, not in main
+dist/
 
 # Testing
 coverage/
