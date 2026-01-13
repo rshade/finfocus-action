@@ -38,6 +38,10 @@ inputs:
     description: 'If true, provides a detailed breakdown of all resources and metadata in the PR comment'
     required: false
     default: 'false'
+  include-recommendations:
+    description: 'Include cost optimization recommendations in PR comment (true/false)'
+    required: false
+    default: 'false'
   log-level:
     description: 'Log level for pulumicost (debug, info, warn, error)'
     required: false
@@ -84,6 +88,12 @@ outputs:
   actual-cost-period:
     description: 'The date range for actual costs (e.g., 2025-01-01 to 2025-01-07)'
     value: ${{ steps.run.outputs.actual-cost-period }}
+  total-savings:
+    description: 'Total potential monthly savings from recommendations'
+    value: ${{ steps.run.outputs.total-savings }}
+  recommendation-count:
+    description: 'Total number of cost recommendations found'
+    value: ${{ steps.run.outputs.recommendation-count }}
 
 runs:
   using: 'composite'
@@ -102,6 +112,7 @@ runs:
         INPUT_FAIL_ON_COST_INCREASE: ${{ inputs.fail-on-cost-increase }}
         INPUT_ANALYZER_MODE: ${{ inputs.analyzer-mode }}
         INPUT_DETAILED_COMMENT: ${{ inputs.detailed-comment }}
+        INPUT_INCLUDE_RECOMMENDATIONS: ${{ inputs.include-recommendations }}
         INPUT_LOG_LEVEL: ${{ inputs.log-level }}
         INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_INCLUDE_ACTUAL_COSTS: ${{ inputs.include-actual-costs }}
