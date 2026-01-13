@@ -8,6 +8,7 @@ export interface ActionConfiguration {
   threshold: string | null;
   analyzerMode: boolean;
   detailedComment: boolean;
+  includeRecommendations: boolean;
   logLevel: string;
   debug: boolean;
 }
@@ -65,9 +66,38 @@ export interface IPluginManager {
 
 export interface IAnalyzer {
   runAnalysis(planPath: string, config?: ActionConfiguration): Promise<PulumicostReport>;
+  runRecommendations(
+    planPath: string,
+    config?: ActionConfiguration,
+  ): Promise<RecommendationsReport>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
 }
 
+export interface RecommendationsSummary {
+  total_count: number;
+  total_savings: number;
+  currency: string;
+  count_by_action_type: Record<string, number>;
+}
+
+export interface Recommendation {
+  resource_id: string;
+  action_type: string;
+  description: string;
+  estimated_savings: number;
+  currency: string;
+}
+
+export interface RecommendationsReport {
+  summary: RecommendationsSummary;
+  recommendations: Recommendation[];
+}
+
 export interface ICommenter {
-  upsertComment(report: PulumicostReport, token: string, config?: ActionConfiguration): Promise<void>;
+  upsertComment(
+    report: PulumicostReport,
+    token: string,
+    config?: ActionConfiguration,
+    recommendationsReport?: RecommendationsReport,
+  ): Promise<void>;
 }

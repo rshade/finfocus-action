@@ -3,8 +3,13 @@ import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import YAML from 'yaml';
-import { IAnalyzer, PulumicostReport, ActionConfiguration } from './types.js';
+
+import {
+  IAnalyzer,
+  PulumicostReport,
+  ActionConfiguration,
+  RecommendationsReport,
+} from './types.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<PulumicostReport> {
@@ -138,6 +143,85 @@ export class Analyzer implements IAnalyzer {
     }
   }
 
+  async runRecommendations(
+    planPath: string,
+    config?: ActionConfiguration,
+  ): Promise<RecommendationsReport> {
+    const debug = config?.debug === true;
+    if (debug) {
+      core.info(`=== Analyzer: Running cost recommendations ===`);
+      core.info(`  Plan file path: ${planPath}`);
+    }
+
+    if (!fs.existsSync(planPath)) {
+      throw new Error(`Pulumi plan file not found: ${planPath}`);
+    }
+
+    const planStats = fs.statSync(planPath);
+    if (planStats.size === 0) {
+      throw new Error(`Pulumi plan file is empty: ${planPath}`);
+    }
+
+    const planContent = fs.readFileSync(planPath, 'utf8');
+    try {
+      JSON.parse(planContent);
+    } catch (parseErr) {
+      throw new Error(
+        `Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+      );
+    }
+
+    const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
+    if (debug) {
+      core.info(`=== Running pulumicost recommendations command ===`);
+      core.info(`  Command: pulumicost ${args.join(' ')}`);
+    }
+
+    const output = await exec.getExecOutput('pulumicost', args, {
+      silent: !debug,
+      ignoreReturnCode: true,
+    });
+
+    if (output.exitCode !== 0) {
+      core.warning(
+        `pulumicost recommendations failed with exit code ${output.exitCode}: ${output.stderr}`,
+      );
+      // Return empty recommendations instead of failing
+      return {
+        summary: {
+          total_count: 0,
+          total_savings: 0,
+          currency: 'USD',
+          count_by_action_type: {},
+        },
+        recommendations: [],
+      };
+    }
+
+    try {
+      const report = JSON.parse(output.stdout) as RecommendationsReport;
+      if (debug) {
+        core.info(`  Parsed recommendations successfully`);
+        core.info(`  Total recommendations: ${report.summary.total_count}`);
+      }
+      return report;
+    } catch (err) {
+      core.warning(
+        `Failed to parse pulumicost recommendations output: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      // Return empty recommendations
+      return {
+        summary: {
+          total_count: 0,
+          total_savings: 0,
+          currency: 'USD',
+          count_by_action_type: {},
+        },
+        recommendations: [],
+      };
+    }
+  }
+
   async setupAnalyzerMode(config?: ActionConfiguration): Promise<void> {
     const debug = config?.debug === true;
     if (debug) core.info(`=== Analyzer: Setting up analyzer mode ===`);
@@ -178,7 +262,7 @@ export class Analyzer implements IAnalyzer {
 
     // The binary MUST be named 'pulumi-analyzer-policy-pulumicost' for the 'pulumicost' runtime
     const policyBinaryPath = path.join(policyPackDir, 'pulumi-analyzer-policy-pulumicost');
-    
+
     if (debug) core.info(`  Installing policy binary to: ${policyBinaryPath}`);
     fs.copyFileSync(pulumicostBinary, policyBinaryPath);
     fs.chmodSync(policyBinaryPath, 0o755);

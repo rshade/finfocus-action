@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ActionConfiguration } from './types.js';
+import { ActionConfiguration, RecommendationsReport } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
@@ -20,11 +20,11 @@ function logEnvironment(): void {
   core.info(`CWD: ${process.cwd()}`);
   core.info(`HOME: ${process.env.HOME || process.env.USERPROFILE || 'unknown'}`);
   core.info(`PATH: ${process.env.PATH?.split(':').slice(0, 5).join(':') || 'unknown'}...`);
-  
+
   const relevantEnvVars = Object.keys(process.env)
-    .filter(k => k.startsWith('INPUT_') || k.startsWith('GITHUB_') || k.startsWith('RUNNER_'))
+    .filter((k) => k.startsWith('INPUT_') || k.startsWith('GITHUB_') || k.startsWith('RUNNER_'))
     .sort();
-  
+
   core.info('=== Relevant Environment Variables ===');
   for (const key of relevantEnvVars) {
     const value = process.env[key];
@@ -40,7 +40,7 @@ function logInputs(): void {
   core.info('=== Action Inputs (raw) ===');
   const inputs = [
     'pulumi_plan_json',
-    'github_token', 
+    'github_token',
     'pulumicost_version',
     'install_plugins',
     'behavior_on_error',
@@ -48,9 +48,10 @@ function logInputs(): void {
     'fail_on_cost_increase',
     'analyzer_mode',
     'detailed_comment',
-    'debug'
+    'include_recommendations',
+    'debug',
   ];
-  
+
   for (const input of inputs) {
     const value = core.getInput(input);
     if (input === 'github_token') {
@@ -78,10 +79,10 @@ function logAnalyzerOutput(): void {
 async function run(): Promise<void> {
   const startTime = Date.now();
   let config: ActionConfiguration | undefined;
-  
+
   try {
     core.info('🚀 Starting finfocus-action');
-    
+
     // Parse config first to know if we are in debug mode
     const pulumiPlanJsonPath = core.getInput('pulumi_plan_json') || 'plan.json';
     const githubToken = core.getInput('github_token');
@@ -101,6 +102,8 @@ async function run(): Promise<void> {
     const analyzerMode = parseBoolean(analyzerModeRaw, false);
     const detailedCommentRaw = core.getInput('detailed_comment');
     const detailedComment = parseBoolean(detailedCommentRaw, false);
+    const includeRecommendationsRaw = core.getInput('include_recommendations');
+    const includeRecommendations = parseBoolean(includeRecommendationsRaw, false);
     const logLevel = core.getInput('log_level') || 'error';
     const debugRaw = core.getInput('debug');
     const debug = parseBoolean(debugRaw, false);
@@ -115,6 +118,7 @@ async function run(): Promise<void> {
       threshold,
       analyzerMode,
       detailedComment,
+      includeRecommendations,
       logLevel,
       debug,
     };
@@ -128,12 +132,15 @@ async function run(): Promise<void> {
       core.info(`  github-token: ${githubToken ? '[PROVIDED]' : '[EMPTY]'}`);
       core.info(`  pulumicost-version resolved to: "${pulumicostVersion}"`);
       core.info(`  install-plugins raw: "${installPluginsRaw}"`);
-      core.info(`  install-plugins parsed: [${installPlugins.map(p => `"${p}"`).join(', ')}]`);
+      core.info(`  install-plugins parsed: [${installPlugins.map((p) => `"${p}"`).join(', ')}]`);
       core.info(`  behavior-on-error: "${behaviorOnError}"`);
       core.info(`  post-comment raw: "${postCommentRaw}" -> parsed: ${postComment}`);
       core.info(`  fail-on-cost-increase: "${threshold}"`);
       core.info(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
       core.info(`  detailed-comment raw: "${detailedCommentRaw}" -> parsed: ${detailedComment}`);
+      core.info(
+        `  include-recommendations raw: "${includeRecommendationsRaw}" -> parsed: ${includeRecommendations}`,
+      );
       core.info(`  log-level: "${logLevel}"`);
       core.info(`  debug raw: "${debugRaw}" -> parsed: ${debug}`);
     }
@@ -144,7 +151,7 @@ async function run(): Promise<void> {
         const stats = fs.statSync(config.pulumiPlanJsonPath);
         core.info(`  Plan file exists: ${config.pulumiPlanJsonPath}`);
         core.info(`  Plan file size: ${stats.size} bytes`);
-        
+
         if (stats.size > 0 && stats.size < 10000) {
           const content = fs.readFileSync(config.pulumiPlanJsonPath, 'utf8');
           core.info(`  Plan file content (first 1000 chars):\n${content.substring(0, 1000)}`);
@@ -209,11 +216,11 @@ async function run(): Promise<void> {
     if (config.debug) {
       core.info(`Analysis took: ${Date.now() - analysisStartTime}ms`);
     }
-    
+
     // Extract values from report - handle both new and legacy formats
     const totalMonthlyCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
-    
+
     if (config.debug) {
       const resourceCount = report.resources?.length ?? report.summary?.resources?.length ?? 0;
       core.info(`Analysis result summary:`);
@@ -239,11 +246,29 @@ async function run(): Promise<void> {
       core.info(`📈 Cost change: ${report.diff.monthly_cost_change} ${currency}`);
     }
 
+    let recommendationsReport: RecommendationsReport | undefined;
+    if (config.includeRecommendations) {
+      core.info('');
+      core.startGroup('💡 Running cost recommendations');
+      const recommendationsStartTime = Date.now();
+      recommendationsReport = await analyzer.runRecommendations(config.pulumiPlanJsonPath, config);
+      if (config.debug) {
+        core.info(`Recommendations took: ${Date.now() - recommendationsStartTime}ms`);
+      }
+
+      core.setOutput('total-savings', recommendationsReport.summary.total_savings.toString());
+      core.setOutput('recommendation-count', recommendationsReport.summary.total_count.toString());
+      core.info(
+        `💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`,
+      );
+      core.endGroup();
+    }
+
     if (config.postComment && config.githubToken) {
       core.info('');
       core.startGroup('💬 Posting PR comment');
       const commentStartTime = Date.now();
-      await commenter.upsertComment(report, config.githubToken, config);
+      await commenter.upsertComment(report, config.githubToken, config, recommendationsReport);
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
       }
@@ -254,15 +279,11 @@ async function run(): Promise<void> {
       core.info('');
       core.startGroup('🛡️ Checking cost guardrails');
       const { checkThreshold } = await import('./guardrails.js');
-      const failed = checkThreshold(
-        config.threshold,
-        report.diff.monthly_cost_change,
-        currency
-      );
+      const failed = checkThreshold(config.threshold, report.diff.monthly_cost_change, currency);
 
       if (failed) {
         throw new Error(
-          `Cost increase of ${report.diff.monthly_cost_change} ${currency} exceeds threshold ${config.threshold}`
+          `Cost increase of ${report.diff.monthly_cost_change} ${currency} exceeds threshold ${config.threshold}`,
         );
       }
       core.info(`✅ Cost within threshold: ${config.threshold}`);
@@ -277,7 +298,7 @@ async function run(): Promise<void> {
       core.info('');
       core.info('=== ERROR OCCURRED ===');
       core.info(`Total execution time before error: ${Date.now() - startTime}ms`);
-      
+
       const behavior = core.getInput('behavior-on-error') || 'fail';
       core.info(`Error behavior setting: ${behavior}`);
     }
