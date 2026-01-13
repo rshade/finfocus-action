@@ -4,7 +4,7 @@ author: 'rshade'
 inputs:
   pulumi-plan-json:
     description: 'Path to the pulumi preview --json output file'
-    required: true
+    required: false
     default: 'plan.json'
   github-token:
     description: 'GitHub Token for posting comments'
@@ -15,7 +15,7 @@ inputs:
     required: false
     default: 'latest'
   install-plugins:
-    description: 'Comma-separated list of plugins to install (e.g., aws-plugin)'
+    description: 'Comma-separated list of plugins to install (e.g., aws-public)'
     required: false
     default: ''
   behavior-on-error:
@@ -23,7 +23,7 @@ inputs:
     required: false
     default: 'fail'
   post-comment:
-    description: 'Whether to post a comment to the PR'
+    description: 'Whether to post a comment to the PR (true/false)'
     required: false
     default: 'true'
   fail-on-cost-increase:
@@ -34,21 +34,53 @@ inputs:
     description: 'If true, sets up environment for pulumi preview to use as analyzer'
     required: false
     default: 'false'
+  detailed-comment:
+    description: 'If true, provides a detailed breakdown of all resources and metadata in the PR comment'
+    required: false
+    default: 'false'
+  log-level:
+    description: 'Log level for pulumicost (debug, info, warn, error)'
+    required: false
+    default: 'error'
+  debug:
+    description: 'If true, enables detailed debug logging for the action itself'
+    required: false
+    default: 'false'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
+    value: ${{ steps.run.outputs.total-monthly-cost }}
   cost-diff:
     description: 'The difference in cost compared to the base state'
+    value: ${{ steps.run.outputs.cost-diff }}
   currency:
     description: 'The currency code (e.g., USD)'
+    value: ${{ steps.run.outputs.currency }}
   report-json-path:
     description: 'Path to the generated full JSON report'
+    value: ${{ steps.run.outputs.report-json-path }}
+  policy-pack-path:
+    description: 'Path to the set up policy pack directory'
+    value: ${{ steps.run.outputs.policy-pack-path }}
 runs:
   using: 'composite'
   steps:
     - name: 'Run finfocus-action'
+      id: run
       run: node ${{ github.action_path }}/dist/index.js
       shell: bash
+      env:
+        INPUT_PULUMI_PLAN_JSON: ${{ inputs.pulumi-plan-json }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_PULUMICOST_VERSION: ${{ inputs.pulumicost-version }}
+        INPUT_INSTALL_PLUGINS: ${{ inputs.install-plugins }}
+        INPUT_BEHAVIOR_ON_ERROR: ${{ inputs.behavior-on-error }}
+        INPUT_POST_COMMENT: ${{ inputs.post-comment }}
+        INPUT_FAIL_ON_COST_INCREASE: ${{ inputs.fail-on-cost-increase }}
+        INPUT_ANALYZER_MODE: ${{ inputs.analyzer-mode }}
+        INPUT_DETAILED_COMMENT: ${{ inputs.detailed-comment }}
+        INPUT_LOG_LEVEL: ${{ inputs.log-level }}
+        INPUT_DEBUG: ${{ inputs.debug }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

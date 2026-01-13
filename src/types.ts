@@ -7,19 +7,45 @@ export interface ActionConfiguration {
   postComment: boolean;
   threshold: string | null;
   analyzerMode: boolean;
+  detailedComment: boolean;
+  includeRecommendations: boolean;
+  logLevel: string;
+  debug: boolean;
+}
+
+export interface PulumicostResource {
+  resourceType: string;
+  resourceId: string;
+  adapter: string;
+  currency: string;
+  monthly: number;
+  hourly: number;
+  notes?: string;
+  breakdown?: unknown;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface PulumicostSummary {
+  totalMonthly: number;
+  totalHourly: number;
+  currency: string;
+  byProvider?: Record<string, number>;
+  byService?: Record<string, number>;
+  byAdapter?: Record<string, number>;
+  resources?: PulumicostResource[];
 }
 
 export interface PulumicostReport {
-  projected_monthly_cost: number;
-  currency: string;
+  summary: PulumicostSummary;
+  resources?: PulumicostResource[];
+  // Legacy fields for backward compatibility
+  projected_monthly_cost?: number;
+  currency?: string;
   diff?: {
     monthly_cost_change: number;
     percent_change: number;
   };
-  resources?: Array<{
-    urn: string;
-    monthly_cost: number;
-  }>;
 }
 
 export interface CostAssessment {
@@ -31,18 +57,47 @@ export interface CostAssessment {
 }
 
 export interface IInstaller {
-  install(version: string): Promise<string>;
+  install(version: string, config?: ActionConfiguration): Promise<string>;
 }
 
 export interface IPluginManager {
-  installPlugins(plugins: string[]): Promise<void>;
+  installPlugins(plugins: string[], config?: ActionConfiguration): Promise<void>;
 }
 
 export interface IAnalyzer {
-  runAnalysis(planPath: string): Promise<PulumicostReport>;
-  setupAnalyzerMode(): Promise<void>;
+  runAnalysis(planPath: string, config?: ActionConfiguration): Promise<PulumicostReport>;
+  runRecommendations(
+    planPath: string,
+    config?: ActionConfiguration,
+  ): Promise<RecommendationsReport>;
+  setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
+}
+
+export interface RecommendationsSummary {
+  total_count: number;
+  total_savings: number;
+  currency: string;
+  count_by_action_type: Record<string, number>;
+}
+
+export interface Recommendation {
+  resource_id: string;
+  action_type: string;
+  description: string;
+  estimated_savings: number;
+  currency: string;
+}
+
+export interface RecommendationsReport {
+  summary: RecommendationsSummary;
+  recommendations: Recommendation[];
 }
 
 export interface ICommenter {
-  upsertComment(report: PulumicostReport, token: string): Promise<void>;
+  upsertComment(
+    report: PulumicostReport,
+    token: string,
+    config?: ActionConfiguration,
+    recommendationsReport?: RecommendationsReport,
+  ): Promise<void>;
 }
