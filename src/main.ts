@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ActionConfiguration, RecommendationsReport, ActualCostReport } from './types.js';
+import { ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
@@ -118,6 +118,14 @@ async function run(): Promise<void> {
     const pulumiStateJsonPath = core.getInput('pulumi_state_json') || '';
     const actualCostsGroupBy = core.getInput('actual_costs_group_by') || 'provider';
 
+    const includeSustainabilityRaw = core.getInput('include_sustainability');
+    const includeSustainability = parseBoolean(includeSustainabilityRaw, false);
+    const utilizationRate = core.getInput('utilization_rate') || '1.0';
+    const sustainabilityEquivalentsRaw = core.getInput('sustainability_equivalents');
+    const sustainabilityEquivalents = parseBoolean(sustainabilityEquivalentsRaw, true);
+    const failOnCarbonIncreaseRaw = core.getInput('fail_on_carbon_increase');
+    const failOnCarbonIncrease = failOnCarbonIncreaseRaw || null;
+
     config = {
       pulumiPlanJsonPath,
       githubToken,
@@ -135,6 +143,10 @@ async function run(): Promise<void> {
       actualCostsPeriod,
       pulumiStateJsonPath,
       actualCostsGroupBy,
+      includeSustainability,
+      utilizationRate,
+      sustainabilityEquivalents,
+      failOnCarbonIncrease,
     };
 
     if (config.debug) {
@@ -163,6 +175,14 @@ async function run(): Promise<void> {
       core.info(`  actual-costs-period: "${actualCostsPeriod}"`);
       core.info(`  pulumi-state-json: "${pulumiStateJsonPath}"`);
       core.info(`  actual-costs-group-by: "${actualCostsGroupBy}"`);
+      core.info(
+        `  include-sustainability raw: "${includeSustainabilityRaw}" -> parsed: ${includeSustainability}`,
+      );
+      core.info(`  utilization-rate: "${utilizationRate}"`);
+      core.info(
+        `  sustainability-equivalents raw: "${sustainabilityEquivalentsRaw}" -> parsed: ${sustainabilityEquivalents}`,
+      );
+      core.info(`  fail-on-carbon-increase: "${failOnCarbonIncrease}"`);
     }
 
     if (config.debug) {
@@ -266,6 +286,26 @@ async function run(): Promise<void> {
       core.info(`📈 Cost change: ${report.diff.monthly_cost_change} ${currency}`);
     }
 
+    let sustainabilityReport: SustainabilityReport | undefined;
+    if (config.includeSustainability) {
+      core.info('');
+      core.startGroup('🌱 Running sustainability analysis');
+      const { totalCO2e, totalCO2eDiff, carbonIntensity } = analyzer.calculateSustainabilityMetrics(report);
+      
+      sustainabilityReport = {
+        totalCO2e,
+        totalCO2eDiff,
+        carbonIntensity
+      };
+
+      core.setOutput('total-carbon-footprint', totalCO2e.toString());
+      core.setOutput('carbon-intensity', carbonIntensity.toString());
+      
+      core.info(`🌱 Total Carbon Footprint: ${totalCO2e.toFixed(2)} kgCO2e/month`);
+      core.info(`🌱 Carbon Intensity: ${carbonIntensity.toFixed(2)} gCO2e/USD`);
+      core.endGroup();
+    }
+
     let recommendationsReport: RecommendationsReport | undefined;
     if (config.includeRecommendations) {
       core.info('');
@@ -314,6 +354,7 @@ async function run(): Promise<void> {
         config,
         recommendationsReport,
         actualCostReport,
+        sustainabilityReport,
       );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
@@ -333,6 +374,29 @@ async function run(): Promise<void> {
         );
       }
       core.info(`✅ Cost within threshold: ${config.threshold}`);
+      core.endGroup();
+    }
+
+    if (config.failOnCarbonIncrease && sustainabilityReport) {
+      core.info('');
+      core.startGroup('🌱 Checking sustainability guardrails');
+      const { checkCarbonThreshold } = await import('./guardrails.js');
+      
+      // Calculate base total for percent check
+      const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
+      
+      const failed = checkCarbonThreshold(
+        config.failOnCarbonIncrease,
+        sustainabilityReport.totalCO2eDiff,
+        baseTotal
+      );
+
+      if (failed) {
+        throw new Error(
+          `Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`,
+        );
+      }
+      core.info(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
       core.endGroup();
     }
 

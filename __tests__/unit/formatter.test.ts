@@ -105,4 +105,30 @@ describe('formatCommentBody', () => {
     expect(result).toContain('50.00 USD');
     expect(result).toContain('25.25 USD');
   });
+
+  it('should include sustainability impact section when enabled', () => {
+    const sustainabilityReport = {
+      totalCO2e: 125.5,
+      totalCO2eDiff: 15.2,
+      carbonIntensity: 2.95
+    };
+
+    const config: ActionConfiguration = {
+      includeSustainability: true,
+      sustainabilityEquivalents: true
+    } as ActionConfiguration;
+
+    const result = formatCommentBody(mockReport, config, undefined, undefined, sustainabilityReport);
+
+    expect(result).toContain('🌱 Sustainability Impact');
+    expect(result).toContain('Carbon Footprint');
+    expect(result).toContain('125.50 kgCO₂e/month');
+    expect(result).toContain('Carbon Change');
+    expect(result).toContain('+15.20 kgCO₂e/month');
+    expect(result).toContain('Carbon Intensity');
+    expect(result).toContain('2.95 gCO₂e/USD');
+    expect(result).toContain('Environmental Equivalents');
+    expect(result).toContain('68.45 trees');
+    expect(result).toContain('313.75 miles');
+  });
 });

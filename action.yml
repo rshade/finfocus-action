@@ -66,6 +66,22 @@ inputs:
     description: 'Group actual costs by: resource, type, provider, daily, monthly'
     required: false
     default: 'provider'
+  include-sustainability:
+    description: 'Include carbon footprint and sustainability metrics (true/false)'
+    required: false
+    default: 'false'
+  utilization-rate:
+    description: 'Assumed utilization rate for sustainability calculations (0.0 to 1.0)'
+    required: false
+    default: '1.0'
+  sustainability-equivalents:
+    description: 'Show impact equivalents like trees, miles driven (true/false)'
+    required: false
+    default: 'true'
+  fail-on-carbon-increase:
+    description: 'Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases'
+    required: false
+    default: ''
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -94,6 +110,12 @@ outputs:
   recommendation-count:
     description: 'Total number of cost recommendations found'
     value: ${{ steps.run.outputs.recommendation-count }}
+  total-carbon-footprint:
+    description: 'Total estimated CO2 emissions (kgCO2e/month)'
+    value: ${{ steps.run.outputs.total-carbon-footprint }}
+  carbon-intensity:
+    description: 'Carbon intensity per dollar spent (gCO2e/USD)'
+    value: ${{ steps.run.outputs.carbon-intensity }}
 
 runs:
   using: 'composite'
@@ -119,6 +141,10 @@ runs:
         INPUT_ACTUAL_COSTS_PERIOD: ${{ inputs.actual-costs-period }}
         INPUT_PULUMI_STATE_JSON: ${{ inputs.pulumi-state-json }}
         INPUT_ACTUAL_COSTS_GROUP_BY: ${{ inputs.actual-costs-group-by }}
+        INPUT_INCLUDE_SUSTAINABILITY: ${{ inputs.include-sustainability }}
+        INPUT_UTILIZATION_RATE: ${{ inputs.utilization-rate }}
+        INPUT_SUSTAINABILITY_EQUIVALENTS: ${{ inputs.sustainability-equivalents }}
+        INPUT_FAIL_ON_CARBON_INCREASE: ${{ inputs.fail-on-carbon-increase }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

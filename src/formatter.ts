@@ -3,13 +3,106 @@ import {
   ActionConfiguration,
   RecommendationsReport,
   ActualCostReport,
+  SustainabilityReport,
+  EquivalencyMetrics,
 } from './types.js';
+
+export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
+  // Source: EPA Greenhouse Gas Equivalencies Calculator
+  // Note: These are approximations for illustrative purposes.
+
+  // Trees: 1 tree absorbs ~22 kg CO₂/year (Illustrative; varies by species/age/location)
+  const trees = (totalCO2e * 12) / 22;
+
+  // Miles driven: ~0.4 kg CO₂/mile (Approx. based on average passenger vehicle)
+  const milesDriven = totalCO2e / 0.4;
+
+  // Home electricity: ~0.42 kg CO₂/kWh (Approx; EPA US avg is 0.394 kg/kWh), avg home uses ~30 kWh/day
+  const homeElectricityDays = totalCO2e / (30 * 0.42);
+
+  return {
+    trees,
+    milesDriven,
+    homeElectricityDays,
+  };
+}
+
+function formatSustainabilitySection(
+  report: SustainabilityReport,
+  config?: ActionConfiguration,
+  pulumicostReport?: PulumicostReport,
+): string {
+  if (!config?.includeSustainability) return '';
+
+  const { totalCO2e, totalCO2eDiff, carbonIntensity } = report;
+  const equivalents = config.sustainabilityEquivalents ? calculateEquivalents(totalCO2e) : undefined;
+
+  let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
+  if (totalCO2eDiff > 0) diffText = `+${diffText}`;
+
+  let equivalentsSection = '';
+  if (equivalents) {
+    equivalentsSection = `
+<details>
+<summary>Environmental Equivalents</summary>
+
+- 🌲 Equivalent to planting **${equivalents.trees.toFixed(2)} trees** annually to offset
+- 🚗 Equivalent to driving **${equivalents.milesDriven.toFixed(2)} miles** per month
+- 💡 Equivalent to **${equivalents.homeElectricityDays.toFixed(2)} days** of home electricity use
+</details>
+`;
+  }
+
+  // Build Resource Breakdown by Carbon Impact
+  let resourceTable = '';
+  const resources = pulumicostReport?.resources ?? pulumicostReport?.summary?.resources ?? [];
+  
+  if (resources.length > 0) {
+    const resourcesWithCarbon = resources
+      .filter(r => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
+      .sort((a, b) => (b.sustainability!.carbon_footprint.value) - (a.sustainability!.carbon_footprint.value));
+
+    if (resourcesWithCarbon.length > 0) {
+      const resourceRows = resourcesWithCarbon
+        .slice(0, 10) // Top 10 by carbon
+        .map((r) => {
+          const name = r.resourceId.split('::').pop() || r.resourceId;
+          const carbon = r.sustainability!.carbon_footprint.value.toFixed(2);
+          const unit = r.sustainability!.carbon_footprint.unit;
+          return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
+        })
+        .join('\n');
+
+      if (resourceRows) {
+        resourceTable = `
+### Resources by Carbon Impact
+
+| Resource | Type | CO₂/month |
+| :--- | :--- | ---: |
+${resourceRows}
+`;
+      }
+    }
+  }
+
+  return `
+### 🌱 Sustainability Impact
+
+| Metric | Value |
+| :--- | ---: |
+| **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
+| **Carbon Change** | ${diffText} |
+| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
+${equivalentsSection}${resourceTable}
+`;
+}
 
 export function formatCommentBody(
   report: PulumicostReport,
   config?: ActionConfiguration,
   recommendationsReport?: RecommendationsReport,
   actualCostReport?: ActualCostReport,
+  sustainabilityReport?: SustainabilityReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -149,6 +242,10 @@ ${recRows}
 `;
   }
 
+  const sustainabilitySection = sustainabilityReport 
+    ? formatSustainabilitySection(sustainabilityReport, config, report) 
+    : '';
+
   return `## 💰 Cloud Cost Estimate
 
 | Metric | Value |
@@ -156,7 +253,7 @@ ${recRows}
 | **Projected Monthly** | ${total} ${currency} |
 ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
 
 *Estimates calculated by [pulumicost](https://github.com/rshade/pulumicost-core)*
 `;

@@ -95,4 +95,56 @@ describe('Analyzer', () => {
       'Failed to parse pulumicost JSON output'
     );
   });
+
+  it('should parse sustainability data when present in report', async () => {
+    const mockReportWithSustainability = {
+      summary: {
+        totalMonthly: 100,
+        totalHourly: 0.1,
+        currency: 'USD',
+      },
+      resources: [
+        {
+          resourceType: 'aws:ec2/instance:Instance',
+          monthly: 7.50,
+          sustainability: {
+            gCO2e: { value: 12.5, unit: 'gCO2e/month' },
+            carbon_footprint: { value: 12.5, unit: 'kgCO2e/month' }
+          }
+        }
+      ]
+    };
+
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(mockReportWithSustainability),
+      stderr: '',
+    });
+
+    const report = await analyzer.runAnalysis('plan.json');
+
+    expect(report.resources?.[0].sustainability).toBeDefined();
+    expect(report.resources?.[0].sustainability?.gCO2e.value).toBe(12.5);
+    expect(report.resources?.[0].sustainability?.carbon_footprint.unit).toBe('kgCO2e/month');
+  });
+
+  it('should pass utilization flag to pulumicost when configured', async () => {
+    const config = {
+      utilizationRate: '0.8',
+    } as any;
+
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: '{}',
+      stderr: '',
+    });
+
+    await analyzer.runAnalysis('plan.json', config);
+
+    expect(exec.getExecOutput).toHaveBeenCalledWith(
+      'pulumicost',
+      expect.arrayContaining(['--utilization', '0.8']),
+      expect.anything()
+    );
+  });
 });

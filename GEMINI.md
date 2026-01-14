@@ -22,6 +22,7 @@ npm test && npm run lint
 TypeScript 5.x / Node.js 20: Follow standard conventions
 
 ## Recent Changes
+- 001-sustainability-metrics: Added TypeScript types and functions (no external dependencies)
 
 - 001-create-finfocus-action: Added TypeScript 5.x / Node.js 20 + `@actions/core`, `@actions/exec`, `@actions/github`, `@actions/tool-cache`, `jest`
 
