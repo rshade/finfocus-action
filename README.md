@@ -42,7 +42,7 @@ To display actual (historical) cloud costs alongside your estimates, or to enabl
 | `include-actual-costs` | Include actual/historical costs in PR comment (`true`/`false`). | No | `false` |
 | `actual-costs-period` | Time period for actual costs: `7d`, `30d`, `mtd` (month-to-date), or custom `YYYY-MM-DD`. | No | `7d` |
 | `actual-costs-group-by` | Group actual costs by: `resource`, `type`, `provider`, `daily`, `monthly`. | No | `provider` |
-| `include-sustainability`| Include carbon footprint and sustainability metrics (`true`/`false`). | No | `false` |
+| `include-sustainability`| Include carbon footprint and sustainability metrics (`true`/`false`). | No | `true` |
 | `utilization-rate` | Assumed utilization rate for sustainability calculations (0.0 to 1.0). | No | `1.0` |
 | `sustainability-equivalents` | Show impact equivalents like trees, miles driven (`true`/`false`). | No | `true` |
 | `fail-on-carbon-increase` | Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases. | No | `""` |

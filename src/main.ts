@@ -107,7 +107,7 @@ async function run(): Promise<void> {
     const detailedCommentRaw = core.getInput('detailed_comment');
     const detailedComment = parseBoolean(detailedCommentRaw, false);
     const includeRecommendationsRaw = core.getInput('include_recommendations');
-    const includeRecommendations = parseBoolean(includeRecommendationsRaw, false);
+    const includeRecommendations = parseBoolean(includeRecommendationsRaw, true);
     const logLevel = core.getInput('log_level') || 'error';
     const debugRaw = core.getInput('debug');
     const debug = parseBoolean(debugRaw, false);
@@ -119,7 +119,7 @@ async function run(): Promise<void> {
     const actualCostsGroupBy = core.getInput('actual_costs_group_by') || 'provider';
 
     const includeSustainabilityRaw = core.getInput('include_sustainability');
-    const includeSustainability = parseBoolean(includeSustainabilityRaw, false);
+    const includeSustainability = parseBoolean(includeSustainabilityRaw, true);
     const utilizationRate = core.getInput('utilization_rate') || '1.0';
     const sustainabilityEquivalentsRaw = core.getInput('sustainability_equivalents');
     const sustainabilityEquivalents = parseBoolean(sustainabilityEquivalentsRaw, true);

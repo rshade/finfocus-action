@@ -41,7 +41,7 @@ inputs:
   include-recommendations:
     description: 'Include cost optimization recommendations in PR comment (true/false)'
     required: false
-    default: 'false'
+    default: 'true'
   log-level:
     description: 'Log level for pulumicost (debug, info, warn, error)'
     required: false
@@ -69,7 +69,7 @@ inputs:
   include-sustainability:
     description: 'Include carbon footprint and sustainability metrics (true/false)'
     required: false
-    default: 'false'
+    default: 'true'
   utilization-rate:
     description: 'Assumed utilization rate for sustainability calculations (0.0 to 1.0)'
     required: false
