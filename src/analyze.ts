@@ -79,6 +79,12 @@ export class Analyzer implements IAnalyzer {
     }
 
     const args = ['cost', 'projected', '--pulumi-json', planPath, '--output', 'json'];
+
+    // Add utilization flag if provided and different from default
+    if (config?.utilizationRate && config.utilizationRate !== '1.0') {
+      args.push('--utilization', config.utilizationRate);
+    }
+
     if (debug) {
       core.info(`=== Running pulumicost command ===`);
       core.info(`  Command: pulumicost ${args.join(' ')}`);
@@ -142,6 +148,45 @@ export class Analyzer implements IAnalyzer {
           `Raw output: ${output.stdout.substring(0, 500)}...`,
       );
     }
+  }
+
+  calculateSustainabilityMetrics(report: PulumicostReport): {
+    totalCO2e: number;
+    totalCO2eDiff: number;
+    carbonIntensity: number;
+  } {
+    let totalCO2e = 0;
+    
+    // Sum up carbon footprint from all resources
+    if (report.resources) {
+      for (const resource of report.resources) {
+        if (resource.sustainability?.carbon_footprint?.value) {
+          totalCO2e += resource.sustainability.carbon_footprint.value;
+        }
+      }
+    } else if (report.summary?.resources) {
+      for (const resource of report.summary.resources) {
+        if (resource.sustainability?.carbon_footprint?.value) {
+          totalCO2e += resource.sustainability.carbon_footprint.value;
+        }
+      }
+    }
+
+    // Since pulumicost currently might not provide total diff for sustainability, 
+    // we default to 0 for now unless we can calculate it from base state.
+    // For V1 MVP, we will assume 0 or absolute value if base isn't available.
+    // However, if we want to support diff, we'd need the base report which we don't have here.
+    // We will just return the absolute total for now.
+    const totalCO2eDiff = 0;
+
+    const totalCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
+    const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0; // gCO2e/USD
+
+    return {
+      totalCO2e,
+      totalCO2eDiff,
+      carbonIntensity,
+    };
   }
 
   async runRecommendations(

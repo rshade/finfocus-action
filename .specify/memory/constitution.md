@@ -1,11 +1,11 @@
 <!--
 Sync Impact Report:
-- Version: 1.1.0 → 1.2.0
+- Version: 1.2.0 → 1.3.0
 - Principles Modified:
-  - Documentation Discipline: Added requirement to update both Standard Configuration (PR Commenter) and Analyzer Mode with each new spec.
+  - Documentation Discipline: Added explicit requirements for technical writer documentation generation and a formal review loop.
 - Added sections: None
 - Removed sections: None
-- Templates requiring updates: ✅ updated (plan, spec, tasks - validated as generic/dynamic)
+- Templates requiring updates: ✅ updated (tasks-template.md)
 - Follow-up TODOs: None
 -->
 
@@ -31,13 +31,13 @@ Code MUST be optimized for execution speed and resource efficiency. Critical pat
 
 ### V. Documentation Discipline
 
-Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUST be updated synchronously with code changes. API changes require immediate documentation updates. Documentation MUST be clear, concise, and up-to-date with the current state of the codebase. With each new specification or spec update, both Standard Configuration (PR Commenter) and Analyzer Mode documentation MUST be synchronized and updated accordingly.
+Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUST be updated synchronously with code changes to reflect full technical criteria. API changes require immediate documentation updates. Documentation MUST be clear, concise, and up-to-date with the current state of the codebase. With each new specification or spec update, both Standard Configuration (PR Commenter) and Analyzer Mode documentation MUST be synchronized. Every implementation plan MUST include specific tasks for "doc generation by a technical writer" and a formal "documentation review loop" to ensure accuracy and completeness.
 
 ## Technology Stack & Constraints
 
-**Primary Language**: Go (implied by repository structure).
+**Primary Language**: TypeScript / Node.js (implied by repository structure).
 **Environment**: Linux compatibility is required.
-**Dependency Management**: Use standard modules (e.g., `go mod`).
+**Dependency Management**: Use standard modules (e.g., `npm` / `package.json`).
 **Security**: No secrets in code. Input validation is mandatory for all external data.
 
 ## Workflow & Review
@@ -50,4 +50,4 @@ Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUS
 
 This Constitution governs all development within the `finfocus-action` project. Amendments require a formal version bump, documented rationale, and team consensus. All pull requests and code reviews MUST verify compliance with these principles.
 
-**Version**: 1.2.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-13
+**Version**: 1.3.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-13

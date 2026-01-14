@@ -15,6 +15,10 @@ export interface ActionConfiguration {
   actualCostsPeriod: string;
   pulumiStateJsonPath: string;
   actualCostsGroupBy: string;
+  includeSustainability: boolean;
+  utilizationRate: string;
+  sustainabilityEquivalents: boolean;
+  failOnCarbonIncrease: string | null;
 }
 
 export interface ActualCostItem {
@@ -31,6 +35,16 @@ export interface ActualCostReport {
   items: ActualCostItem[];
 }
 
+export interface PulumicostSustainabilityMetric {
+  value: number;
+  unit: string;
+}
+
+export interface PulumicostSustainabilityData {
+  gCO2e: PulumicostSustainabilityMetric;
+  carbon_footprint: PulumicostSustainabilityMetric;
+}
+
 export interface PulumicostResource {
   resourceType: string;
   resourceId: string;
@@ -42,6 +56,20 @@ export interface PulumicostResource {
   breakdown?: unknown;
   startDate?: string;
   endDate?: string;
+  sustainability?: PulumicostSustainabilityData;
+}
+
+export interface EquivalencyMetrics {
+  trees: number; // Annual offset
+  milesDriven: number;
+  homeElectricityDays: number;
+}
+
+export interface SustainabilityReport {
+  totalCO2e: number; // kgCO2e/month
+  totalCO2eDiff: number; // kgCO2e/month
+  carbonIntensity: number; // gCO2e/USD
+  equivalents?: EquivalencyMetrics;
 }
 
 export interface PulumicostSummary {
@@ -72,6 +100,9 @@ export interface CostAssessment {
   currency: string;
   reportPath: string;
   failedThreshold: boolean;
+  totalCarbonFootprint?: number;
+  carbonIntensity?: number;
+  failedCarbonThreshold?: boolean;
 }
 
 export interface IInstaller {
@@ -90,6 +121,11 @@ export interface IAnalyzer {
   ): Promise<RecommendationsReport>;
   runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
+  calculateSustainabilityMetrics(report: PulumicostReport): {
+    totalCO2e: number;
+    totalCO2eDiff: number;
+    carbonIntensity: number;
+  };
 }
 
 export interface RecommendationsSummary {
@@ -119,5 +155,6 @@ export interface ICommenter {
     config?: ActionConfiguration,
     recommendationsReport?: RecommendationsReport,
     actualCostReport?: ActualCostReport,
+    sustainabilityReport?: SustainabilityReport,
   ): Promise<void>;
 }
