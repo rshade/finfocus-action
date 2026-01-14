@@ -8,13 +8,16 @@ import {
 } from './types.js';
 
 export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
-  // Trees: 1 tree absorbs ~22 kg CO₂/year -> kgCO2e * 12 / 22
+  // Source: EPA Greenhouse Gas Equivalencies Calculator
+  // Note: These are approximations for illustrative purposes.
+
+  // Trees: 1 tree absorbs ~22 kg CO₂/year (Illustrative; varies by species/age/location)
   const trees = (totalCO2e * 12) / 22;
 
-  // Miles driven: ~0.4 kg CO₂/mile -> kgCO2e / 0.4
+  // Miles driven: ~0.4 kg CO₂/mile (Approx. based on average passenger vehicle)
   const milesDriven = totalCO2e / 0.4;
 
-  // Home electricity: ~0.42 kg CO₂/kWh, avg home uses ~30 kWh/day -> kgCO2e / (30 * 0.42)
+  // Home electricity: ~0.42 kg CO₂/kWh (Approx; EPA US avg is 0.394 kg/kWh), avg home uses ~30 kWh/day
   const homeElectricityDays = totalCO2e / (30 * 0.42);
 
   return {

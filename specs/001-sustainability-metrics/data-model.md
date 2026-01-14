@@ -15,7 +15,7 @@ Represents the raw sustainability data returned by `pulumicost` for a single res
 | `carbon_footprint.value` | `number` | The numerical value. |
 | `carbon_footprint.unit` | `string` | Unit (e.g., "kgCO2e/month"). |
 
-### SustainabilityReport (Aggergated)
+### SustainabilityReport (Aggregated)
 
 Represents the aggregated sustainability data for the entire plan.
 

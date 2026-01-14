@@ -34,12 +34,18 @@ This mode runs after you've generated a Pulumi plan JSON. It parses the plan, ca
 ```
 
 ### Configuration with Actual Costs
-...
-| `actual-costs-group-by` | Group actual costs by: `resource`, `type`, `provider`, `daily`, `monthly`. |    No    |      `provider`       |
-| `include-sustainability`| Include carbon footprint and sustainability metrics (true/false).          |    No    |        `false`        |
-| `utilization-rate`      | Assumed utilization rate for sustainability calculations (0.0 to 1.0).     |    No    |         `1.0`         |
-| `sustainability-equivalents` | Show impact equivalents like trees, miles driven (true/false).        |    No    |         `true`        |
-| `fail-on-carbon-increase` | Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases.    |    No    |          `""`         |
+
+To display actual (historical) cloud costs alongside your estimates, or to enable sustainability metrics, configure the following inputs.
+
+| Input | Description | Required | Default |
+| :--- | :--- | :--- | :--- |
+| `include-actual-costs` | Include actual/historical costs in PR comment (`true`/`false`). | No | `false` |
+| `actual-costs-period` | Time period for actual costs: `7d`, `30d`, `mtd` (month-to-date), or custom `YYYY-MM-DD`. | No | `7d` |
+| `actual-costs-group-by` | Group actual costs by: `resource`, `type`, `provider`, `daily`, `monthly`. | No | `provider` |
+| `include-sustainability`| Include carbon footprint and sustainability metrics (`true`/`false`). | No | `false` |
+| `utilization-rate` | Assumed utilization rate for sustainability calculations (0.0 to 1.0). | No | `1.0` |
+| `sustainability-equivalents` | Show impact equivalents like trees, miles driven (`true`/`false`). | No | `true` |
+| `fail-on-carbon-increase` | Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases. | No | `""` |
 
 ## Outputs
 
@@ -53,8 +59,6 @@ This mode runs after you've generated a Pulumi plan JSON. It parses the plan, ca
 | `actual-cost-period`     | The date range for actual costs (e.g., 2025-01-01 to 2025-01-07). |
 | `total-carbon-footprint` | Total estimated CO2 emissions (kgCO2e/month).                     |
 | `carbon-intensity`       | Carbon intensity per dollar spent (gCO2e/USD).                    |
-
-## Development
 
 ## Development
 

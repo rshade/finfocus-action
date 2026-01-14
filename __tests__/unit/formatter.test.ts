@@ -110,12 +110,7 @@ describe('formatCommentBody', () => {
     const sustainabilityReport = {
       totalCO2e: 125.5,
       totalCO2eDiff: 15.2,
-      carbonIntensity: 2.95,
-      equivalents: {
-        trees: 2.5,
-        milesDriven: 312,
-        homeElectricityDays: 42
-      }
+      carbonIntensity: 2.95
     };
 
     const config: ActionConfiguration = {

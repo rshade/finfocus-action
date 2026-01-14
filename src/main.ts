@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ActionConfiguration, RecommendationsReport, ActualCostReport } from './types.js';
+import { ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
