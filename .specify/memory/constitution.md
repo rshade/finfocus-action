@@ -1,11 +1,11 @@
 <!--
 Sync Impact Report:
-- Version: 1.2.0 → 1.3.0
+- Version: 1.3.0 → 1.4.0
 - Principles Modified:
-  - Documentation Discipline: Added explicit requirements for technical writer documentation generation and a formal review loop.
+  - User Experience Consistency: Added "Batteries Included" defaults principle (optional features must default to 'true').
 - Added sections: None
 - Removed sections: None
-- Templates requiring updates: ✅ updated (tasks-template.md)
+- Templates requiring updates: ✅ checked (none required)
 - Follow-up TODOs: None
 -->
 
@@ -24,6 +24,8 @@ Comprehensive test coverage is MANDATORY. Unit tests MUST cover business logic, 
 ### III. User Experience Consistency
 
 Interfaces (whether CLI or API) MUST be predictable, intuitive, and consistent. Output formats must be uniform across commands/endpoints. Error messages MUST be actionable, clear, and distinct from standard output. Avoid exposing internal implementation details to the user.
+
+Adopt "Batteries Included" defaults: Optional features MUST default to 'true' (opt-out) to maximize discoverability and immediate utility, unless they incur significant cost or risk.
 
 ### IV. Performance Requirements
 
@@ -50,4 +52,4 @@ Documentation is a first-class citizen. `README.md` and `docs/` (if present) MUS
 
 This Constitution governs all development within the `finfocus-action` project. Amendments require a formal version bump, documented rationale, and team consensus. All pull requests and code reviews MUST verify compliance with these principles.
 
-**Version**: 1.3.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-13
+**Version**: 1.4.0 | **Ratified**: 2026-01-08 | **Last Amended**: 2026-01-14
