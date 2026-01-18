@@ -16,7 +16,7 @@ describe('Analyzer - Actual Costs Integration', () => {
   const mockConfig: ActionConfiguration = {
     pulumiPlanJsonPath: 'plan.json',
     githubToken: 'token',
-    pulumicostVersion: 'latest',
+    finfocusVersion: 'latest',
     installPlugins: [],
     behaviorOnError: 'fail',
     postComment: true,
@@ -38,7 +38,7 @@ describe('Analyzer - Actual Costs Integration', () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
   });
 
-  it('should execute pulumicost cost actual command with correct arguments', async () => {
+  it('should execute finfocus cost actual command with correct arguments', async () => {
     const mockCliOutput = {
       total: 125.75,
       currency: 'USD',
@@ -58,7 +58,7 @@ describe('Analyzer - Actual Costs Integration', () => {
 
     // Verify the command was called with correct arguments
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining([
         'cost',
         'actual',
@@ -98,7 +98,7 @@ describe('Analyzer - Actual Costs Integration', () => {
     expect(report.total).toBe(0);
     expect(report.items).toHaveLength(0);
     expect(core.warning).toHaveBeenCalledWith(
-      expect.stringContaining('pulumicost cost actual failed with exit code 1'),
+      expect.stringContaining('finfocus cost actual failed with exit code 1'),
     );
   });
 
@@ -134,7 +134,7 @@ describe('Analyzer - Actual Costs Integration', () => {
     await analyzer.runActualCosts(configWithState);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['--pulumi-state', 'state.json']),
       expect.any(Object),
     );

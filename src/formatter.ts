@@ -1,5 +1,5 @@
 import {
-  PulumicostReport,
+  FinfocusReport,
   ActionConfiguration,
   RecommendationsReport,
   ActualCostReport,
@@ -30,7 +30,7 @@ export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
 function formatSustainabilitySection(
   report: SustainabilityReport,
   config?: ActionConfiguration,
-  pulumicostReport?: PulumicostReport,
+  finfocusReport?: FinfocusReport,
 ): string {
   if (!config?.includeSustainability) return '';
 
@@ -55,7 +55,7 @@ function formatSustainabilitySection(
 
   // Build Resource Breakdown by Carbon Impact
   let resourceTable = '';
-  const resources = pulumicostReport?.resources ?? pulumicostReport?.summary?.resources ?? [];
+  const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
   
   if (resources.length > 0) {
     const resourcesWithCarbon = resources
@@ -98,7 +98,7 @@ ${equivalentsSection}${resourceTable}
 }
 
 export function formatCommentBody(
-  report: PulumicostReport,
+  report: FinfocusReport,
   config?: ActionConfiguration,
   recommendationsReport?: RecommendationsReport,
   actualCostReport?: ActualCostReport,
@@ -255,6 +255,6 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 ${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
 
-*Estimates calculated by [pulumicost](https://github.com/rshade/pulumicost-core)*
+*Estimates calculated by [finfocus](https://github.com/rshade/finfocus)*
 `;
 }

@@ -23,7 +23,7 @@ jobs:
 ```
 
 ### Analyzer Mode
-Runs `pulumicost` as a policy pack integrated into the Pulumi engine.
+Runs `finfocus` as a policy pack integrated into the Pulumi engine.
 
 ```yaml
 jobs:

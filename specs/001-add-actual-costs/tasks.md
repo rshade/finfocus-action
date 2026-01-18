@@ -54,7 +54,7 @@
 
 - [x] T007 [P] [US1] Unit test for runActualCosts method in **tests**/unit/actual_costs.test.ts
 - [x] T008 [P] [US1] Unit test for actual cost comment formatting in **tests**/unit/formatter.test.ts
-- [x] T009 [P] [US1] Integration test for pulumicost CLI command execution in **tests**/integration/actual_costs_integration.test.ts
+- [x] T009 [P] [US1] Integration test for finfocus CLI command execution in **tests**/integration/actual_costs_integration.test.ts
 
 ### Implementation for User Story 1
 
@@ -96,7 +96,7 @@
 
 **Goal**: Support Pulumi state file input for actual cost estimation when billing data is unavailable.
 
-**Independent Test**: Provide state file path and verify pulumicost receives correct --pulumi-state parameter and uses state-based estimation.
+**Independent Test**: Provide state file path and verify finfocus receives correct --pulumi-state parameter and uses state-based estimation.
 
 ### Tests for User Story 3 ⚠️
 
@@ -167,7 +167,7 @@
 # Launch all tests for User Story 1 together:
 Task: "Unit test for runActualCosts method in __tests__/unit/actual_costs.test.ts"
 Task: "Unit test for actual cost comment formatting in __tests__/unit/formatter.test.ts"
-Task: "Integration test for pulumicost CLI command execution in __tests__/integration/actual_costs_integration.test.ts"
+Task: "Integration test for finfocus CLI command execution in __tests__/integration/actual_costs_integration.test.ts"
 
 # Launch implementation tasks sequentially (dependencies):
 Task: "Add actual cost orchestration in src/main.ts"

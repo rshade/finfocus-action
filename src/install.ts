@@ -7,7 +7,7 @@ import * as exec from '@actions/exec';
 import { IInstaller, ActionConfiguration } from './types.js';
 
 const REPO_OWNER = 'rshade';
-const REPO_NAME = 'pulumicost-core';
+const REPO_NAME = 'finfocus';
 
 export class Installer implements IInstaller {
   async install(version: string, config?: ActionConfiguration): Promise<string> {
@@ -23,17 +23,17 @@ export class Installer implements IInstaller {
       core.info(`  Mapped platform: ${platform}`);
       core.info(`  Mapped arch: ${arch}`);
     } else {
-      core.info(`Installing pulumicost (${version})...`);
+      core.info(`Installing finfocus (${version})...`);
     }
 
     const resolvedVersion = await this.resolveVersion(version, debug);
     if (debug) core.info(`  Resolved version: ${resolvedVersion}`);
 
     if (debug) core.info(`=== Checking tool cache ===`);
-    const cached = tc.find('pulumicost-core', resolvedVersion, arch);
+    const cached = tc.find('finfocus', resolvedVersion, arch);
     if (cached) {
       if (debug) {
-        core.info(`  Cache HIT: Found pulumicost at ${cached}`);
+        core.info(`  Cache HIT: Found finfocus at ${cached}`);
         core.info(`  Binary path: ${path.join(cached, this.getBinaryName())}`);
       }
       core.addPath(cached);
@@ -43,7 +43,7 @@ export class Installer implements IInstaller {
     if (debug) core.info(`  Cache MISS: Will download`);
 
     const ext = platform === 'windows' ? 'zip' : 'tar.gz';
-    const assetName = `pulumicost-core-v${resolvedVersion}-${platform}-${arch}.${ext}`;
+    const assetName = `finfocus-v${resolvedVersion}-${platform}-${arch}.${ext}`;
     const downloadUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/v${resolvedVersion}/${assetName}`;
 
     if (debug) {
@@ -66,7 +66,7 @@ export class Installer implements IInstaller {
     } catch (err) {
       core.error(`  Download FAILED`);
       throw new Error(
-        `Failed to download pulumicost from ${downloadUrl}. ` +
+        `Failed to download finfocus from ${downloadUrl}. ` +
           `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
           `Error: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -95,12 +95,12 @@ export class Installer implements IInstaller {
     } catch (err) {
       core.error(`  Extraction FAILED`);
       throw new Error(
-        `Failed to extract pulumicost archive. Error: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to extract finfocus archive. Error: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
 
     if (debug) core.info(`=== Caching binary ===`);
-    const cachedPath = await tc.cacheDir(extractPath, 'pulumicost-core', resolvedVersion, arch);
+    const cachedPath = await tc.cacheDir(extractPath, 'finfocus', resolvedVersion, arch);
     core.addPath(cachedPath);
 
     const binaryPath = path.join(cachedPath, this.getBinaryName());
@@ -121,8 +121,8 @@ export class Installer implements IInstaller {
   private async verifyInstallation(debug: boolean): Promise<void> {
     if (debug) core.info(`=== Verifying installation ===`);
     try {
-      if (debug) core.info(`  Running: pulumicost --version`);
-      const output = await exec.getExecOutput('pulumicost', ['--version'], {
+      if (debug) core.info(`  Running: finfocus --version`);
+      const output = await exec.getExecOutput('finfocus', ['--version'], {
         silent: !debug,
         ignoreReturnCode: true,
       });
@@ -132,7 +132,7 @@ export class Installer implements IInstaller {
       }
 
       if (output.exitCode !== 0) {
-        core.warning(`  pulumicost --version returned non-zero exit code: ${output.exitCode}`);
+        core.warning(`  finfocus --version returned non-zero exit code: ${output.exitCode}`);
       } else if (debug) {
         core.info(`  Verification successful`);
       }
@@ -142,13 +142,13 @@ export class Installer implements IInstaller {
     }
 
     if (debug) {
-      core.info(`  Checking PATH for pulumicost...`);
+      core.info(`  Checking PATH for finfocus...`);
       try {
-        const whichOutput = await exec.getExecOutput('which', ['pulumicost'], {
+        const whichOutput = await exec.getExecOutput('which', ['finfocus'], {
           silent: true,
           ignoreReturnCode: true,
         });
-        core.info(`  which pulumicost: ${whichOutput.stdout.trim() || '(not found)'}`);
+        core.info(`  which finfocus: ${whichOutput.stdout.trim() || '(not found)'}`);
       } catch {
         core.info(`  which command failed`);
       }
@@ -196,7 +196,7 @@ export class Installer implements IInstaller {
     return a;
   }
 
-  private getBinaryName(): string {
-    return os.platform() === 'win32' ? 'pulumicost.exe' : 'pulumicost';
+  protected getBinaryName(): string {
+    return os.platform() === 'win32' ? 'finfocus.exe' : 'finfocus';
   }
 }

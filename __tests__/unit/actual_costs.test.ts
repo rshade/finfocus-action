@@ -18,7 +18,7 @@ describe('Analyzer - Actual Costs', () => {
   const mockConfig: ActionConfiguration = {
     pulumiPlanJsonPath: 'plan.json',
     githubToken: 'token',
-    pulumicostVersion: 'latest',
+    finfocusVersion: 'latest',
     installPlugins: [],
     behaviorOnError: 'fail',
     postComment: true,
@@ -59,7 +59,7 @@ describe('Analyzer - Actual Costs', () => {
     const report = await analyzer.runActualCosts(mockConfig);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining([
         'cost',
         'actual',
@@ -86,7 +86,7 @@ describe('Analyzer - Actual Costs', () => {
     await analyzer.runActualCosts(configWithState);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['--pulumi-state', 'state.json']),
       expect.any(Object),
     );
@@ -104,7 +104,7 @@ describe('Analyzer - Actual Costs', () => {
     await analyzer.runActualCosts(configWithCustom);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['--from', '2025-01-01']),
       expect.any(Object),
     );
@@ -189,7 +189,7 @@ describe('Analyzer - Actual Costs', () => {
       await analyzer.runActualCosts(configCustom);
 
       expect(exec.getExecOutput).toHaveBeenCalledWith(
-        'pulumicost',
+        'finfocus',
         expect.arrayContaining(['--from', '2024-01-01']),
         expect.any(Object),
       );
@@ -215,7 +215,7 @@ describe('Analyzer - Actual Costs', () => {
       await analyzer.runActualCosts(configGroupBy);
 
       expect(exec.getExecOutput).toHaveBeenCalledWith(
-        'pulumicost',
+        'finfocus',
         expect.arrayContaining(['--group-by', 'service']),
         expect.any(Object),
       );

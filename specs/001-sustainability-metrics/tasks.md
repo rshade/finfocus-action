@@ -17,7 +17,7 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [x] T001 Verify `pulumicost` binary in environment supports sustainability (manual verification or check docs)
+- [x] T001 Verify `finfocus` binary in environment supports sustainability (manual verification or check docs)
 - [x] T002 Update `action.yml` with new inputs (`include-sustainability`, `utilization-rate`, `sustainability-equivalents`, `fail-on-carbon-increase`) and outputs
 
 ---
@@ -30,7 +30,7 @@
 
 - [x] T003 Update `src/types.ts` with `SustainabilityMetrics`, `SustainabilityReport`, and `EquivalencyMetrics` interfaces
 - [x] T004 Update `src/types.ts` `ActionConfiguration` interface to include new inputs
-- [x] T005 Update `src/types.ts` `PulumicostResource` interface to include `sustainability` field
+- [x] T005 Update `src/types.ts` `FinfocusResource` interface to include `sustainability` field
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -50,7 +50,7 @@
 ### Implementation for User Story 1
 
 - [x] T008 [P] [US1] Update `src/main.ts` to parse `include-sustainability` input and pass to config
-- [x] T009 [US1] Update `src/analyze.ts` `runAnalysis` to request sustainability data (ensure `pulumicost` cmd args are correct if needed, or just parse output)
+- [x] T009 [US1] Update `src/analyze.ts` `runAnalysis` to request sustainability data (ensure `finfocus` cmd args are correct if needed, or just parse output)
 - [x] T010 [US1] Implement helper to extract/sum sustainability metrics in `src/analyze.ts` (or `src/utils.ts`)
 - [x] T011 [US1] Implement `formatSustainabilitySection` in `src/formatter.ts` to generate the markdown table (including "Resources by Carbon Impact" table per FR-007)
 - [x] T012 [US1] Update `src/comment.ts` to append the sustainability section to the PR comment if enabled
@@ -64,7 +64,7 @@
 
 **Goal**: Allow users to adjust utilization rates for more accurate estimates
 
-**Independent Test**: Verify `pulumicost` command receives `--utilization` flag when configured.
+**Independent Test**: Verify `finfocus` command receives `--utilization` flag when configured.
 
 ### Tests for User Story 2 (OPTIONAL) ⚠️
 
@@ -73,7 +73,7 @@
 ### Implementation for User Story 2
 
 - [x] T014 [P] [US2] Update `src/main.ts` to parse `utilization-rate` input
-- [x] T015 [US2] Update `src/analyze.ts` to pass `--utilization` flag to `pulumicost` CLI command based on config
+- [x] T015 [US2] Update `src/analyze.ts` to pass `--utilization` flag to `finfocus` CLI command based on config
 
 **Checkpoint**: User Stories 1 AND 2 should both work independently
 

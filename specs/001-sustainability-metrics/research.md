@@ -14,18 +14,18 @@
 
 **Rationale**:
 - `include-sustainability` is off by default to avoid clutter for users who don't care.
-- `utilization-rate` needs to be passed to the `pulumicost` CLI args to affect calculation *before* we get the JSON.
+- `utilization-rate` needs to be passed to the `finfocus` CLI args to affect calculation *before* we get the JSON.
 - `fail-on-carbon-increase` mirrors `fail-on-cost-increase` for consistency.
 
 **Alternatives**:
 - Passing utilization via env var? No, CLI flag is cleaner.
 - Combining toggles? No, explicit is better.
 
-## 2. Data Extraction (`pulumicost` Integration)
+## 2. Data Extraction (`finfocus` Integration)
 
-**Decision**: Parse `sustainability` field from `pulumicost` JSON output.
+**Decision**: Parse `sustainability` field from `finfocus` JSON output.
 
-Based on issue description, `pulumicost` v0.1.3+ JSON output adds a `sustainability` object to resources:
+Based on issue description, `finfocus` v0.1.3+ JSON output adds a `sustainability` object to resources:
 
 ```json
 {
@@ -41,16 +41,16 @@ Based on issue description, `pulumicost` v0.1.3+ JSON output adds a `sustainabil
 ```
 
 **Implementation**:
-- Update `PulumicostResource` interface in `src/types.ts` to include optional `sustainability` field.
+- Update `FinfocusResource` interface in `src/types.ts` to include optional `sustainability` field.
 - Update `Analyzer.runAnalysis` to pass `--utilization` flag if configured.
-- No extra parsing logic needed if `pulumicost` returns it in the main JSON; just type definition update.
+- No extra parsing logic needed if `finfocus` returns it in the main JSON; just type definition update.
 
 ## 3. Calculation & Display
 
 **Decision**:
 - **Total**: Sum `sustainability.carbon_footprint.value` from all resources.
-- **Diff**: Calculate manually if `pulumicost` doesn't provide it in summary diff (likely need to sum for "base" state if available, or just show absolute if diff not supported by CLI yet). *Assumption*: CLI might not give diff for carbon yet, so we might only show absolute values for V1, or try to calculate if we have base plan.
-    - *Correction*: The issue says "Display carbon footprint in PR comment with change comparison". If `pulumicost` provides a diff in the JSON, we use it. If not, we might be limited to absolute. The JSON example shows resource-level data. The text mentions "Carbon Change +15.2". We will look for a diff field or calculate it if possible.
+- **Diff**: Calculate manually if `finfocus` doesn't provide it in summary diff (likely need to sum for "base" state if available, or just show absolute if diff not supported by CLI yet). *Assumption*: CLI might not give diff for carbon yet, so we might only show absolute values for V1, or try to calculate if we have base plan.
+    - *Correction*: The issue says "Display carbon footprint in PR comment with change comparison". If `finfocus` provides a diff in the JSON, we use it. If not, we might be limited to absolute. The JSON example shows resource-level data. The text mentions "Carbon Change +15.2". We will look for a diff field or calculate it if possible.
 - **Equivalents**: Calculate in `src/formatter.ts` using the totals.
 
 **Equivalency Formulas (from spec)**:

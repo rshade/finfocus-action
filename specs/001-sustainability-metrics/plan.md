@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement support for `pulumicost` sustainability metrics (GreenOps) by adding new action inputs, extracting carbon data from the JSON report, calculating environmental equivalents (trees, miles, electricity), and displaying a "Sustainability Impact" section in the PR comment. Includes a fail-safe threshold for carbon increases.
+Implement support for `finfocus` sustainability metrics (GreenOps) by adding new action inputs, extracting carbon data from the JSON report, calculating environmental equivalents (trees, miles, electricity), and displaying a "Sustainability Impact" section in the PR comment. Includes a fail-safe threshold for carbon increases.
 
 ## Technical Context
 
@@ -48,7 +48,7 @@ specs/001-sustainability-metrics/
 
 ```text
 src/
-├── types.ts             # Update interfaces (PulumicostResource, ActionConfiguration)
+├── types.ts             # Update interfaces (FinfocusResource, ActionConfiguration)
 ├── analyze.ts           # Update Analyzer to parse sustainability data & pass flags
 ├── formatter.ts         # Add formatSustainabilitySection logic
 ├── comment.ts           # Update comment assembly

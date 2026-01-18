@@ -1,5 +1,5 @@
 name: 'finfocus-action'
-description: 'Integrate pulumicost-core into CI/CD workflows for cloud cost estimates'
+description: 'Integrate finfocus into CI/CD workflows for cloud cost estimates'
 author: 'rshade'
 inputs:
   pulumi-plan-json:
@@ -10,8 +10,8 @@ inputs:
     description: 'GitHub Token for posting comments'
     required: false
     default: ${{ github.token }}
-  pulumicost-version:
-    description: 'Version of pulumicost to install'
+  finfocus-version:
+    description: 'Version of finfocus to install'
     required: false
     default: 'latest'
   install-plugins:
@@ -43,7 +43,7 @@ inputs:
     required: false
     default: 'true'
   log-level:
-    description: 'Log level for pulumicost (debug, info, warn, error)'
+    description: 'Log level for finfocus (debug, info, warn, error)'
     required: false
     default: 'error'
   debug:
@@ -127,7 +127,7 @@ runs:
       env:
         INPUT_PULUMI_PLAN_JSON: ${{ inputs.pulumi-plan-json }}
         INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
-        INPUT_PULUMICOST_VERSION: ${{ inputs.pulumicost-version }}
+        INPUT_FINFOCUS_VERSION: ${{ inputs.finfocus-version }}
         INPUT_INSTALL_PLUGINS: ${{ inputs.install-plugins }}
         INPUT_BEHAVIOR_ON_ERROR: ${{ inputs.behavior-on-error }}
         INPUT_POST_COMMENT: ${{ inputs.post-comment }}

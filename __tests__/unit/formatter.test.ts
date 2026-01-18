@@ -1,8 +1,8 @@
 import { formatCommentBody } from '../../src/formatter.js';
-import { PulumicostReport, ActionConfiguration, ActualCostReport } from '../../src/types.js';
+import { FinfocusReport, ActionConfiguration, ActualCostReport } from '../../src/types.js';
 
 describe('formatCommentBody', () => {
-  const mockReport: PulumicostReport = {
+  const mockReport: FinfocusReport = {
     summary: {
       totalMonthly: 100.5,
       currency: 'USD',
@@ -62,7 +62,7 @@ describe('formatCommentBody', () => {
   });
 
   it('should handle cost differences correctly', () => {
-    const reportWithDiff: PulumicostReport = {
+    const reportWithDiff: FinfocusReport = {
       ...mockReport,
       diff: {
         monthly_cost_change: 15.25,
@@ -77,7 +77,7 @@ describe('formatCommentBody', () => {
   });
 
   it('should include resource breakdown when available', () => {
-    const reportWithResources: PulumicostReport = {
+    const reportWithResources: FinfocusReport = {
       ...mockReport,
       resources: [
         {

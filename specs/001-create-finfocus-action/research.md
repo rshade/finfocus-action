@@ -19,10 +19,10 @@
   - **Docker Container Action**: Rejected due to latency and OS compatibility issues (no macOS/Windows support).
 
 ### 3. Binary Management
-- **Decision**: Use `@actions/tool-cache` to download and cache `pulumicost`.
+- **Decision**: Use `@actions/tool-cache` to download and cache `finfocus`.
 - **Rationale**: Standard practice for setup-actions. caching speeds up subsequent runs on self-hosted runners.
-- **Pattern**: Download from `https://github.com/rshade/finfocus-action/releases/download/v${version}/pulumicost-v${version}-${os}-${arch}.tar.gz`.
+- **Pattern**: Download from `https://github.com/rshade/finfocus-action/releases/download/v${version}/finfocus-v${version}-${os}-${arch}.tar.gz`.
 
 ## Open Questions Resolved
-- **Release Artifact Pattern**: Confirmed as `pulumicost-v{version}-{os}-{arch}.tar.gz` in spec clarifications.
-- **Comment Identification**: Confirmed using `<!-- pulumicost-action-comment -->` hidden marker.
+- **Release Artifact Pattern**: Confirmed as `finfocus-v{version}-{os}-{arch}.tar.gz` in spec clarifications.
+- **Comment Identification**: Confirmed using `<!-- finfocus-action-comment -->` hidden marker.

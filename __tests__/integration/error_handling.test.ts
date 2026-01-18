@@ -18,7 +18,7 @@ describe('Analyzer - Error Handling Integration Tests', () => {
   const mockConfig: ActionConfiguration = {
     pulumiPlanJsonPath: 'plan.json',
     githubToken: 'token',
-    pulumicostVersion: 'latest',
+    finfocusVersion: 'latest',
     installPlugins: [],
     behaviorOnError: 'fail',
     postComment: true,
@@ -55,7 +55,7 @@ describe('Analyzer - Error Handling Integration Tests', () => {
     expect(report.total).toBe(0);
     expect(report.items).toHaveLength(0);
     expect(core.warning).toHaveBeenCalledWith(
-      expect.stringContaining('pulumicost cost actual failed with exit code 1'),
+      expect.stringContaining('finfocus cost actual failed with exit code 1'),
     );
   });
 
@@ -137,19 +137,19 @@ describe('Analyzer - Error Handling Integration Tests', () => {
 
     // Should fall back to plan file
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['--pulumi-json', 'plan.json']),
       expect.any(Object),
     );
     expect(exec.getExecOutput).not.toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['--pulumi-state', 'missing-state.json']),
       expect.any(Object),
     );
     expect(report.total).toBe(25.0);
   });
 
-  it('should handle malformed JSON from pulumicost gracefully', async () => {
+  it('should handle malformed JSON from finfocus gracefully', async () => {
     (exec.getExecOutput as jest.Mock).mockResolvedValue({
       exitCode: 0,
       stdout: '{ invalid json }',

@@ -19,7 +19,7 @@ export class PluginManager implements IPluginManager {
       return;
     }
 
-    const pluginDir = path.join(os.homedir(), '.pulumicost', 'plugins');
+    const pluginDir = path.join(os.homedir(), '.finfocus', 'plugins');
     if (debug) {
       core.info(`  Plugin directory: ${pluginDir}`);
       core.info(`  Plugin directory exists: ${fs.existsSync(pluginDir)}`);
@@ -31,7 +31,7 @@ export class PluginManager implements IPluginManager {
 
       if (debug)
         core.info(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
-      else core.info(`Installing pulumicost plugin: "${trimmedPlugin}"`);
+      else core.info(`Installing finfocus plugin: "${trimmedPlugin}"`);
 
       if (!trimmedPlugin) {
         if (debug) core.info(`  Skipping empty plugin name`);
@@ -41,11 +41,11 @@ export class PluginManager implements IPluginManager {
       // We avoid the progress bar in logs by using silent mode in exec
       const args = ['plugin', 'install', trimmedPlugin];
 
-      if (debug) core.info(`  Command: pulumicost ${args.join(' ')}`);
+      if (debug) core.info(`  Command: finfocus ${args.join(' ')}`);
 
       try {
         const installStart = Date.now();
-        const output = await exec.getExecOutput('pulumicost', args, {
+        const output = await exec.getExecOutput('finfocus', args, {
           silent: !debug,
           ignoreReturnCode: true,
         });
@@ -98,8 +98,8 @@ export class PluginManager implements IPluginManager {
 
   private async listInstalledPlugins(debug: boolean): Promise<void> {
     try {
-      if (debug) core.info(`  Running: pulumicost plugin list`);
-      const output = await exec.getExecOutput('pulumicost', ['plugin', 'list'], {
+      if (debug) core.info(`  Running: finfocus plugin list`);
+      const output = await exec.getExecOutput('finfocus', ['plugin', 'list'], {
         silent: !debug,
         ignoreReturnCode: true,
       });

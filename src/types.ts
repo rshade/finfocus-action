@@ -1,7 +1,7 @@
 export interface ActionConfiguration {
   pulumiPlanJsonPath: string;
   githubToken: string;
-  pulumicostVersion: string;
+  finfocusVersion: string;
   installPlugins: string[];
   behaviorOnError: 'fail' | 'warn' | 'silent';
   postComment: boolean;
@@ -35,17 +35,17 @@ export interface ActualCostReport {
   items: ActualCostItem[];
 }
 
-export interface PulumicostSustainabilityMetric {
+export interface FinfocusSustainabilityMetric {
   value: number;
   unit: string;
 }
 
-export interface PulumicostSustainabilityData {
-  gCO2e: PulumicostSustainabilityMetric;
-  carbon_footprint: PulumicostSustainabilityMetric;
+export interface FinfocusSustainabilityData {
+  gCO2e: FinfocusSustainabilityMetric;
+  carbon_footprint: FinfocusSustainabilityMetric;
 }
 
-export interface PulumicostResource {
+export interface FinfocusResource {
   resourceType: string;
   resourceId: string;
   adapter: string;
@@ -56,7 +56,7 @@ export interface PulumicostResource {
   breakdown?: unknown;
   startDate?: string;
   endDate?: string;
-  sustainability?: PulumicostSustainabilityData;
+  sustainability?: FinfocusSustainabilityData;
 }
 
 export interface EquivalencyMetrics {
@@ -72,19 +72,19 @@ export interface SustainabilityReport {
   equivalents?: EquivalencyMetrics;
 }
 
-export interface PulumicostSummary {
+export interface FinfocusSummary {
   totalMonthly: number;
   totalHourly: number;
   currency: string;
   byProvider?: Record<string, number>;
   byService?: Record<string, number>;
   byAdapter?: Record<string, number>;
-  resources?: PulumicostResource[];
+  resources?: FinfocusResource[];
 }
 
-export interface PulumicostReport {
-  summary: PulumicostSummary;
-  resources?: PulumicostResource[];
+export interface FinfocusReport {
+  summary: FinfocusSummary;
+  resources?: FinfocusResource[];
   // Legacy fields for backward compatibility
   projected_monthly_cost?: number;
   currency?: string;
@@ -114,14 +114,14 @@ export interface IPluginManager {
 }
 
 export interface IAnalyzer {
-  runAnalysis(planPath: string, config?: ActionConfiguration): Promise<PulumicostReport>;
+  runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport>;
   runRecommendations(
     planPath: string,
     config?: ActionConfiguration,
   ): Promise<RecommendationsReport>;
   runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
-  calculateSustainabilityMetrics(report: PulumicostReport): {
+  calculateSustainabilityMetrics(report: FinfocusReport): {
     totalCO2e: number;
     totalCO2eDiff: number;
     carbonIntensity: number;
@@ -150,7 +150,7 @@ export interface RecommendationsReport {
 
 export interface ICommenter {
   upsertComment(
-    report: PulumicostReport,
+    report: FinfocusReport,
     token: string,
     config?: ActionConfiguration,
     recommendationsReport?: RecommendationsReport,

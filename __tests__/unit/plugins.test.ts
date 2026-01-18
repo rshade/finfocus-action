@@ -31,7 +31,7 @@ describe('PluginManager', () => {
   it('should skip if no plugins provided', async () => {
     await pluginManager.installPlugins([]);
     expect(exec.getExecOutput).not.toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['plugin', 'install']),
       expect.anything()
     );
@@ -41,12 +41,12 @@ describe('PluginManager', () => {
     await pluginManager.installPlugins(['aws-plugin', ' kubecost ']);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       ['plugin', 'install', 'aws-plugin'],
       expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       ['plugin', 'install', 'kubecost'],
       expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
@@ -78,7 +78,7 @@ describe('PluginManager', () => {
     await pluginManager.installPlugins(['aws-plugin'], { debug: true } as any);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       ['plugin', 'list'],
       expect.objectContaining({ silent: false, ignoreReturnCode: true })
     );

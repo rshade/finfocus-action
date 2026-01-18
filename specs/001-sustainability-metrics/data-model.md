@@ -4,7 +4,7 @@
 
 ### SustainabilityMetrics (Component of Resource)
 
-Represents the raw sustainability data returned by `pulumicost` for a single resource.
+Represents the raw sustainability data returned by `finfocus` for a single resource.
 
 | Field | Type | Description |
 |-------|------|-------------|

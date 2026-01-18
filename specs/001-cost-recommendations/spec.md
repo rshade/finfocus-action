@@ -3,7 +3,7 @@
 **Feature Branch**: `001-cost-recommendations`  
 **Created**: 2026-01-12  
 **Status**: Draft  
-**Input**: User description: "Add support for displaying cost optimization recommendations from `pulumicost cost recommendations` in PR comments alongside the existing cost estimates."
+**Input**: User description: "Add support for displaying cost optimization recommendations from `finfocus cost recommendations` in PR comments alongside the existing cost estimates."
 
 ## User Scenarios & Testing _(mandatory)_
 
@@ -40,7 +40,7 @@ As a repository maintainer, I want to control whether cost optimization recommen
 
 ### Edge Cases
 
-- What happens when the `pulumicost cost recommendations` command fails or returns invalid JSON?
+- What happens when the `finfocus cost recommendations` command fails or returns invalid JSON?
 - How does the system handle recommendations with zero or negative savings?
 - What occurs when there are a large number of recommendations (e.g., 50+) that might make the PR comment too long?
 - How should the system behave when the Pulumi plan file is missing or invalid?
@@ -50,7 +50,7 @@ As a repository maintainer, I want to control whether cost optimization recommen
 ### Functional Requirements
 
 - **FR-001**: System MUST provide a new input parameter `include-recommendations` (boolean, default: false) to control whether recommendations are displayed
-- **FR-002**: System MUST execute `pulumicost cost recommendations --pulumi-json plan.json --output json` when `include-recommendations` is true
+- **FR-002**: System MUST execute `finfocus cost recommendations --pulumi-json plan.json --output json` when `include-recommendations` is true
 - **FR-003**: System MUST parse the recommendations JSON output and extract summary (total_count, total_savings, currency) and recommendations array
 - **FR-004**: System MUST display recommendations in the PR comment with a clear section header and table format showing resource, recommendation, and monthly savings
 - **FR-005**: System MUST include total potential savings prominently in the recommendations section
@@ -68,7 +68,7 @@ As a repository maintainer, I want to control whether cost optimization recommen
 ### Measurable Outcomes
 
 - **SC-001**: PR comments with recommendations display within 30 seconds of action completion
-- **SC-002**: 100% of valid recommendations from `pulumicost` are displayed accurately in PR comments
+- **SC-002**: 100% of valid recommendations from `finfocus` are displayed accurately in PR comments
 - **SC-003**: Users can identify potential monthly savings clearly from the PR comment format
 - **SC-004**: No errors occur when `include-recommendations` is false (default behavior unchanged)
 - **SC-005**: System handles recommendation parsing failures gracefully without breaking the PR comment

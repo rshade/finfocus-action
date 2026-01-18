@@ -29,13 +29,13 @@ describe('Analyzer Mode (Policy Pack)', () => {
   it('should setup policy pack correctly', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
     (exec.getExecOutput as jest.Mock)
-      .mockResolvedValueOnce({ exitCode: 0, stdout: 'pulumicost version 0.1.2\n', stderr: '' }) // version
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
+      .mockResolvedValueOnce({ exitCode: 0, stdout: 'v0.1.2\n', stderr: '' }) // version
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/finfocus\n', stderr: '' }); // which
 
     await analyzer.setupAnalyzerMode();
 
-    const expectedPolicyDir = '/home/user/.pulumicost/analyzer';
-    const expectedBinaryPath = `${expectedPolicyDir}/pulumi-analyzer-policy-pulumicost`;
+    const expectedPolicyDir = '/home/user/.finfocus/analyzer';
+    const expectedBinaryPath = `${expectedPolicyDir}/pulumi-analyzer-policy-finfocus`;
     const expectedPolicyYamlPath = `${expectedPolicyDir}/PulumiPolicy.yaml`;
 
     // 1. Verify directory creation
@@ -44,20 +44,20 @@ describe('Analyzer Mode (Policy Pack)', () => {
     // 2. Verify PulumiPolicy.yaml creation with metadata
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expectedPolicyYamlPath,
-      expect.stringContaining('runtime: pulumicost')
+      expect.stringContaining('runtime: finfocus')
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expectedPolicyYamlPath,
-      expect.stringContaining('name: pulumicost')
+      expect.stringContaining('name: finfocus')
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expectedPolicyYamlPath,
-      expect.stringContaining('version: 0.1.2')
+      expect.stringContaining('version: v0.1.2')
     );
 
     // 3. Verify binary copy and chmod
     expect(fs.copyFileSync).toHaveBeenCalledWith(
-      '/bin/pulumicost',
+      '/bin/finfocus',
       expectedBinaryPath
     );
     expect(fs.chmodSync).toHaveBeenCalledWith(expectedBinaryPath, 0o755);
@@ -74,16 +74,16 @@ describe('Analyzer Mode (Policy Pack)', () => {
     expect(core.setOutput).toHaveBeenCalledWith('policy-pack-path', expectedPolicyDir);
   });
 
-  it('should export PULUMICOST_LOG_LEVEL if provided', async () => {
+  it('should export FINFOCUS_LOG_LEVEL if provided', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (exec.getExecOutput as jest.Mock)
       .mockResolvedValueOnce({ exitCode: 0, stdout: 'v0.1.2\n', stderr: '' }) // version
-      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/pulumicost\n', stderr: '' }); // which
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '/bin/finfocus\n', stderr: '' }); // which
 
     await analyzer.setupAnalyzerMode({
       logLevel: 'debug',
     } as any);
 
-    expect(core.exportVariable).toHaveBeenCalledWith('PULUMICOST_LOG_LEVEL', 'debug');
+    expect(core.exportVariable).toHaveBeenCalledWith('FINFOCUS_LOG_LEVEL', 'debug');
   });
 });

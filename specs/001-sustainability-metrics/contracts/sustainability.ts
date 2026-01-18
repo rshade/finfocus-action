@@ -1,16 +1,16 @@
-export interface PulumicostSustainabilityMetric {
+export interface FinfocusSustainabilityMetric {
   value: number;
   unit: string;
 }
 
-export interface PulumicostSustainabilityData {
-  gCO2e: PulumicostSustainabilityMetric;
-  carbon_footprint: PulumicostSustainabilityMetric;
+export interface FinfocusSustainabilityData {
+  gCO2e: FinfocusSustainabilityMetric;
+  carbon_footprint: FinfocusSustainabilityMetric;
 }
 
-// Extends existing PulumicostResource
-export interface SustainabilityResourceExtension {
-  sustainability?: PulumicostSustainabilityData;
+// Extends existing FinfocusResource
+export interface SustainabilityResource extends FinfocusResource {
+  sustainability?: FinfocusSustainabilityData;
 }
 
 export interface EquivalencyMetrics {

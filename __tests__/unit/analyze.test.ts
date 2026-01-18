@@ -45,7 +45,7 @@ describe('Analyzer', () => {
     const report = await analyzer.runAnalysis('plan.json');
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       ['cost', 'projected', '--pulumi-json', 'plan.json', '--output', 'json'],
       expect.objectContaining({ silent: true, ignoreReturnCode: true })
     );
@@ -80,7 +80,7 @@ describe('Analyzer', () => {
     });
 
     await expect(analyzer.runAnalysis('plan.json')).rejects.toThrow(
-      'pulumicost analysis failed with exit code 1'
+      'finfocus analysis failed with exit code 1'
     );
   });
 
@@ -92,7 +92,7 @@ describe('Analyzer', () => {
     });
 
     await expect(analyzer.runAnalysis('plan.json')).rejects.toThrow(
-      'Failed to parse pulumicost JSON output'
+      'Failed to parse finfocus JSON output'
     );
   });
 
@@ -128,7 +128,7 @@ describe('Analyzer', () => {
     expect(report.resources?.[0].sustainability?.carbon_footprint.unit).toBe('kgCO2e/month');
   });
 
-  it('should pass utilization flag to pulumicost when configured', async () => {
+  it('should pass utilization flag to finfocus when configured', async () => {
     const config = {
       utilizationRate: '0.8',
     } as any;
@@ -142,7 +142,7 @@ describe('Analyzer', () => {
     await analyzer.runAnalysis('plan.json', config);
 
     expect(exec.getExecOutput).toHaveBeenCalledWith(
-      'pulumicost',
+      'finfocus',
       expect.arrayContaining(['--utilization', '0.8']),
       expect.anything()
     );

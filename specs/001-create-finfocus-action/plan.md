@@ -4,7 +4,7 @@
 
 ## Summary
 
-Implement `finfocus-action`, a TypeScript-based GitHub Composite Action that wraps the `pulumicost-core` binary. The action will provide automated cloud cost estimates in PR comments and enforce budget guardrails. Technical approach involves using `@actions/tool-cache` for binary management and the GitHub API for sticky PR comments.
+Implement `finfocus-action`, a TypeScript-based GitHub Composite Action that wraps the `finfocus` binary. The action will provide automated cloud cost estimates in PR comments and enforce budget guardrails. Technical approach involves using `@actions/tool-cache` for binary management and the GitHub API for sticky PR comments.
 
 ## Technical Context
 
@@ -48,9 +48,9 @@ specs/001-create-finfocus-action/
 src/
 ├── main.ts              # Action entry point
 ├── install.ts           # Binary downloader/cache logic
-├── plugins.ts           # Pulumicost plugin management
+├── plugins.ts           # Finfocus plugin management
 ├── comment.ts           # GitHub PR comment logic
-└── analyze.ts           # Pulumicost CLI wrapper logic
+└── analyze.ts           # Finfocus CLI wrapper logic
 
 dist/                    # Compiled production assets
 

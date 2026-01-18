@@ -7,18 +7,18 @@
 
 ## Summary
 
-Add support for displaying cost optimization recommendations from `pulumicost cost recommendations` in PR comments alongside existing cost estimates. Technical approach: Extend the GitHub Action to optionally run `pulumicost cost recommendations`, parse the JSON output, and format recommendations in the PR comment with savings details.
+Add support for displaying cost optimization recommendations from `finfocus cost recommendations` in PR comments alongside existing cost estimates. Technical approach: Extend the GitHub Action to optionally run `finfocus cost recommendations`, parse the JSON output, and format recommendations in the PR comment with savings details.
 
 ## Technical Context
 
 **Language/Version**: Go (latest stable)  
-**Primary Dependencies**: @actions/core, @actions/github, @actions/exec, pulumicost CLI  
+**Primary Dependencies**: @actions/core, @actions/github, @actions/exec, finfocus CLI  
 **Storage**: N/A (no persistent storage required)  
 **Testing**: Jest for unit tests, integration tests via GitHub Actions workflow  
 **Target Platform**: GitHub Actions runner (Linux)  
 **Project Type**: GitHub Action (single project)  
 **Performance Goals**: PR comments display within 30 seconds of action completion  
-**Constraints**: Handle up to 50 recommendations gracefully, command execution under 20 seconds, no external API calls beyond pulumicost  
+**Constraints**: Handle up to 50 recommendations gracefully, command execution under 20 seconds, no external API calls beyond finfocus  
 **Scale/Scope**: Single PR processing, recommendations count variable (0-50+), output size manageable in PR comments
 
 ## Constitution Check

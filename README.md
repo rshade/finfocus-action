@@ -3,7 +3,7 @@
 [![Test](https://github.com/rshade/finfocus-action/actions/workflows/test.yml/badge.svg)](https://github.com/rshade/finfocus-action/actions/workflows/test.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-GitHub Action for integrating **[pulumicost-core](https://github.com/rshade/pulumicost-core)** into CI/CD workflows. It empowers developers to visualize, track, and enforce cloud cost estimates directly within their Pull Requests.
+GitHub Action for integrating **[finfocus](https://github.com/rshade/finfocus)** into CI/CD workflows. It empowers developers to visualize, track, and enforce cloud cost estimates directly within their Pull Requests.
 
 - 💰 **PR Cost Visibility**: Posts a sticky comment with cost estimates directly on your Pull Requests.
 - 🌱 **Sustainability Impact**: Visualize the carbon footprint (CO2e) of your infrastructure changes.

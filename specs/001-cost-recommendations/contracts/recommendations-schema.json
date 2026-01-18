@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Pulumicost Recommendations API",
+  "title": "Finfocus Recommendations API",
   "type": "object",
   "properties": {
     "summary": {

@@ -4,7 +4,7 @@ Enable carbon footprint estimation for your infrastructure changes.
 
 ## Prerequisites
 
-- `pulumicost` v0.1.3 or higher (handled by action default `latest`).
+- `finfocus` v0.1.3 or higher (handled by action default `latest`).
 - Cloud provider plugins that support sustainability data (e.g., `aws-public`).
 
 ## Configuration
@@ -46,5 +46,5 @@ The PR comment will now include a **Sustainability Impact** section:
 
 ## Troubleshooting
 
-- **No Data?**: Ensure your resource types are supported by the `pulumicost` sustainability engine.
+- **No Data?**: Ensure your resource types are supported by the `finfocus` sustainability engine.
 - **Unexpected Values?**: Check your `utilization-rate`. Default is 100% (1.0), which may overestimate emissions for idle resources.

@@ -6,14 +6,14 @@ import * as os from 'os';
 
 import {
   IAnalyzer,
-  PulumicostReport,
+  FinfocusReport,
   ActionConfiguration,
   RecommendationsReport,
   ActualCostReport,
 } from './types.js';
 
 export class Analyzer implements IAnalyzer {
-  async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<PulumicostReport> {
+  async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
     const debug = config?.debug === true;
     if (debug) {
       core.info(`=== Analyzer: Running cost analysis ===`);
@@ -86,12 +86,12 @@ export class Analyzer implements IAnalyzer {
     }
 
     if (debug) {
-      core.info(`=== Running pulumicost command ===`);
-      core.info(`  Command: pulumicost ${args.join(' ')}`);
+      core.info(`=== Running finfocus command ===`);
+      core.info(`  Command: finfocus ${args.join(' ')}`);
     }
 
     const analysisStart = Date.now();
-    const output = await exec.getExecOutput('pulumicost', args, {
+    const output = await exec.getExecOutput('finfocus', args, {
       silent: !debug,
       ignoreReturnCode: true,
     });
@@ -117,9 +117,9 @@ export class Analyzer implements IAnalyzer {
     }
 
     if (output.exitCode !== 0) {
-      core.error(`  pulumicost command FAILED with exit code ${output.exitCode}`);
+      core.error(`  finfocus command FAILED with exit code ${output.exitCode}`);
       throw new Error(
-        `pulumicost analysis failed with exit code ${output.exitCode}.\n` +
+        `finfocus analysis failed with exit code ${output.exitCode}.\n` +
           `Stderr: ${output.stderr}\n` +
           `Stdout: ${output.stdout}`,
       );
@@ -127,7 +127,7 @@ export class Analyzer implements IAnalyzer {
 
     if (debug) core.info(`=== Parsing analysis output ===`);
     try {
-      const report = JSON.parse(output.stdout) as PulumicostReport;
+      const report = JSON.parse(output.stdout) as FinfocusReport;
       if (debug) {
         core.info(`  Parsed successfully`);
         core.info(`  Report fields: ${Object.keys(report).join(', ')}`);
@@ -139,18 +139,18 @@ export class Analyzer implements IAnalyzer {
       }
       return report;
     } catch (err) {
-      core.error(`  Failed to parse pulumicost output as JSON`);
+      core.error(`  Failed to parse finfocus output as JSON`);
       core.error(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
       core.error(`  Raw output (first 1000 chars): ${output.stdout.substring(0, 1000)}`);
       throw new Error(
-        `Failed to parse pulumicost JSON output.\n` +
+        `Failed to parse finfocus JSON output.\n` +
           `Error: ${err instanceof Error ? err.message : String(err)}\n` +
           `Raw output: ${output.stdout.substring(0, 500)}...`,
       );
     }
   }
 
-  calculateSustainabilityMetrics(report: PulumicostReport): {
+  calculateSustainabilityMetrics(report: FinfocusReport): {
     totalCO2e: number;
     totalCO2eDiff: number;
     carbonIntensity: number;
@@ -172,7 +172,7 @@ export class Analyzer implements IAnalyzer {
       }
     }
 
-    // Since pulumicost currently might not provide total diff for sustainability, 
+    // Since finfocus currently might not provide total diff for sustainability, 
     // we default to 0 for now unless we can calculate it from base state.
     // For V1 MVP, we will assume 0 or absolute value if base isn't available.
     // However, if we want to support diff, we'd need the base report which we don't have here.
@@ -194,10 +194,6 @@ export class Analyzer implements IAnalyzer {
     config?: ActionConfiguration,
   ): Promise<RecommendationsReport> {
     const debug = config?.debug === true;
-    if (debug) {
-      core.info(`=== Analyzer: Running cost recommendations ===`);
-      core.info(`  Plan file path: ${planPath}`);
-    }
 
     if (!fs.existsSync(planPath)) {
       throw new Error(`Pulumi plan file not found: ${planPath}`);
@@ -219,18 +215,18 @@ export class Analyzer implements IAnalyzer {
 
     const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
     if (debug) {
-      core.info(`=== Running pulumicost recommendations command ===`);
-      core.info(`  Command: pulumicost ${args.join(' ')}`);
+      core.info(`=== Running finfocus recommendations command ===`);
+      core.info(`  Command: finfocus ${args.join(' ')}`);
     }
 
-    const output = await exec.getExecOutput('pulumicost', args, {
+    const output = await exec.getExecOutput('finfocus', args, {
       silent: !debug,
       ignoreReturnCode: true,
     });
 
     if (output.exitCode !== 0) {
       core.warning(
-        `pulumicost recommendations failed with exit code ${output.exitCode}: ${output.stderr}`,
+        `finfocus recommendations failed with exit code ${output.exitCode}: ${output.stderr}`,
       );
       // Return empty recommendations instead of failing
       return {
@@ -253,7 +249,7 @@ export class Analyzer implements IAnalyzer {
       return report;
     } catch (err) {
       core.warning(
-        `Failed to parse pulumicost recommendations output: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to parse finfocus recommendations output: ${err instanceof Error ? err.message : String(err)}`,
       );
       // Return empty recommendations
       return {
@@ -314,17 +310,17 @@ export class Analyzer implements IAnalyzer {
     }
 
     if (debug) {
-      core.info(`  Command: pulumicost ${args.join(' ')}`);
+      core.info(`  Command: finfocus ${args.join(' ')}`);
     }
 
-    const output = await exec.getExecOutput('pulumicost', args, {
+    const output = await exec.getExecOutput('finfocus', args, {
       silent: !debug,
       ignoreReturnCode: true,
     });
 
     if (output.exitCode !== 0) {
       core.warning(
-        `pulumicost cost actual failed with exit code ${output.exitCode}: ${output.stderr}`,
+        `finfocus cost actual failed with exit code ${output.exitCode}: ${output.stderr}`,
       );
       return {
         total: 0,
@@ -439,12 +435,12 @@ export class Analyzer implements IAnalyzer {
   async setupAnalyzerMode(config?: ActionConfiguration): Promise<void> {
     const debug = config?.debug === true;
     if (debug) core.info(`=== Analyzer: Setting up analyzer mode ===`);
-    else core.info(`Setting up pulumicost analyzer mode...`);
+    else core.info(`Setting up finfocus analyzer mode...`);
 
-    // 1. Get pulumicost version for metadata
+    // 1. Get finfocus version for metadata
     let version = '0.0.0-dev';
     try {
-      const versionOutput = await exec.getExecOutput('pulumicost', ['--version'], {
+      const versionOutput = await exec.getExecOutput('finfocus', ['--version'], {
         silent: true,
         ignoreReturnCode: true,
       });
@@ -455,7 +451,7 @@ export class Analyzer implements IAnalyzer {
     if (debug) core.info(`  Using version: ${version}`);
 
     // 2. Define Policy Pack Directory
-    const policyPackDir = path.join(os.homedir(), '.pulumicost', 'analyzer');
+    const policyPackDir = path.join(os.homedir(), '.finfocus', 'analyzer');
     if (debug) core.info(`  Policy Pack directory: ${policyPackDir}`);
 
     if (!fs.existsSync(policyPackDir)) {
@@ -466,25 +462,29 @@ export class Analyzer implements IAnalyzer {
     // 3. Create PulumiPolicy.yaml
     const policyYamlPath = path.join(policyPackDir, 'PulumiPolicy.yaml');
     if (debug) core.info(`  Writing PulumiPolicy.yaml to: ${policyYamlPath}`);
-    // The runtime 'pulumicost' tells Pulumi to look for 'pulumi-analyzer-policy-pulumicost'
-    const policyYamlContent = `runtime: pulumicost\nname: pulumicost\nversion: ${version}\n`;
+    // The runtime 'finfocus' tells Pulumi to look for 'pulumi-analyzer-policy-finfocus'
+    const policyYamlContent = `runtime: finfocus\nname: finfocus\nversion: ${version}\n`;
     fs.writeFileSync(policyYamlPath, policyYamlContent);
 
     // 4. Locate and Copy Binary
-    const pulumicostBinary = await this.findBinary('pulumicost', debug);
-    if (debug) core.info(`  Source binary: ${pulumicostBinary}`);
+    const finfocusBinary = await this.findBinary('finfocus', debug);
+    if (debug) core.info(`  Source binary: ${finfocusBinary}`);
 
-    // The binary MUST be named 'pulumi-analyzer-policy-pulumicost' for the 'pulumicost' runtime
-    const policyBinaryPath = path.join(policyPackDir, 'pulumi-analyzer-policy-pulumicost');
+    // The binary MUST be named 'pulumi-analyzer-policy-finfocus' for the 'finfocus' runtime
+    const policyBinaryPath = path.join(policyPackDir, 'pulumi-analyzer-policy-finfocus');
 
     if (debug) core.info(`  Installing policy binary to: ${policyBinaryPath}`);
-    fs.copyFileSync(pulumicostBinary, policyBinaryPath);
+    fs.copyFileSync(finfocusBinary, policyBinaryPath);
     fs.chmodSync(policyBinaryPath, 0o755);
 
     // 5. Configure Environment
-    // - Add to PATH so Pulumi can find the binary named 'pulumi-analyzer-policy-pulumicost'
-    if (debug) core.info(`  Adding ${policyPackDir} to PATH`);
-    core.addPath(policyPackDir);
+    // - Add to PATH so Pulumi can find the binary named 'pulumi-analyzer-policy-finfocus'
+    if (debug) {
+      core.info(`  Adding ${policyPackDir} to PATH`);
+      core.addPath(policyPackDir);
+    } else {
+      core.addPath(policyPackDir);
+    }
 
     // - Export environment variables to trigger automatic loading in subsequent steps
     // PULUMI_POLICY_PACK is the environment variable equivalent of the --policy-pack flag
@@ -501,8 +501,8 @@ export class Analyzer implements IAnalyzer {
 
     // - Export log level if provided
     if (config?.logLevel) {
-      if (debug) core.info(`  Exporting PULUMICOST_LOG_LEVEL=${config.logLevel}`);
-      core.exportVariable('PULUMICOST_LOG_LEVEL', config.logLevel);
+      if (debug) core.info(`  Exporting FINFOCUS_LOG_LEVEL=${config.logLevel}`);
+      core.exportVariable('FINFOCUS_LOG_LEVEL', config.logLevel);
     }
 
     // Set output for use in subsequent steps

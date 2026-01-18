@@ -11,7 +11,7 @@ Map of inputs provided by the GitHub Action workflow.
 interface ActionConfiguration {
   pulumiPlanJsonPath: string; // valid file path
   githubToken: string;       // non-empty string
-  pulumicostVersion: string; // "latest" or semver string
+  finfocusVersion: string; // "latest" or semver string
   installPlugins: string[];  // parsed from comma-separated string
   behaviorOnError: 'fail' | 'warn' | 'silent';
   postComment: boolean;
@@ -20,11 +20,11 @@ interface ActionConfiguration {
 }
 ```
 
-### PulumicostReport (External)
-The JSON structure returned by `pulumicost cost projected --json`.
+### FinfocusReport (External)
+The JSON structure returned by `finfocus cost projected --json`.
 
 ```typescript
-interface PulumicostReport {
+interface FinfocusReport {
   projected_monthly_cost: number;
   currency: string; // ISO 4217 3-letter code (e.g., "USD")
   diff?: {
@@ -35,7 +35,7 @@ interface PulumicostReport {
     urn: string;
     monthly_cost: number;
   }>;
-  // ... other fields from pulumicost schema
+  // ... other fields from finfocus schema
 }
 ```
 

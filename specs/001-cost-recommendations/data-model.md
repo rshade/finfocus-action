@@ -6,7 +6,7 @@
 
 ### Cost Recommendation
 
-**Purpose**: Represents an individual optimization suggestion from pulumicost.
+**Purpose**: Represents an individual optimization suggestion from finfocus.
 
 **Fields**:
 

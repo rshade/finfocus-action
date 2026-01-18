@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-`finfocus-action` is a dedicated GitHub Action for integrating `pulumicost-core` into CI/CD workflows. It empowers developers to visualize, track, and enforce cloud cost estimates directly within their Pull Requests, preventing budget surprises before deployment. It supports both a standard PR commenting workflow and an advanced Pulumi Analyzer integration for deeper policy enforcement.
+`finfocus-action` is a dedicated GitHub Action for integrating `finfocus` into CI/CD workflows. It empowers developers to visualize, track, and enforce cloud cost estimates directly within their Pull Requests, preventing budget surprises before deployment. It supports both a standard PR commenting workflow and an advanced Pulumi Analyzer integration for deeper policy enforcement.
 
 ## User Scenarios & Testing
 
@@ -44,7 +44,7 @@ As a Platform Engineer, I want to block PRs that increase monthly spend by more 
 
 ### User Story 3 - Analyzer Integration (Priority: P3)
 
-As a Security/Compliance Officer, I want to ensure `pulumicost` runs as an official Pulumi Analyzer to enforce policy compliance deep within the engine.
+As a Security/Compliance Officer, I want to ensure `finfocus` runs as an official Pulumi Analyzer to enforce policy compliance deep within the engine.
 
 **Why this priority**: Advanced use case for strict policy enforcement beyond simple cost sums.
 
@@ -52,7 +52,7 @@ As a Security/Compliance Officer, I want to ensure `pulumicost` runs as an offic
 
 **Acceptance Scenarios**:
 
-1. **Given** `analyzer-mode` is set to "true", **When** the action completes, **Then** the environment is configured (files created, env vars set) such that a subsequent `pulumi preview` command automatically loads `pulumicost` as a policy pack.
+1. **Given** `analyzer-mode` is set to "true", **When** the action completes, **Then** the environment is configured (files created, env vars set) such that a subsequent `pulumi preview` command automatically loads `finfocus` as a policy pack.
 
 ---
 
@@ -60,10 +60,10 @@ As a Security/Compliance Officer, I want to ensure `pulumicost` runs as an offic
 
 ### Functional Requirements
 
-- FR-001: System MUST download and install the `pulumicost` binary to the runner's PATH, supporting a user-specified version (defaulting to latest). Release artifacts follow the naming convention `pulumicost-v{version}-{os}-{arch}.tar.gz`.
-- FR-002: System MUST support installing a list of specified plugins (e.g., `aws-plugin`) via the `pulumicost` CLI.
-- **FR-003**: System MUST execute cost analysis using the `pulumicost` CLI against a provided Pulumi plan JSON file.
-- FR-004: System MUST format the analysis results into a readable Markdown table and post/update a sticky comment on the GitHub Pull Request using the provided GitHub token, identifying existing comments via a hidden HTML marker (`<!-- pulumicost-action-comment -->`).
+- FR-001: System MUST download and install the `finfocus` binary to the runner's PATH, supporting a user-specified version (defaulting to latest). Release artifacts follow the naming convention `finfocus-v{version}-{os}-{arch}.tar.gz`.
+- FR-002: System MUST support installing a list of specified plugins (e.g., `aws-plugin`) via the `finfocus` CLI.
+- **FR-003**: System MUST execute cost analysis using the `finfocus` CLI against a provided Pulumi plan JSON file.
+- FR-004: System MUST format the analysis results into a readable Markdown table and post/update a sticky comment on the GitHub Pull Request using the provided GitHub token, identifying existing comments via a hidden HTML marker (`<!-- finfocus-action-comment -->`).
 - FR-005: System MUST parse the `fail-on-cost-increase` input and fail the execution if the projected cost increase exceeds the defined threshold. If the input is malformed, the system MUST log a warning and skip the guardrail check.
 - FR-006: System MUST support an "Analyzer Mode" that prepares the runtime environment (creating `PulumiPolicy.yaml`, setting `PULUMI_POLICY_PACK_PATH`) for subsequent Pulumi steps.
 - FR-007: System MUST provide GitHub Action outputs for `total-monthly-cost`, `cost-diff`, `currency`, and `report-json-path` for use in subsequent steps.
@@ -84,15 +84,15 @@ As a Security/Compliance Officer, I want to ensure `pulumicost` runs as an offic
 
 ### Session 2026-01-08
 
-- Q: How should the action identify its own comment to update? → A: Use a hidden HTML comment marker `<!-- pulumicost-action-comment -->` embedded in the markdown body.
-- Q: What is the exact naming convention for the `pulumicost` release artifacts? → A: `pulumicost-v{version}-{os}-{arch}.tar.gz`.
+- Q: How should the action identify its own comment to update? → A: Use a hidden HTML comment marker `<!-- finfocus-action-comment -->` embedded in the markdown body.
+- Q: What is the exact naming convention for the `finfocus` release artifacts? → A: `finfocus-v{version}-{os}-{arch}.tar.gz`.
 - Q: How should the system handle malformed `fail-on-cost-increase` inputs? → A: Log a warning and skip the guardrail check.
 
 ## Success Criteria
 
 ### Measurable Outcomes
 
-- **SC-001**: Action installs `pulumicost` and runs successfully on Linux, macOS, and Windows runners in under 1 minute (excluding plugin download time).
+- **SC-001**: Action installs `finfocus` and runs successfully on Linux, macOS, and Windows runners in under 1 minute (excluding plugin download time).
 - **SC-002**: 100% of successful runs on a PR result in a visible, correctly formatted comment (or update).
 - **SC-003**: Pipelines consistently fail (blocking merge) when cost increase thresholds are exceeded.
 - **SC-004**: Analyzer mode setup correctly triggers the policy pack during the `pulumi preview` phase in 100% of test cases.
@@ -100,5 +100,5 @@ As a Security/Compliance Officer, I want to ensure `pulumicost` runs as an offic
 ## Assumptions
 
 - User has a valid Pulumi project and is able to generate a JSON preview (`pulumi preview --json`).
-- The `pulumicost` binary and plugins are available via public GitHub Releases.
+- The `finfocus` binary and plugins are available via public GitHub Releases.
 - The workflow has access to a valid `GITHUB_TOKEN` with permissions to comment on PRs.

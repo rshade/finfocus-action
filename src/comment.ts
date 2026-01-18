@@ -2,7 +2,7 @@ import * as github from '@actions/github';
 import * as core from '@actions/core';
 import {
   ICommenter,
-  PulumicostReport,
+  FinfocusReport,
   ActionConfiguration,
   RecommendationsReport,
   ActualCostReport,
@@ -11,10 +11,10 @@ import {
 import { formatCommentBody } from './formatter.js';
 
 export class Commenter implements ICommenter {
-  private readonly marker = '<!-- pulumicost-action-comment -->';
+  private readonly marker = '<!-- finfocus-action-comment -->';
 
   async upsertComment(
-    report: PulumicostReport,
+    report: FinfocusReport,
     token: string,
     config?: ActionConfiguration,
     recommendationsReport?: RecommendationsReport,

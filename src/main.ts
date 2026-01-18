@@ -41,7 +41,7 @@ function logInputs(): void {
   const inputs = [
     'pulumi_plan_json',
     'github_token',
-    'pulumicost_version',
+    'finfocus_version',
     'install_plugins',
     'behavior_on_error',
     'post_comment',
@@ -67,10 +67,8 @@ function logInputs(): void {
 }
 
 function logAnalyzerOutput(): void {
-  const logPath = '/tmp/pulumicost-analyzer.log';
-  if (fs.existsSync(logPath)) {
-    core.startGroup('🔍 Pulumicost Analyzer Logs');
-    try {
+      const logPath = '/tmp/finfocus-analyzer.log';  if (fs.existsSync(logPath)) {
+          core.startGroup('🔍 Finfocus Analyzer Logs');    try {
       const logs = fs.readFileSync(logPath, 'utf8');
       core.info(logs);
     } catch (err) {
@@ -90,7 +88,7 @@ async function run(): Promise<void> {
     // Parse config first to know if we are in debug mode
     const pulumiPlanJsonPath = core.getInput('pulumi_plan_json') || 'plan.json';
     const githubToken = core.getInput('github_token');
-    const pulumicostVersion = core.getInput('pulumicost_version') || 'latest';
+    const finfocusVersion = core.getInput('finfocus_version') || 'latest';
     const installPluginsRaw = core.getInput('install_plugins') || '';
     const installPlugins = installPluginsRaw
       .split(',')
@@ -129,7 +127,7 @@ async function run(): Promise<void> {
     config = {
       pulumiPlanJsonPath,
       githubToken,
-      pulumicostVersion,
+      finfocusVersion,
       installPlugins,
       behaviorOnError,
       postComment,
@@ -156,7 +154,7 @@ async function run(): Promise<void> {
       core.info('=== Parsing Configuration ===');
       core.info(`  pulumi-plan-json resolved to: "${pulumiPlanJsonPath}"`);
       core.info(`  github-token: ${githubToken ? '[PROVIDED]' : '[EMPTY]'}`);
-      core.info(`  pulumicost-version resolved to: "${pulumicostVersion}"`);
+      core.info(`  finfocus-version resolved to: "${finfocusVersion}"`);
       core.info(`  install-plugins raw: "${installPluginsRaw}"`);
       core.info(`  install-plugins parsed: [${installPlugins.map((p) => `"${p}"`).join(', ')}]`);
       core.info(`  behavior-on-error: "${behaviorOnError}"`);
@@ -217,11 +215,11 @@ async function run(): Promise<void> {
     const commenter = new Commenter();
 
     core.info('');
-    core.startGroup('📦 Installing pulumicost');
+    core.startGroup('📦 Installing finfocus');
     const installStartTime = Date.now();
-    const binaryPath = await installer.install(config.pulumicostVersion, config);
+    const binaryPath = await installer.install(config.finfocusVersion, config);
     if (config.debug) {
-      core.info(`Installed pulumicost at: ${binaryPath}`);
+      core.info(`Installed finfocus at: ${binaryPath}`);
       core.info(`Installation took: ${Date.now() - installStartTime}ms`);
     }
     core.endGroup();

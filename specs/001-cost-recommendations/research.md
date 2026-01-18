@@ -4,11 +4,11 @@
 
 ## Research Tasks
 
-### How to install and use pulumicost CLI in GitHub Actions
+### How to install and use finfocus CLI in GitHub Actions
 
 **Decision**: Use `npm install -g @pulumi/cost` or download binary from GitHub releases.
 
-**Rationale**: Pulumicost is available as npm package or pre-built binaries. For GitHub Actions, downloading the binary ensures version consistency and avoids npm registry issues.
+**Rationale**: Finfocus is available as npm package or pre-built binaries. For GitHub Actions, downloading the binary ensures version consistency and avoids npm registry issues.
 
 **Alternatives considered**: Using Docker image, but binary download is simpler and faster.
 

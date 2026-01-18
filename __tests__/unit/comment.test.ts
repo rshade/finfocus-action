@@ -35,7 +35,7 @@ describe('Commenter', () => {
     await commenter.upsertComment({ projected_monthly_cost: 100, currency: 'USD' }, 'token');
 
     expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.stringContaining('<!-- pulumicost-action-comment -->')
+      body: expect.stringContaining('<!-- finfocus-action-comment -->')
     }));
   });
 
@@ -46,7 +46,7 @@ describe('Commenter', () => {
           listComments: jest.fn().mockResolvedValue({
             data: [
               { id: 1, body: 'other comment' },
-              { id: 2, body: '<!-- pulumicost-action-comment --> existing table' }
+              { id: 2, body: '<!-- finfocus-action-comment --> existing table' }
             ]
           }),
           updateComment: jest.fn().mockResolvedValue({})

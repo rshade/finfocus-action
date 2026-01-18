@@ -34,7 +34,7 @@
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
 - [ ] T004 Setup TypeScript interfaces for recommendations data
-- [ ] T005 Configure pulumicost CLI integration setup
+- [ ] T005 Configure finfocus CLI integration setup
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

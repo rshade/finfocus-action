@@ -49,7 +49,7 @@ npm test -- --coverage                      # With coverage
 
 ```typescript
 export interface IAnalyzer {
-  runAnalysis(planPath: string): Promise<PulumicostReport>;
+  runAnalysis(planPath: string): Promise<FinfocusReport>;
 }
 ```
 
@@ -120,8 +120,8 @@ describe('Analyzer', () => {
 - Maintain test coverage, avoid breaking interface changes
 
 ## Active Technologies
-- Go (latest stable) + @actions/core, @actions/github, @actions/exec, pulumicost CLI (001-cost-recommendations)
+- Go (latest stable) + @actions/core, @actions/github, @actions/exec, finfocus CLI (001-cost-recommendations)
 - N/A (no persistent storage required) (001-cost-recommendations)
 
 ## Recent Changes
-- 001-cost-recommendations: Added Go (latest stable) + @actions/core, @actions/github, @actions/exec, pulumicost CLI
+- 001-cost-recommendations: Added Go (latest stable) + @actions/core, @actions/github, @actions/exec, finfocus CLI

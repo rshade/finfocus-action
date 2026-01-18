@@ -5,20 +5,20 @@
 
 ## Problem Statement
 
-The analyzer plugin is being installed correctly to `~/.pulumi/plugins/analyzer-pulumicost-<version>/pulumi-analyzer-pulumicost`, but Pulumi is not finding/invoking it during `pulumi preview`.
+The analyzer plugin is being installed correctly to `~/.pulumi/plugins/analyzer-finfocus-<version>/pulumi-analyzer-finfocus`, but Pulumi is not finding/invoking it during `pulumi preview`.
 
 ## Root Cause (Updated v2)
 
 Even after fixing the YAML structure, two issues remained:
-1.  **Binary Naming**: `pulumicost` only enters analyzer mode if its process name contains `pulumi-analyzer-pulumicost`. By calling it `pulumicost-real` in the wrapper, it was running as a CLI and exiting.
+1.  **Binary Naming**: `finfocus` only enters analyzer mode if its process name contains `pulumi-analyzer-finfocus`. By calling it `finfocus-real` in the wrapper, it was running as a CLI and exiting.
 2.  **Path to Directory**: In `Pulumi.yaml`, `plugins.analyzers.path` **MUST point to the directory** containing the analyzer executable, NOT the executable itself.
-3.  **Version Command**: `pulumicost version` is not valid; `pulumicost --version` is required.
+3.  **Version Command**: `finfocus version` is not valid; `finfocus --version` is required.
 
 ## Evidence
 
 From the workflow logs (run 20896000573):
-1. `Error: unknown command "version" for "pulumicost"` -> caused fallback to v0.1.0 path.
-2. `error: parsing plugin options for 'pulumicost': provider folder ... is not a directory` -> caused by pointing path to the binary.
+1. `Error: unknown command "version" for "finfocus"` -> caused fallback to v0.1.0 path.
+2. `error: parsing plugin options for 'finfocus': provider folder ... is not a directory` -> caused by pointing path to the binary.
 
 ## Fix Required
 
@@ -26,9 +26,9 @@ From the workflow logs (run 20896000573):
 
 Change the `setupAnalyzerMode()` function to:
 
-1.  Rename the internal binary to `pulumi-analyzer-pulumicost-real`.
+1.  Rename the internal binary to `pulumi-analyzer-finfocus-real`.
 2.  Update `Pulumi.yaml` to point `path` to the **plugin directory**.
-3.  Use `pulumicost --version`.
+3.  Use `finfocus --version`.
 4.  Remove any legacy top-level `analyzers` config.
 
 ### Implementation Steps
@@ -50,6 +50,6 @@ Change the `setupAnalyzerMode()` function to:
 
 ## References
 
-- pulumicost-core: `specs/012-analyzer-e2e-tests/research.md`
+- finfocus: `specs/012-analyzer-e2e-tests/research.md`
 - Pulumi Project File: https://www.pulumi.com/docs/iac/concepts/projects/project-file/
 

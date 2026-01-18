@@ -20,7 +20,7 @@ The cost optimization recommendations feature adds optional cost-saving suggesti
 
 When enabled, the action will:
 
-1. Run `pulumicost cost recommendations` if the CLI is available
+1. Run `finfocus cost recommendations` if the CLI is available
 2. Parse the recommendations JSON
 3. Display them in a table format in the PR comment
 
@@ -38,5 +38,5 @@ When enabled, the action will:
 
 ## Requirements
 
-- pulumicost CLI must be installed in the runner environment
+- finfocus CLI must be installed in the runner environment
 - Pulumi plan JSON file must be available at `plan.json`
