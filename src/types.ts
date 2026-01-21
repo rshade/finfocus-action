@@ -157,6 +157,10 @@ export interface IAnalyzer {
     totalCO2eDiff: number;
     carbonIntensity: number;
   };
+  calculateBudgetStatus(
+    config: ActionConfiguration,
+    report: FinfocusReport,
+  ): BudgetStatus | undefined;
   extractBudgetStatus(stdout: string): BudgetStatus | undefined;
 }
 

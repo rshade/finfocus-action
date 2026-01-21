@@ -3,12 +3,7 @@ node_modules/
 
 # Build
 dist/
-# Note: In some GitHub Action patterns, dist/ IS committed. 
-# But usually, it's better to keep it ignored and use a release workflow to commit it if needed,
-# or commit it if that's the project's convention. 
-# Given T030, we are building it. I'll leave it out of gitignore for now if we want to commit it.
-# Actually, the convention for many actions IS to commit dist. 
-# I'll ignore node_modules and other junk.
+# Note: dist/ is built and committed only in release branches, not in main
 
 # Testing
 coverage/

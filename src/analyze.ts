@@ -512,6 +512,113 @@ export class Analyzer implements IAnalyzer {
     if (debug) core.info(`  Analyzer (Policy Pack) setup complete.`);
   }
 
+  calculateBudgetStatus(
+    config: ActionConfiguration,
+    report: FinfocusReport,
+  ): BudgetStatus | undefined {
+    // Return undefined if budget is not configured
+    if (!config.budgetAmount || config.budgetAmount <= 0) {
+      return undefined;
+    }
+
+    const debug = config?.debug === true;
+    if (debug) {
+      core.info('=== Calculating budget status ===');
+    }
+
+    // Extract projected monthly cost from report
+    const projectedCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
+    const currency = config.budgetCurrency || 'USD';
+    const period = config.budgetPeriod || 'monthly';
+    const amount = config.budgetAmount;
+
+    if (debug) {
+      core.info(`  Budget amount: ${amount} ${currency}/${period}`);
+      core.info(`  Projected cost: ${projectedCost} ${currency}`);
+    }
+
+    // Calculate spent, remaining, and percentage
+    const spent = projectedCost;
+    const remaining = amount - spent;
+    const percentUsed = amount > 0 ? (spent / amount) * 100 : 0;
+
+    if (debug) {
+      core.info(`  Spent: ${spent.toFixed(2)} ${currency}`);
+      core.info(`  Remaining: ${remaining.toFixed(2)} ${currency}`);
+      core.info(`  Percent used: ${percentUsed.toFixed(1)}%`);
+    }
+
+    // Parse and evaluate alerts
+    const alertsConfig = this.parseAlerts(config.budgetAlerts);
+    const alerts = alertsConfig.map((alert) => {
+      const triggered = percentUsed >= alert.threshold;
+      if (debug && triggered) {
+        core.info(`  Alert triggered: ${alert.threshold}% (${alert.type})`);
+      }
+      return {
+        threshold: alert.threshold,
+        type: alert.type,
+        triggered,
+      };
+    });
+
+    return {
+      configured: true,
+      amount,
+      currency,
+      period,
+      spent,
+      remaining,
+      percentUsed,
+      alerts: alerts.length > 0 ? alerts : undefined,
+    };
+  }
+
+  private parseAlerts(alertsInput?: string): Array<{ threshold: number; type: string }> {
+    // Default alerts if none provided
+    const defaultAlerts = [
+      { threshold: 80, type: 'actual' },
+      { threshold: 100, type: 'forecasted' },
+    ];
+
+    if (!alertsInput || alertsInput.trim() === '') {
+      return defaultAlerts;
+    }
+
+    try {
+      const parsed = JSON.parse(alertsInput) as Array<{ threshold: number; type: string }>;
+
+      if (!Array.isArray(parsed)) {
+        core.warning('Budget alerts must be an array. Using default alerts.');
+        return defaultAlerts;
+      }
+
+      const validAlerts = parsed.filter((alert) => {
+        if (typeof alert.threshold !== 'number' || alert.threshold <= 0) {
+          core.warning(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
+          return false;
+        }
+        if (alert.type !== 'actual' && alert.type !== 'forecasted') {
+          core.warning(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validAlerts.length === 0) {
+        core.warning('No valid alerts found. Using default alerts.');
+        return defaultAlerts;
+      }
+
+      return validAlerts;
+    } catch (err) {
+      core.warning(
+        `Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`,
+      );
+      return defaultAlerts;
+    }
+  }
+
   extractBudgetStatus(stdout: string): BudgetStatus | undefined {
     if (!stdout) {
       return undefined;

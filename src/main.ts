@@ -362,17 +362,24 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
-    // Extract budget status if budget is configured
-    // Note: Currently returns undefined since we use --output json
-    // This provides forward compatibility for when finfocus CLI includes budget in output
+    // Calculate budget status if budget is configured
     let budgetStatus;
     if (config.budgetAmount && config.budgetAmount > 0) {
-      // Budget status extraction from stdout would go here
-      // For now, analyzer.extractBudgetStatus will return undefined with JSON output
-      budgetStatus = analyzer.extractBudgetStatus('');
+      core.info('');
+      core.startGroup('📊 Calculating budget status');
+      budgetStatus = analyzer.calculateBudgetStatus(config, report);
       if (config.debug && budgetStatus) {
-        core.info(`📊 Budget status extracted: ${JSON.stringify(budgetStatus)}`);
+        core.info(`📊 Budget status calculated: ${JSON.stringify(budgetStatus)}`);
       }
+      if (budgetStatus) {
+        core.setOutput('budget-spent', budgetStatus.spent?.toString() || '0');
+        core.setOutput('budget-remaining', budgetStatus.remaining?.toString() || '0');
+        core.setOutput('budget-percent-used', budgetStatus.percentUsed?.toString() || '0');
+        core.info(
+          `📊 Budget: ${budgetStatus.spent?.toFixed(2)}/${budgetStatus.amount?.toFixed(2)} ${budgetStatus.currency} (${budgetStatus.percentUsed?.toFixed(1)}%)`,
+        );
+      }
+      core.endGroup();
     }
 
     if (config.postComment && config.githubToken) {

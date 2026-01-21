@@ -147,4 +147,177 @@ describe('Analyzer', () => {
       expect.anything()
     );
   });
+
+  describe('calculateBudgetStatus', () => {
+    it('should return undefined when budget is not configured', () => {
+      const config = {
+        budgetAmount: undefined,
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 50, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return undefined when budget amount is 0 or negative', () => {
+      const config = {
+        budgetAmount: 0,
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 50, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should calculate budget status correctly when under budget', () => {
+      const config = {
+        budgetAmount: 100,
+        budgetCurrency: 'USD',
+        budgetPeriod: 'monthly',
+        budgetAlerts: JSON.stringify([
+          { threshold: 80, type: 'actual' },
+          { threshold: 100, type: 'forecasted' },
+        ]),
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 50, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeDefined();
+      expect(result?.configured).toBe(true);
+      expect(result?.amount).toBe(100);
+      expect(result?.currency).toBe('USD');
+      expect(result?.period).toBe('monthly');
+      expect(result?.spent).toBe(50);
+      expect(result?.remaining).toBe(50);
+      expect(result?.percentUsed).toBe(50);
+      expect(result?.alerts).toHaveLength(2);
+      expect(result?.alerts?.[0].triggered).toBe(false);
+      expect(result?.alerts?.[1].triggered).toBe(false);
+    });
+
+    it('should calculate budget status correctly when at 80% threshold', () => {
+      const config = {
+        budgetAmount: 100,
+        budgetCurrency: 'USD',
+        budgetPeriod: 'monthly',
+        budgetAlerts: JSON.stringify([
+          { threshold: 80, type: 'actual' },
+          { threshold: 100, type: 'forecasted' },
+        ]),
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 80, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeDefined();
+      expect(result?.spent).toBe(80);
+      expect(result?.remaining).toBe(20);
+      expect(result?.percentUsed).toBe(80);
+      expect(result?.alerts?.[0].triggered).toBe(true); // 80% alert triggered
+      expect(result?.alerts?.[1].triggered).toBe(false); // 100% not triggered
+    });
+
+    it('should calculate budget status correctly when over budget', () => {
+      const config = {
+        budgetAmount: 100,
+        budgetCurrency: 'USD',
+        budgetPeriod: 'monthly',
+        budgetAlerts: JSON.stringify([
+          { threshold: 80, type: 'actual' },
+          { threshold: 100, type: 'forecasted' },
+        ]),
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 120, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeDefined();
+      expect(result?.spent).toBe(120);
+      expect(result?.remaining).toBe(-20);
+      expect(result?.percentUsed).toBe(120);
+      expect(result?.alerts?.[0].triggered).toBe(true);
+      expect(result?.alerts?.[1].triggered).toBe(true);
+    });
+
+    it('should use default alerts when budgetAlerts is not provided', () => {
+      const config = {
+        budgetAmount: 100,
+        budgetCurrency: 'USD',
+        budgetPeriod: 'monthly',
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 85, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeDefined();
+      expect(result?.alerts).toHaveLength(2);
+      expect(result?.alerts?.[0]).toEqual({
+        threshold: 80,
+        type: 'actual',
+        triggered: true,
+      });
+      expect(result?.alerts?.[1]).toEqual({
+        threshold: 100,
+        type: 'forecasted',
+        triggered: false,
+      });
+    });
+
+    it('should handle legacy report format with projected_monthly_cost', () => {
+      const config = {
+        budgetAmount: 100,
+        budgetCurrency: 'USD',
+        budgetPeriod: 'monthly',
+      } as any;
+
+      const report = {
+        projected_monthly_cost: 75,
+        currency: 'USD',
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeDefined();
+      expect(result?.spent).toBe(75);
+      expect(result?.remaining).toBe(25);
+      expect(result?.percentUsed).toBe(75);
+    });
+
+    it('should use defaults for currency and period when not provided', () => {
+      const config = {
+        budgetAmount: 100,
+      } as any;
+
+      const report = {
+        summary: { totalMonthly: 50, currency: 'USD' },
+      } as any;
+
+      const result = analyzer.calculateBudgetStatus(config, report);
+
+      expect(result).toBeDefined();
+      expect(result?.currency).toBe('USD');
+      expect(result?.period).toBe('monthly');
+    });
+  });
 });
