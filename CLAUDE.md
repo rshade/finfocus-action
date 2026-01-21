@@ -107,3 +107,4 @@ main.ts
 - Budget tracking is opt-in: ConfigManager only runs when `budget-amount` is provided
 - Budget configuration is written to `~/.finfocus/config.yaml` for finfocus CLI to read
 - Budget status extraction returns undefined when using `--output json` (forward compatible for future finfocus CLI support)
+- **JSON format compatibility**: finfocus v0.2.4+ wraps JSON output in a `"finfocus"` key. The action handles both wrapped and unwrapped formats for backward compatibility (see `src/analyze.ts:131`)

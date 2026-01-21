@@ -128,9 +128,15 @@ export class Analyzer implements IAnalyzer {
 
     if (debug) core.info(`=== Parsing analysis output ===`);
     try {
-      const report = JSON.parse(output.stdout) as FinfocusReport;
+      const parsed = JSON.parse(output.stdout);
+
+      // Handle wrapped format (finfocus v0.2.4+) where output is wrapped in "finfocus" key
+      // Also maintain backward compatibility with unwrapped format
+      const report = (parsed.finfocus ? parsed.finfocus : parsed) as FinfocusReport;
+
       if (debug) {
         core.info(`  Parsed successfully`);
+        core.info(`  Format: ${parsed.finfocus ? 'wrapped' : 'unwrapped'}`);
         core.info(`  Report fields: ${Object.keys(report).join(', ')}`);
         core.info(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
         core.info(`  currency: ${report.currency}`);
