@@ -7,6 +7,7 @@ import {
   RecommendationsReport,
   ActualCostReport,
   SustainabilityReport,
+  BudgetStatus,
 } from './types.js';
 import { formatCommentBody } from './formatter.js';
 
@@ -20,6 +21,7 @@ export class Commenter implements ICommenter {
     recommendationsReport?: RecommendationsReport,
     actualCostReport?: ActualCostReport,
     sustainabilityReport?: SustainabilityReport,
+    budgetStatus?: BudgetStatus,
   ): Promise<void> {
     const octokit = github.getOctokit(token);
     const context = github.context;
@@ -31,7 +33,7 @@ export class Commenter implements ICommenter {
 
     const prNumber = context.payload.pull_request.number;
     const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport)}`;
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus)}`;
 
     const { data: comments } = await octokit.rest.issues.listComments({
       ...context.repo,

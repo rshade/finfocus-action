@@ -10,6 +10,7 @@ import {
   ActionConfiguration,
   RecommendationsReport,
   ActualCostReport,
+  BudgetStatus,
 } from './types.js';
 
 export class Analyzer implements IAnalyzer {
@@ -509,6 +510,92 @@ export class Analyzer implements IAnalyzer {
     core.setOutput('policy-pack-path', policyPackDir);
 
     if (debug) core.info(`  Analyzer (Policy Pack) setup complete.`);
+  }
+
+  extractBudgetStatus(stdout: string): BudgetStatus | undefined {
+    if (!stdout) {
+      return undefined;
+    }
+
+    try {
+      // Look for budget-related patterns in the output
+      // Example patterns:
+      // Budget: $1,000.00 USD/monthly
+      // Current Spend: $850.00 USD (85.0%)
+      // Remaining: $150.00 USD
+
+      const budgetMatch = stdout.match(/Budget:\s*\$?([\d,]+\.?\d*)\s*(\w+)?\/?(\w+)?/i);
+      const spendMatch = stdout.match(/(?:Current\s+)?Spend(?:ing)?:\s*\$?([\d,]+\.?\d*)\s*(\w+)?\s*\(?([\d.]+)%?\)?/i);
+      const remainingMatch = stdout.match(/Remaining:\s*\$?([\d,]+\.?\d*)\s*(\w+)?/i);
+
+      if (!budgetMatch) {
+        // No budget information found in output
+        return undefined;
+      }
+
+      const amount = parseFloat(budgetMatch[1].replace(/,/g, ''));
+      if (!Number.isFinite(amount)) {
+        return undefined;
+      }
+
+      const currency = budgetMatch[2] || 'USD';
+      const period = budgetMatch[3] || 'monthly';
+
+      let spent: number | undefined;
+      let percentUsed: number | undefined;
+
+      if (spendMatch) {
+        const parsedSpent = parseFloat(spendMatch[1].replace(/,/g, ''));
+        spent = Number.isFinite(parsedSpent) ? parsedSpent : undefined;
+
+        if (spendMatch[3]) {
+          const parsedPercent = parseFloat(spendMatch[3]);
+          percentUsed = Number.isFinite(parsedPercent) ? parsedPercent : undefined;
+        }
+      }
+
+      let remaining: number | undefined;
+      if (remainingMatch) {
+        const parsedRemaining = parseFloat(remainingMatch[1].replace(/,/g, ''));
+        remaining = Number.isFinite(parsedRemaining) ? parsedRemaining : undefined;
+      } else if (spent !== undefined) {
+        remaining = amount - spent;
+      }
+
+      // Calculate percentUsed if we have spent and amount but no explicit percentage
+      if (percentUsed === undefined && spent !== undefined && amount > 0) {
+        const calculatedPercent = (spent / amount) * 100;
+        percentUsed = Number.isFinite(calculatedPercent) ? calculatedPercent : undefined;
+      }
+
+      // Parse alerts if present
+      const alerts: Array<{ threshold: number; type: string; triggered: boolean }> = [];
+      const alertMatches = stdout.matchAll(/Alert:\s*(\d+)%\s*\((\w+)\)\s*-\s*(triggered|not\s+triggered)/gi);
+
+      for (const alertMatch of alertMatches) {
+        alerts.push({
+          threshold: parseInt(alertMatch[1]),
+          type: alertMatch[2].toLowerCase(),
+          triggered: alertMatch[3].toLowerCase().includes('triggered') && !alertMatch[3].toLowerCase().includes('not'),
+        });
+      }
+
+      return {
+        configured: true,
+        amount,
+        currency,
+        period,
+        spent,
+        remaining,
+        percentUsed,
+        alerts: alerts.length > 0 ? alerts : undefined,
+      };
+    } catch (err) {
+      core.debug(
+        `Failed to parse budget status from output: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return undefined;
+    }
   }
 
   private async findBinary(name: string, debug: boolean): Promise<string> {

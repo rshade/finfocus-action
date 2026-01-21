@@ -5,6 +5,7 @@ import {
   ActualCostReport,
   SustainabilityReport,
   EquivalencyMetrics,
+  BudgetStatus,
 } from './types.js';
 
 export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
@@ -25,6 +26,114 @@ export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
     milesDriven,
     homeElectricityDays,
   };
+}
+
+/**
+ * Generate a TUI-style progress bar using block characters
+ * @param percent - Percentage value (0-100+, can exceed 100%)
+ * @param width - Width of the progress bar in characters (default: 30)
+ * @returns Progress bar string with filled (█) and empty (░) blocks
+ */
+function generateTUIProgressBar(percent: number, width: number = 30): string {
+  const filled = Math.min(width, Math.floor((percent / 100) * width));
+  const empty = Math.max(0, width - filled);
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+/**
+ * Format a line for TUI box with proper padding and borders
+ * @param content - Content to display in the line
+ * @param width - Width of the content area (default: 42)
+ * @returns Formatted line with borders and padding
+ */
+function formatTUILine(content: string, width: number = 42): string {
+  const contentLength = content.length;
+  const padding = Math.max(0, width - contentLength);
+  return `│ ${content}${' '.repeat(padding)} │`;
+}
+
+/**
+ * Create a TUI box with borders around the provided lines
+ * @param lines - Array of content lines to display in the box
+ * @param width - Width of the content area (default: 42)
+ * @returns Complete TUI box with top, bottom, and side borders
+ */
+function createTUIBox(lines: string[], width: number = 42): string {
+  const top = '╭' + '─'.repeat(width + 2) + '╮';
+  const bottom = '╰' + '─'.repeat(width + 2) + '╯';
+
+  const formattedLines = lines.map((line) => formatTUILine(line, width));
+
+  return [top, ...formattedLines, bottom].join('\n');
+}
+
+function formatBudgetSection(budgetStatus?: BudgetStatus): string {
+  if (!budgetStatus || !budgetStatus.configured) {
+    return '';
+  }
+
+  const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
+
+  // Simple currency symbol mapping
+  const getCurrencySymbol = (curr: string = 'USD'): string => {
+    const symbols: Record<string, string> = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      JPY: '¥',
+      CNY: '¥',
+    };
+    return symbols[curr.toUpperCase()] || curr;
+  };
+
+  const currencySymbol = getCurrencySymbol(currency);
+
+  // Determine status message
+  let statusMessage = '';
+  if (percentUsed !== undefined) {
+    if (percentUsed >= 100) {
+      statusMessage = '⚠ CRITICAL - budget exceeded';
+    } else if (percentUsed >= 80) {
+      statusMessage = '⚠ WARNING - spend exceeds 80% threshold';
+    }
+  }
+
+  // Build TUI box content
+  const lines: string[] = [];
+  lines.push('BUDGET STATUS');
+  lines.push('────────────────────────────────────');
+  lines.push(`Budget: ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
+
+  if (spent !== undefined && percentUsed !== undefined) {
+    lines.push(`Current Spend: ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(1)}%)`);
+  }
+
+  lines.push(''); // Empty line
+
+  // Progress bar with block characters
+  if (percentUsed !== undefined) {
+    const progressBar = generateTUIProgressBar(percentUsed);
+    lines.push(`${progressBar} ${percentUsed.toFixed(0)}%`);
+  }
+
+  if (statusMessage) {
+    lines.push(statusMessage);
+  }
+
+  // Add triggered alerts to the TUI box
+  if (alerts && alerts.length > 0) {
+    const triggeredAlerts = alerts.filter((a) => a.triggered);
+    if (triggeredAlerts.length > 0) {
+      lines.push(''); // Empty line before alerts
+      triggeredAlerts.forEach((a) => {
+        const icon = a.type === 'actual' ? '💰' : '📊';
+        lines.push(`${icon} ${a.threshold}% ${a.type} threshold exceeded`);
+      });
+    }
+  }
+
+  // Wrap in TUI box and code block for GitHub
+  return '\n```\n' + createTUIBox(lines) + '\n```\n';
 }
 
 function formatSustainabilitySection(
@@ -103,6 +212,7 @@ export function formatCommentBody(
   recommendationsReport?: RecommendationsReport,
   actualCostReport?: ActualCostReport,
   sustainabilityReport?: SustainabilityReport,
+  budgetStatus?: BudgetStatus,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -242,9 +352,11 @@ ${recRows}
 `;
   }
 
-  const sustainabilitySection = sustainabilityReport 
-    ? formatSustainabilitySection(sustainabilityReport, config, report) 
+  const sustainabilitySection = sustainabilityReport
+    ? formatSustainabilitySection(sustainabilityReport, config, report)
     : '';
+
+  const budgetSection = formatBudgetSection(budgetStatus);
 
   return `## 💰 Cloud Cost Estimate
 
@@ -253,7 +365,7 @@ ${recRows}
 | **Projected Monthly** | ${total} ${currency} |
 ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
+${budgetSection}${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
 
 *Estimates calculated by [finfocus](https://github.com/rshade/finfocus)*
 `;

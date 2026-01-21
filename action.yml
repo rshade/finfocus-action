@@ -82,6 +82,22 @@ inputs:
     description: 'Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases'
     required: false
     default: ''
+  budget-amount:
+    description: 'Budget amount for cost tracking (e.g., 1000)'
+    required: false
+    default: ''
+  budget-currency:
+    description: 'Budget currency code (e.g., USD)'
+    required: false
+    default: 'USD'
+  budget-period:
+    description: 'Budget period: monthly, quarterly, yearly'
+    required: false
+    default: 'monthly'
+  budget-alerts:
+    description: 'Budget alerts in JSON format: [{"threshold": 80, "type": "actual"}, {"threshold": 100, "type": "forecasted"}]'
+    required: false
+    default: ''
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -145,6 +161,10 @@ runs:
         INPUT_UTILIZATION_RATE: ${{ inputs.utilization-rate }}
         INPUT_SUSTAINABILITY_EQUIVALENTS: ${{ inputs.sustainability-equivalents }}
         INPUT_FAIL_ON_CARBON_INCREASE: ${{ inputs.fail-on-carbon-increase }}
+        INPUT_BUDGET_AMOUNT: ${{ inputs.budget-amount }}
+        INPUT_BUDGET_CURRENCY: ${{ inputs.budget-currency }}
+        INPUT_BUDGET_PERIOD: ${{ inputs.budget-period }}
+        INPUT_BUDGET_ALERTS: ${{ inputs.budget-alerts }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

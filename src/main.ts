@@ -5,6 +5,7 @@ import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
 import { Commenter } from './comment.js';
+import { ConfigManager } from './config.js';
 
 function parseBoolean(value: string, defaultValue: boolean): boolean {
   if (!value || value.trim() === '') return defaultValue;
@@ -124,6 +125,12 @@ async function run(): Promise<void> {
     const failOnCarbonIncreaseRaw = core.getInput('fail_on_carbon_increase');
     const failOnCarbonIncrease = failOnCarbonIncreaseRaw || null;
 
+    const budgetAmountRaw = core.getInput('budget_amount');
+    const budgetAmount = budgetAmountRaw ? parseFloat(budgetAmountRaw) : undefined;
+    const budgetCurrency = core.getInput('budget_currency') || 'USD';
+    const budgetPeriod = core.getInput('budget_period') || 'monthly';
+    const budgetAlerts = core.getInput('budget_alerts') || '';
+
     config = {
       pulumiPlanJsonPath,
       githubToken,
@@ -145,6 +152,10 @@ async function run(): Promise<void> {
       utilizationRate,
       sustainabilityEquivalents,
       failOnCarbonIncrease,
+      budgetAmount,
+      budgetCurrency,
+      budgetPeriod,
+      budgetAlerts,
     };
 
     if (config.debug) {
@@ -235,6 +246,15 @@ async function run(): Promise<void> {
       core.endGroup();
     } else {
       if (config.debug) core.info('No plugins to install (install-plugins is empty)');
+    }
+
+    // Setup budget configuration if budget amount is provided
+    if (config.budgetAmount && config.budgetAmount > 0) {
+      core.info('');
+      core.startGroup('📊 Setting up budget configuration');
+      const configManager = new ConfigManager();
+      await configManager.writeConfig(config);
+      core.endGroup();
     }
 
     if (config.analyzerMode) {
@@ -342,6 +362,19 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
+    // Extract budget status if budget is configured
+    // Note: Currently returns undefined since we use --output json
+    // This provides forward compatibility for when finfocus CLI includes budget in output
+    let budgetStatus;
+    if (config.budgetAmount && config.budgetAmount > 0) {
+      // Budget status extraction from stdout would go here
+      // For now, analyzer.extractBudgetStatus will return undefined with JSON output
+      budgetStatus = analyzer.extractBudgetStatus('');
+      if (config.debug && budgetStatus) {
+        core.info(`📊 Budget status extracted: ${JSON.stringify(budgetStatus)}`);
+      }
+    }
+
     if (config.postComment && config.githubToken) {
       core.info('');
       core.startGroup('💬 Posting PR comment');
@@ -353,6 +386,7 @@ async function run(): Promise<void> {
         recommendationsReport,
         actualCostReport,
         sustainabilityReport,
+        budgetStatus,
       );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
