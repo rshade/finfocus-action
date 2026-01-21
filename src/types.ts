@@ -19,6 +19,37 @@ export interface ActionConfiguration {
   utilizationRate: string;
   sustainabilityEquivalents: boolean;
   failOnCarbonIncrease: string | null;
+  budgetAmount?: number;
+  budgetCurrency?: string;
+  budgetPeriod?: string;
+  budgetAlerts?: string;
+}
+
+export interface BudgetAlert {
+  threshold: number;
+  type: 'actual' | 'forecasted';
+}
+
+export interface BudgetConfiguration {
+  amount: number;
+  currency: string;
+  period: 'monthly' | 'quarterly' | 'yearly';
+  alerts: BudgetAlert[];
+}
+
+export interface BudgetStatus {
+  configured: boolean;
+  amount?: number;
+  currency?: string;
+  period?: string;
+  spent?: number;
+  remaining?: number;
+  percentUsed?: number;
+  alerts?: Array<{
+    threshold: number;
+    type: string;
+    triggered: boolean;
+  }>;
 }
 
 export interface ActualCostItem {
@@ -126,6 +157,7 @@ export interface IAnalyzer {
     totalCO2eDiff: number;
     carbonIntensity: number;
   };
+  extractBudgetStatus(stdout: string): BudgetStatus | undefined;
 }
 
 export interface RecommendationsSummary {
@@ -156,5 +188,6 @@ export interface ICommenter {
     recommendationsReport?: RecommendationsReport,
     actualCostReport?: ActualCostReport,
     sustainabilityReport?: SustainabilityReport,
+    budgetStatus?: BudgetStatus,
   ): Promise<void>;
 }

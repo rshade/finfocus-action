@@ -34,18 +34,20 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `main.ts` | — | Entry point, config parsing, orchestration |
 | `install.ts` | `Installer` | Downloads finfocus binary from GitHub releases, caches with `@actions/tool-cache` |
 | `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI |
-| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual` commands; calculates sustainability metrics |
+| `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
+| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual` commands; calculates sustainability metrics; extracts budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
-| `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs |
+| `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
 | `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails |
-| `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, etc.) |
+| `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
 
 ### Data Flow
 
-```
+```text
 main.ts
   └─> Installer.install()           # Download/cache finfocus binary
   └─> PluginManager.installPlugins() # Optional plugin installation
+  └─> ConfigManager.writeConfig()   # Optional: create budget config.yaml
   └─> [Analyzer Mode Branch]
   │     └─> Analyzer.setupAnalyzerMode()  # Creates policy pack, sets PULUMI_POLICY_PACK
   └─> [Standard Mode Branch]
@@ -53,17 +55,21 @@ main.ts
         └─> Analyzer.calculateSustainabilityMetrics()
         └─> Analyzer.runRecommendations() # finfocus cost recommendations
         └─> Analyzer.runActualCosts()     # finfocus cost actual
-        └─> Commenter.upsertComment()     # GitHub API
+        └─> Analyzer.extractBudgetStatus() # Optional: extract budget info from output
+        └─> Commenter.upsertComment()     # GitHub API (includes budget status)
         └─> checkThreshold() / checkCarbonThreshold()  # Guardrails
 ```
 
 ### Key Interfaces (types.ts)
 
-- `ActionConfiguration`: All action inputs parsed from `core.getInput()`
+- `ActionConfiguration`: All action inputs parsed from `core.getInput()`, including budget options
 - `FinfocusReport`: Cost analysis output with `summary`, `resources`, `diff`
 - `RecommendationsReport`: Cost optimization suggestions
 - `ActualCostReport`: Historical cost data
 - `SustainabilityReport`: Carbon footprint metrics (kgCO2e)
+- `BudgetConfiguration`: Budget settings with amount, currency, period, and alerts
+- `BudgetStatus`: Current budget status with spent, remaining, percent used, and triggered alerts
+- `BudgetAlert`: Individual budget alert with threshold and type
 
 ## Code Conventions
 
@@ -98,3 +104,6 @@ main.ts
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data in the finfocus report
 - The analyzer mode creates a Pulumi policy pack at `~/.finfocus/analyzer/` with a binary named `pulumi-analyzer-policy-finfocus`
+- Budget tracking is opt-in: ConfigManager only runs when `budget-amount` is provided
+- Budget configuration is written to `~/.finfocus/config.yaml` for finfocus CLI to read
+- Budget status extraction returns undefined when using `--output json` (forward compatible for future finfocus CLI support)

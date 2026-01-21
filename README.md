@@ -47,6 +47,47 @@ To display actual (historical) cloud costs alongside your estimates, or to enabl
 | `sustainability-equivalents` | Show impact equivalents like trees, miles driven (`true`/`false`). | No | `true` |
 | `fail-on-carbon-increase` | Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases. | No | `""` |
 
+### Budget Tracking
+
+Track your cloud spending against monthly, quarterly, or yearly budgets with automated alerts when thresholds are exceeded.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    budget-amount: 1000
+    budget-currency: USD
+    budget-period: monthly
+    budget-alerts: '[{"threshold": 80, "type": "actual"}, {"threshold": 100, "type": "forecasted"}]'
+```
+
+| Input | Description | Required | Default |
+| :--- | :--- | :--- | :--- |
+| `budget-amount` | Budget amount for cost tracking (e.g., 1000). | No | `""` |
+| `budget-currency` | Budget currency code (e.g., USD). | No | `USD` |
+| `budget-period` | Budget period: `monthly`, `quarterly`, `yearly`. | No | `monthly` |
+| `budget-alerts` | Budget alerts in JSON format with threshold and type. | No | `""` |
+
+**Budget Alerts Format:**
+
+```json
+[
+  {"threshold": 80, "type": "actual"},
+  {"threshold": 100, "type": "forecasted"}
+]
+```
+
+- `threshold`: Percentage of budget (0-100+)
+- `type`: `actual` (current spend) or `forecasted` (projected spend)
+
+When configured, the PR comment will include a budget status section showing:
+
+- Current spend vs. budget
+- Remaining budget
+- Usage percentage with visual progress bar
+- Triggered alert notifications
+
 ## Outputs
 
 | Output                   | Description                                                       |

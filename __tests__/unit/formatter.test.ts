@@ -131,4 +131,164 @@ describe('formatCommentBody', () => {
     expect(result).toContain('68.45 trees');
     expect(result).toContain('313.75 miles');
   });
+
+  describe('TUI Budget Display', () => {
+    it('should include TUI-style budget box when budget is configured', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 850.0,
+        remaining: 150.0,
+        percentUsed: 85.0,
+        alerts: [],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      // Check for TUI box structure
+      expect(result).toContain('```');
+      expect(result).toContain('╭');
+      expect(result).toContain('╮');
+      expect(result).toContain('╰');
+      expect(result).toContain('╯');
+      expect(result).toContain('│');
+      expect(result).toContain('BUDGET STATUS');
+      expect(result).toContain('Budget: $1000.00/monthly');
+      expect(result).toContain('Current Spend: $850.00 (85.0%)');
+    });
+
+    it('should show progress bar with block characters', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 850.0,
+        remaining: 150.0,
+        percentUsed: 85.0,
+        alerts: [],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      // Check for block characters in progress bar
+      expect(result).toContain('█'); // Filled blocks
+      expect(result).toContain('░'); // Empty blocks
+      expect(result).toContain('85%');
+    });
+
+    it('should show WARNING message when budget usage exceeds 80%', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 850.0,
+        remaining: 150.0,
+        percentUsed: 85.0,
+        alerts: [],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      expect(result).toContain('⚠ WARNING - spend exceeds 80% threshold');
+    });
+
+    it('should show CRITICAL message when budget is exceeded', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 1050.0,
+        remaining: -50.0,
+        percentUsed: 105.0,
+        alerts: [],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      expect(result).toContain('⚠ CRITICAL - budget exceeded');
+    });
+
+    it('should not show warning message when budget usage is below 80%', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 500.0,
+        remaining: 500.0,
+        percentUsed: 50.0,
+        alerts: [],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      expect(result).not.toContain('⚠ WARNING');
+      expect(result).not.toContain('⚠ CRITICAL');
+    });
+
+    it('should not include budget section when budget is not configured', () => {
+      const budgetStatus = {
+        configured: false,
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      expect(result).not.toContain('BUDGET STATUS');
+      expect(result).not.toContain('╭');
+      expect(result).not.toContain('╮');
+    });
+
+    it('should not include budget section when budgetStatus is undefined', () => {
+      const result = formatCommentBody(mockReport);
+
+      expect(result).not.toContain('BUDGET STATUS');
+      expect(result).not.toContain('╭');
+    });
+
+    it('should include alerts when triggered', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 850.0,
+        remaining: 150.0,
+        percentUsed: 85.0,
+        alerts: [
+          { threshold: 80, type: 'actual', triggered: true },
+          { threshold: 50, type: 'projected', triggered: false },
+        ],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      expect(result).toContain('💰 80% actual threshold exceeded');
+      expect(result).not.toContain('50% projected threshold exceeded');
+    });
+
+    it('should not show alerts when none are triggered', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000.0,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 400.0,
+        remaining: 600.0,
+        percentUsed: 40.0,
+        alerts: [
+          { threshold: 80, type: 'actual', triggered: false },
+          { threshold: 50, type: 'projected', triggered: false },
+        ],
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+
+      expect(result).not.toContain('threshold exceeded');
+    });
+  });
 });
