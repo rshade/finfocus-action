@@ -25,7 +25,7 @@
     "@actions/core": "^2.0.2",
     "@actions/exec": "^2.0.0",
     "@actions/github": "^7.0.0",
-    "@actions/tool-cache": "^3.0.0",
+    "@actions/tool-cache": "^4.0.0",
     "typescript": "^5.9.3",
     "yaml": "^2.8.2"
   },
