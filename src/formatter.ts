@@ -25,6 +25,15 @@ export function getCurrencySymbol(currency: string = 'USD'): string {
   return symbols[currency.toUpperCase()] || currency;
 }
 
+/**
+ * Converts a total CO2e amount into illustrative environmental equivalents.
+ *
+ * @param totalCO2e - Total greenhouse gas emissions in kilograms of CO2e
+ * @returns An object with:
+ *  - `trees`: estimated number of trees required to sequester the given CO2e (approximate, based on ~22 kg CO2/year per tree),
+ *  - `milesDriven`: estimated miles driven equivalent (approximate, based on ~0.4 kg CO2 per mile),
+ *  - `homeElectricityDays`: estimated number of average home electricity days equivalent (approximate, using ~30 kWh/day and ~0.42 kg CO2/kWh)
+ */
 export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
   // Source: EPA Greenhouse Gas Equivalencies Calculator
   // Note: These are approximations for illustrative purposes.
@@ -84,6 +93,14 @@ function createTUIBox(lines: string[], width: number = 42): string {
   return [top, ...formattedLines, bottom].join('\n');
 }
 
+/**
+ * Renders a TUI-style budget status section as a GitHub code block.
+ *
+ * If `budgetStatus` is omitted or its `configured` flag is false, returns an empty string.
+ *
+ * @param budgetStatus - Budget status data used to render amount, period, current spend, progress bar, status message, and any triggered alerts
+ * @returns A markdown code block containing a bordered TUI box summarizing the budget (amount, spend, percent used, status, and triggered alerts), or an empty string when no budget is configured
+ */
 function formatBudgetSection(budgetStatus?: BudgetStatus): string {
   if (!budgetStatus || !budgetStatus.configured) {
     return '';
@@ -141,7 +158,10 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
 }
 
 /**
- * Get status icon for budget health status
+ * Map a budget health status to its corresponding emoji icon.
+ *
+ * @param status - Health status value; expected: "healthy", "warning", "critical", or "exceeded"
+ * @returns The emoji icon for the provided status, `❓` if the status is unrecognized
  */
 function getHealthStatusIcon(status: string): string {
   const icons: Record<string, string> = {
@@ -154,8 +174,15 @@ function getHealthStatusIcon(status: string): string {
 }
 
 /**
- * Format budget health section with visual indicators.
- * Displays health score, forecast, runway, and progress bar.
+ * Builds a TUI-styled Budget Health section for inclusion in a markdown comment.
+ *
+ * Produces a monospaced box showing health score or status, budget, spent, runway,
+ * a progress bar, and any triggered alerts. Returns an empty string when `budgetHealth`
+ * is not present or not configured.
+ *
+ * @param budgetHealth - Budget health report data used to populate the section; if not configured the function returns an empty string
+ * @param config - Optional action configuration. Respects `showBudgetForecast` (controls forecast line) and `budgetAlertThreshold` (used for warning messaging)
+ * @returns A markdown-formatted code block containing the TUI budget health box, or an empty string if budget health is not configured
  */
 function formatBudgetHealthSection(
   budgetHealth: BudgetHealthReport,
@@ -238,6 +265,18 @@ function formatBudgetHealthSection(
   return '\n```\n' + createTUIBox(lines) + '\n```\n';
 }
 
+/**
+ * Render the Sustainability section as a Markdown string for inclusion in the comment body.
+ *
+ * Builds a "Sustainability Impact" block showing total carbon, month-over-month change, and carbon intensity.
+ * When enabled via config, includes environmental equivalents (trees, miles driven, home electricity days).
+ * When a finfocusReport with resource data is provided, includes a top-10 resources-by-carbon table.
+ *
+ * @param report - Sustainability metrics (must include `totalCO2e`, `totalCO2eDiff`, and `carbonIntensity`)
+ * @param config - Optional action configuration; honors `includeSustainability` and `sustainabilityEquivalents` flags
+ * @param finfocusReport - Optional finfocus report used to generate a Resources by Carbon Impact table when present
+ * @returns A Markdown string containing the formatted Sustainability section, or an empty string if sustainability is not enabled
+ */
 function formatSustainabilitySection(
   report: SustainabilityReport,
   config?: ActionConfiguration,
@@ -308,6 +347,18 @@ ${equivalentsSection}${resourceTable}
 `;
 }
 
+/**
+ * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
+ *
+ * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
+ * @param config - Optional action configuration that controls formatting and which sections to show
+ * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
+ * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
+ * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
+ * @param budgetStatus - Optional basic budget status used when detailed budget health is not provided
+ * @param budgetHealth - Optional detailed budget health report used in preference to budgetStatus
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget/budget health, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ */
 export function formatCommentBody(
   report: FinfocusReport,
   config?: ActionConfiguration,
