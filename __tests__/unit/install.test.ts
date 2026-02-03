@@ -3,7 +3,7 @@ import * as tc from '@actions/tool-cache';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as fs from 'fs';
-import { Installer } from '../../src/install.js';
+import { Installer, getFinfocusVersion, supportsExitCodes } from '../../src/install.js';
 
 jest.mock('os');
 jest.mock('@actions/tool-cache');
@@ -113,5 +113,92 @@ describe('Installer', () => {
     expect(tc.downloadTool).not.toHaveBeenCalled();
     expect(core.addPath).toHaveBeenCalledWith('/cached/finfocus');
     expect(result).toBe('/cached/finfocus/finfocus');
+  });
+});
+
+describe('getFinfocusVersion', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should parse version from "finfocus v0.2.5" format', async () => {
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: 'finfocus v0.2.5',
+      stderr: '',
+    });
+
+    const version = await getFinfocusVersion();
+    expect(version).toBe('0.2.5');
+  });
+
+  it('should parse version from "finfocus 0.2.5" format (no v prefix)', async () => {
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: 'finfocus 0.2.5',
+      stderr: '',
+    });
+
+    const version = await getFinfocusVersion();
+    expect(version).toBe('0.2.5');
+  });
+
+  it('should return 0.0.0 when version cannot be parsed', async () => {
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: 'finfocus unknown version',
+      stderr: '',
+    });
+
+    const version = await getFinfocusVersion();
+    expect(version).toBe('0.0.0');
+  });
+
+  it('should return 0.0.0 when command fails', async () => {
+    (exec.getExecOutput as jest.Mock).mockRejectedValue(new Error('Command not found'));
+
+    const version = await getFinfocusVersion();
+    expect(version).toBe('0.0.0');
+  });
+
+  it('should handle multi-line output', async () => {
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: 'finfocus version 0.3.0\nbuilt at 2026-02-02',
+      stderr: '',
+    });
+
+    const version = await getFinfocusVersion();
+    expect(version).toBe('0.3.0');
+  });
+});
+
+describe('supportsExitCodes', () => {
+  it('should return true for version 0.2.5', () => {
+    expect(supportsExitCodes('0.2.5')).toBe(true);
+  });
+
+  it('should return true for version 0.2.6 (newer patch)', () => {
+    expect(supportsExitCodes('0.2.6')).toBe(true);
+  });
+
+  it('should return true for version 0.3.0 (newer minor)', () => {
+    expect(supportsExitCodes('0.3.0')).toBe(true);
+  });
+
+  it('should return true for version 1.0.0 (newer major)', () => {
+    expect(supportsExitCodes('1.0.0')).toBe(true);
+  });
+
+  it('should return false for version 0.2.4 (older patch)', () => {
+    expect(supportsExitCodes('0.2.4')).toBe(false);
+  });
+
+  it('should return false for version 0.1.9 (older minor)', () => {
+    expect(supportsExitCodes('0.1.9')).toBe(false);
+  });
+
+  it('should return false for version 0.0.0 (fallback version)', () => {
+    expect(supportsExitCodes('0.0.0')).toBe(false);
   });
 });
