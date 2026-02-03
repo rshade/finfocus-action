@@ -14,6 +14,7 @@ Thumbs.db
 *.log
 .env
 .env.*
+.playwright-mcp
 
 # IDEs
 .vscode/

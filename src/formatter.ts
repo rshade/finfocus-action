@@ -7,7 +7,35 @@ import {
   EquivalencyMetrics,
   BudgetStatus,
   BudgetHealthReport,
+  Recommendation,
 } from './types.js';
+
+/**
+ * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
+ *
+ * finfocus CLI returns multiple options per resource_id + action_type to give users choices
+ * (e.g., resize to medium vs resize to small). Since users can only pick ONE option per
+ * resource/action, summing all options inflates the total. This function groups by
+ * resource_id + action_type and takes the max savings per group for an accurate total.
+ *
+ * @param recommendations - Array of recommendations from finfocus, or undefined
+ * @returns Total achievable savings (max per resource+action_type group)
+ */
+export function calculateAchievableSavings(recommendations: Recommendation[] | undefined): number {
+  if (!recommendations || recommendations.length === 0) {
+    return 0;
+  }
+
+  const groups = new Map<string, number>();
+
+  for (const rec of recommendations) {
+    const key = `${rec.resource_id}::${rec.action_type}`;
+    const current = groups.get(key) ?? 0;
+    groups.set(key, Math.max(current, rec.estimated_savings));
+  }
+
+  return Array.from(groups.values()).reduce((sum, val) => sum + val, 0);
+}
 
 /**
  * Get currency symbol for display formatting.
@@ -55,51 +83,102 @@ export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
 }
 
 /**
- * Generate a TUI-style progress bar using block characters
+ * Generate a simple text-based progress bar using Unicode blocks
  * @param percent - Percentage value (0-100+, can exceed 100%)
- * @param width - Width of the progress bar in characters (default: 30)
- * @returns Progress bar string with filled (█) and empty (░) blocks
+ * @param width - Width of the progress bar in characters (default: 10)
+ * @returns Progress bar string with filled (▓) and empty (░) blocks
  */
-function generateTUIProgressBar(percent: number, width: number = 30): string {
-  const filled = Math.min(width, Math.floor((percent / 100) * width));
-  const empty = Math.max(0, width - filled);
-  return '█'.repeat(filled) + '░'.repeat(empty);
+function generateProgressBar(percent: number, width: number = 10): string {
+  const capped = Math.min(100, percent);
+  const filled = Math.floor((capped / 100) * width);
+  const empty = width - filled;
+  return '▓'.repeat(filled) + '░'.repeat(empty);
 }
 
 /**
- * Format a line for TUI box with proper padding and borders
- * @param content - Content to display in the line
- * @param width - Width of the content area (default: 42)
- * @returns Formatted line with borders and padding
+ * Get status icon for the dashboard based on budget percentage
+ * @param percentUsed - Budget usage percentage
+ * @returns Status icon emoji
  */
-function formatTUILine(content: string, width: number = 42): string {
-  const contentLength = content.length;
-  const padding = Math.max(0, width - contentLength);
-  return `│ ${content}${' '.repeat(padding)} │`;
+function getDashboardStatusIcon(percentUsed?: number): string {
+  if (percentUsed === undefined) return '—';
+  if (percentUsed >= 100) return '⛔';
+  if (percentUsed >= 80) return '🔴';
+  if (percentUsed >= 50) return '🟡';
+  return '🟢';
 }
 
 /**
- * Create a TUI box with borders around the provided lines
- * @param lines - Array of content lines to display in the box
- * @param width - Width of the content area (default: 42)
- * @returns Complete TUI box with top, bottom, and side borders
- */
-function createTUIBox(lines: string[], width: number = 42): string {
-  const top = '╭' + '─'.repeat(width + 2) + '╮';
-  const bottom = '╰' + '─'.repeat(width + 2) + '╯';
-
-  const formattedLines = lines.map((line) => formatTUILine(line, width));
-
-  return [top, ...formattedLines, bottom].join('\n');
-}
-
-/**
- * Renders a TUI-style budget status section as a GitHub code block.
+ * Formats the dashboard summary row - a 3-column at-a-glance status table
+ * Shows: Monthly Cost | Budget Status | Potential Savings
  *
- * If `budgetStatus` is omitted or its `configured` flag is false, returns an empty string.
+ * @param totalMonthly - Projected monthly cost
+ * @param currency - Currency code
+ * @param percentUsed - Budget usage percentage (optional)
+ * @param totalSavings - Total potential savings from recommendations (optional)
+ * @returns Markdown table string
+ */
+function formatDashboardSummary(
+  totalMonthly: number,
+  currency: string,
+  percentUsed?: number,
+  totalSavings?: number,
+): string {
+  const currencySymbol = getCurrencySymbol(currency);
+
+  // Monthly cost column
+  const costDisplay = `**${currencySymbol}${totalMonthly.toFixed(2)}** ${currency}`;
+
+  // Budget status column
+  let budgetDisplay = '—';
+  if (percentUsed !== undefined) {
+    const icon = getDashboardStatusIcon(percentUsed);
+    budgetDisplay = `${icon} **${percentUsed.toFixed(0)}%** used`;
+  }
+
+  // Savings column
+  let savingsDisplay = '—';
+  if (totalSavings !== undefined && totalSavings > 0) {
+    savingsDisplay = `**${currencySymbol}${totalSavings.toFixed(2)}**/mo`;
+  }
+
+  return `| 💰 Monthly Cost | 📊 Budget Status | 💡 Potential Savings |
+|:---------------:|:----------------:|:--------------------:|
+| ${costDisplay} | ${budgetDisplay} | ${savingsDisplay} |
+`;
+}
+
+/**
+ * Get GitHub alert type based on budget health status
+ * Uses GitHub's blockquote alert syntax: [!NOTE], [!WARNING], [!CAUTION]
+ * @param status - Health status or percentage
+ * @returns GitHub alert type string
+ */
+function getAlertType(status: string | number): 'NOTE' | 'WARNING' | 'CAUTION' {
+  if (typeof status === 'number') {
+    if (status >= 100) return 'CAUTION';
+    if (status >= 80) return 'WARNING';
+    return 'NOTE';
+  }
+  switch (status) {
+    case 'exceeded':
+    case 'critical':
+      return 'CAUTION';
+    case 'warning':
+      return 'WARNING';
+    default:
+      return 'NOTE';
+  }
+}
+
+/**
+ * Renders budget status using GitHub's native alert syntax for better visual impact.
  *
- * @param budgetStatus - Budget status data used to render amount, period, current spend, progress bar, status message, and any triggered alerts
- * @returns A markdown code block containing a bordered TUI box summarizing the budget (amount, spend, percent used, status, and triggered alerts), or an empty string when no budget is configured
+ * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning state, [!NOTE] otherwise.
+ * Displays budget amount, current spend, progress bar, and any triggered alerts.
+ *
+ * @param budgetStatus - Budget status data; returns empty string if not configured
+ * @returns Markdown string with GitHub alert syntax, or empty string when budget not configured
  */
 function formatBudgetSection(budgetStatus?: BudgetStatus): string {
   if (!budgetStatus || !budgetStatus.configured) {
@@ -108,53 +187,44 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
 
   const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
   const currencySymbol = getCurrencySymbol(currency);
+  const alertType = getAlertType(percentUsed ?? 0);
 
-  // Determine status message
-  let statusMessage = '';
+  // Build status title
+  let statusTitle = 'Budget Status';
   if (percentUsed !== undefined) {
     if (percentUsed >= 100) {
-      statusMessage = '⚠ CRITICAL - budget exceeded';
+      statusTitle = 'Budget Exceeded';
     } else if (percentUsed >= 80) {
-      statusMessage = '⚠ WARNING - spend exceeds 80% threshold';
+      statusTitle = 'Budget Warning';
     }
   }
 
-  // Build TUI box content
+  // Build content lines
   const lines: string[] = [];
-  lines.push('BUDGET STATUS');
-  lines.push('────────────────────────────────────');
-  lines.push(`Budget: ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
+  lines.push(`> [!${alertType}]`);
+  lines.push(`> **${statusTitle}**`);
+  lines.push(`>`);
+
+  const budgetLine = `> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`;
+  lines.push(budgetLine);
 
   if (spent !== undefined && percentUsed !== undefined) {
-    lines.push(`Current Spend: ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(1)}%)`);
+    const progressBar = generateProgressBar(percentUsed);
+    lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
   }
 
-  lines.push(''); // Empty line
-
-  // Progress bar with block characters
-  if (percentUsed !== undefined) {
-    const progressBar = generateTUIProgressBar(percentUsed);
-    lines.push(`${progressBar} ${percentUsed.toFixed(0)}%`);
-  }
-
-  if (statusMessage) {
-    lines.push(statusMessage);
-  }
-
-  // Add triggered alerts to the TUI box
+  // Add triggered alerts
   if (alerts && alerts.length > 0) {
     const triggeredAlerts = alerts.filter((a) => a.triggered);
     if (triggeredAlerts.length > 0) {
-      lines.push(''); // Empty line before alerts
+      lines.push(`>`);
       triggeredAlerts.forEach((a) => {
-        const icon = a.type === 'actual' ? '💰' : '📊';
-        lines.push(`${icon} ${a.threshold}% ${a.type} threshold exceeded`);
+        lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
       });
     }
   }
 
-  // Wrap in TUI box and code block for GitHub
-  return '\n```\n' + createTUIBox(lines) + '\n```\n';
+  return '\n' + lines.join('\n') + '\n';
 }
 
 /**
@@ -174,15 +244,14 @@ function getHealthStatusIcon(status: string): string {
 }
 
 /**
- * Builds a TUI-styled Budget Health section for inclusion in a markdown comment.
+ * Builds a Budget Health section using GitHub's native alert syntax.
  *
- * Produces a monospaced box showing health score or status, budget, spent, runway,
- * a progress bar, and any triggered alerts. Returns an empty string when `budgetHealth`
- * is not present or not configured.
+ * Shows health score/status, budget details, spend progress, forecast, and runway.
+ * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning, [!NOTE] for healthy.
  *
- * @param budgetHealth - Budget health report data used to populate the section; if not configured the function returns an empty string
- * @param config - Optional action configuration. Respects `showBudgetForecast` (controls forecast line) and `budgetAlertThreshold` (used for warning messaging)
- * @returns A markdown-formatted code block containing the TUI budget health box, or an empty string if budget health is not configured
+ * @param budgetHealth - Budget health report; returns empty string if not configured
+ * @param config - Optional config for showBudgetForecast and budgetAlertThreshold
+ * @returns Markdown string with GitHub alert syntax, or empty string if not configured
  */
 function formatBudgetHealthSection(
   budgetHealth: BudgetHealthReport,
@@ -195,74 +264,63 @@ function formatBudgetHealthSection(
   const { amount, period, spent, percentUsed, alerts, currency, healthScore, forecast, runwayDays, healthStatus } = budgetHealth;
   const currencySymbol = getCurrencySymbol(currency);
   const statusIcon = getHealthStatusIcon(healthStatus);
+  const alertType = getAlertType(healthStatus);
 
-  // Build TUI box content
-  const lines: string[] = [];
-  lines.push('BUDGET HEALTH');
-  lines.push('────────────────────────────────────────');
-
-  // Health score with visual indicator
-  if (healthScore !== undefined) {
-    lines.push(`Health Score: ${statusIcon} ${healthScore}/100`);
-  } else {
-    lines.push(`Status: ${statusIcon} ${healthStatus}`);
+  // Determine title based on status
+  let statusTitle = 'Budget Health';
+  if (healthStatus === 'exceeded') {
+    statusTitle = 'Budget Exceeded';
+  } else if (healthStatus === 'critical') {
+    statusTitle = 'Budget Critical';
+  } else if (healthStatus === 'warning') {
+    statusTitle = 'Budget Warning';
   }
 
-  lines.push(`Budget: ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
+  // Build content lines
+  const lines: string[] = [];
+  lines.push(`> [!${alertType}]`);
+  lines.push(`> **${statusTitle}** ${statusIcon}`);
+  lines.push(`>`);
+
+  // Health score
+  if (healthScore !== undefined) {
+    lines.push(`> **Health Score:** ${healthScore}/100`);
+  }
+
+  // Budget and spend with progress bar
+  lines.push(`> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
 
   if (spent !== undefined && percentUsed !== undefined) {
-    lines.push(`Spent: ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%)`);
+    const progressBar = generateProgressBar(percentUsed);
+    lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
   }
 
-  // Forecast (if enabled and available)
+  // Forecast (if enabled)
   const showForecast = config?.showBudgetForecast !== false;
   if (showForecast && forecast) {
-    lines.push(`Forecast: ${forecast} (end of period)`);
+    lines.push(`> **Forecast:** ${forecast}`);
   }
 
   // Runway
   if (runwayDays !== undefined) {
     const runwayText = runwayDays === Infinity || runwayDays < 0
       ? 'Unlimited'
-      : `${runwayDays} days remaining`;
-    lines.push(`Runway: ${runwayText}`);
+      : `${runwayDays} days`;
+    lines.push(`> **Runway:** ${runwayText}`);
   }
 
-  lines.push(''); // Empty line
-
-  // Progress bar with block characters
-  if (percentUsed !== undefined) {
-    const progressBar = generateTUIProgressBar(percentUsed);
-    lines.push(`${progressBar} ${percentUsed.toFixed(0)}%`);
-  }
-
-  // Determine status message based on health status
-  if (healthStatus === 'exceeded') {
-    lines.push('⚠ CRITICAL - budget exceeded');
-  } else if (healthStatus === 'critical') {
-    lines.push('⚠ CRITICAL - budget health critical');
-  } else if (healthStatus === 'warning') {
-    lines.push('⚠ WARNING - budget health warning');
-  } else if (percentUsed !== undefined && percentUsed >= 100) {
-    lines.push('⚠ CRITICAL - budget exceeded');
-  } else if (percentUsed !== undefined && percentUsed >= (config?.budgetAlertThreshold ?? 80)) {
-    lines.push(`⚠ WARNING - spend exceeds ${config?.budgetAlertThreshold ?? 80}% threshold`);
-  }
-
-  // Add triggered alerts to the TUI box
+  // Triggered alerts
   if (alerts && alerts.length > 0) {
     const triggeredAlerts = alerts.filter((a) => a.triggered);
     if (triggeredAlerts.length > 0) {
-      lines.push(''); // Empty line before alerts
+      lines.push(`>`);
       triggeredAlerts.forEach((a) => {
-        const icon = a.type === 'actual' ? '💰' : '📊';
-        lines.push(`${icon} ${a.threshold}% ${a.type} threshold exceeded`);
+        lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
       });
     }
   }
 
-  // Wrap in TUI box and code block for GitHub
-  return '\n```\n' + createTUIBox(lines) + '\n```\n';
+  return '\n' + lines.join('\n') + '\n';
 }
 
 /**
@@ -336,7 +394,9 @@ ${resourceRows}
   }
 
   return `
-### 🌱 Sustainability Impact
+
+<details>
+<summary><strong>🌱 Sustainability</strong> — ${totalCO2e.toFixed(2)} kgCO₂e/month</summary>
 
 | Metric | Value |
 | :--- | ---: |
@@ -344,6 +404,7 @@ ${resourceRows}
 | **Carbon Change** | ${diffText} |
 | **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
 ${equivalentsSection}${resourceTable}
+</details>
 `;
 }
 
@@ -406,17 +467,19 @@ export function formatCommentBody(
 
       resourceTable = `
 
-### 📋 Full Resource Breakdown
+<details>
+<summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
 
 | Resource | Type | Monthly Cost | Notes |
 | :--- | :--- | ---: | :--- |
 ${resourceRows}
+
+</details>
 `;
     } else if (resources.length <= 20) {
-      // Standard view: Top 10 resources
-      const resourceRows = sortedResources
-        .filter((r) => r.monthly > 0)
-        .slice(0, 10)
+      // Standard view: Top resources in collapsible section
+      const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
+      const resourceRows = topResources
         .map((r) => {
           const name = r.resourceId.split('::').pop() || r.resourceId;
           return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
@@ -426,19 +489,22 @@ ${resourceRows}
       if (resourceRows) {
         resourceTable = `
 
-### Top Resources by Cost
+<details>
+<summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
 
 | Resource | Type | Monthly Cost |
 | :--- | :--- | ---: |
 ${resourceRows}
+
+</details>
 `;
       }
     }
   }
 
-  // Build provider breakdown if available
+  // Build provider breakdown only if multiple providers
   let providerBreakdown = '';
-  if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 0) {
+  if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
     const providerRows = Object.entries(report.summary.byProvider)
       .filter(([, cost]) => cost > 0)
       .sort(([, a], [, b]) => b - a)
@@ -448,11 +514,14 @@ ${resourceRows}
     if (providerRows) {
       providerBreakdown = `
 
-### Cost by Provider
+<details>
+<summary><strong>☁️ Cost by Provider</strong></summary>
 
 | Provider | Monthly Cost |
 | :--- | ---: |
 ${providerRows}
+
+</details>
 `;
     }
   }
@@ -465,7 +534,7 @@ ${providerRows}
     const actualTotal = actualCostReport.total.toFixed(2);
     actualCostRow = `| **Actual (${config?.actualCostsPeriod || '7d'})** | ${actualTotal} ${actualCostReport.currency} |`;
 
-    // Actual Costs Breakdown Table
+    // Actual Costs Breakdown Table (collapsible)
     if (actualCostReport.items.length > 0) {
       const actualRows = actualCostReport.items
         .sort((a, b) => b.cost - a.cost)
@@ -473,20 +542,27 @@ ${providerRows}
         .join('\n');
 
       actualCostSection = `
-### Actual Costs by ${config?.actualCostsGroupBy || 'provider'} (${actualCostReport.startDate} to ${actualCostReport.endDate})
 
-| Name | Cost |
+<details>
+<summary><strong>💵 Actual Costs</strong> (${actualCostReport.startDate} to ${actualCostReport.endDate})</summary>
+
+| ${config?.actualCostsGroupBy || 'Provider'} | Cost |
 | :--- | ---: |
 | **Total** | **${actualTotal} ${actualCostReport.currency}** |
 ${actualRows}
+
+</details>
 `;
     }
   }
 
   const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
 
+  // Recommendations section - prominent since it's actionable
   let recommendationsSection = '';
   if (recommendationsReport && recommendationsReport.recommendations.length > 0) {
+    const totalSavings = recommendationsReport.summary.total_savings;
+    const savingsCurrency = recommendationsReport.summary.currency;
     const recRows = recommendationsReport.recommendations
       .map((r) => {
         const name = r.resource_id.split('::').pop() || r.resource_id;
@@ -496,13 +572,14 @@ ${actualRows}
 
     recommendationsSection = `
 
-## 💡 Cost Optimization Recommendations
+<details open>
+<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
 
-| Resource | Recommendation | Monthly Savings |
+| Resource | Recommendation | Savings |
 | :--- | :--- | ---: |
 ${recRows}
 
-**Potential Monthly Savings: ${recommendationsReport.summary.total_savings.toFixed(2)} ${recommendationsReport.summary.currency}**
+</details>
 `;
   }
 
@@ -515,15 +592,33 @@ ${recRows}
     ? formatBudgetHealthSection(budgetHealth, config)
     : formatBudgetSection(budgetStatus);
 
-  return `## 💰 Cloud Cost Estimate
+  // Calculate percent used for dashboard (prefer health report, then budget status)
+  const percentUsed = budgetHealth?.percentUsed ?? budgetStatus?.percentUsed;
+
+  // Calculate achievable savings for dashboard (max per resource+action_type group)
+  // This avoids inflating the total by summing mutually exclusive options
+  const achievableSavings = calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
+
+  // Build dashboard summary row
+  const dashboardSummary = formatDashboardSummary(totalMonthly, currency, percentUsed, achievableSavings);
+
+  return `## Cloud Cost Estimate
+
+${dashboardSummary}
+${budgetSection}
+<details>
+<summary><strong>📈 Cost Details</strong></summary>
 
 | Metric | Value |
 | :--- | ---: |
 | **Projected Monthly** | ${total} ${currency} |
 ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
-${budgetSection}${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
 
-*Estimates calculated by [finfocus](https://github.com/rshade/finfocus)*
+</details>
+${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
+
+---
+<sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
 `;
 }
