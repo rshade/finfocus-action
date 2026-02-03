@@ -2,23 +2,28 @@ import * as github from '@actions/github';
 import { Commenter } from '../../src/comment.js';
 
 jest.mock('@actions/github');
+jest.mock('@actions/core');
+
+const mockedGithub = github as jest.Mocked<typeof github>;
 
 describe('Commenter', () => {
   let commenter: Commenter;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     commenter = new Commenter();
-    (github as any).context = {
+    // Set up the mocked context
+    Object.assign(mockedGithub.context, {
       repo: {
         owner: 'owner',
-        repo: 'repo'
+        repo: 'repo',
       },
       payload: {
         pull_request: {
-          number: 123
-        }
-      }
-    };
+          number: 123,
+        },
+      },
+    });
   });
 
   it('should create new comment if none exists', async () => {
@@ -26,17 +31,19 @@ describe('Commenter', () => {
       rest: {
         issues: {
           listComments: jest.fn().mockResolvedValue({ data: [] }),
-          createComment: jest.fn().mockResolvedValue({})
-        }
-      }
+          createComment: jest.fn().mockResolvedValue({}),
+        },
+      },
     };
-    (github.getOctokit as jest.Mock).mockReturnValue(octokit);
+    mockedGithub.getOctokit.mockReturnValue(octokit as any);
 
     await commenter.upsertComment({ projected_monthly_cost: 100, currency: 'USD' }, 'token');
 
-    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(expect.objectContaining({
-      body: expect.stringContaining('<!-- finfocus-action-comment -->')
-    }));
+    expect(octokit.rest.issues.createComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining('<!-- finfocus-action-comment -->'),
+      }),
+    );
   });
 
   it('should update existing comment if found', async () => {
@@ -46,19 +53,21 @@ describe('Commenter', () => {
           listComments: jest.fn().mockResolvedValue({
             data: [
               { id: 1, body: 'other comment' },
-              { id: 2, body: '<!-- finfocus-action-comment --> existing table' }
-            ]
+              { id: 2, body: '<!-- finfocus-action-comment --> existing table' },
+            ],
           }),
-          updateComment: jest.fn().mockResolvedValue({})
-        }
-      }
+          updateComment: jest.fn().mockResolvedValue({}),
+        },
+      },
     };
-    (github.getOctokit as jest.Mock).mockReturnValue(octokit);
+    mockedGithub.getOctokit.mockReturnValue(octokit as any);
 
     await commenter.upsertComment({ projected_monthly_cost: 100, currency: 'USD' }, 'token');
 
-    expect(octokit.rest.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({
-      comment_id: 2
-    }));
+    expect(octokit.rest.issues.updateComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment_id: 2,
+      }),
+    );
   });
 });
