@@ -404,13 +404,14 @@ async function run(): Promise<void> {
     if (config.threshold && report.diff) {
       core.info('');
       core.startGroup('🛡️ Checking cost guardrails');
-      const { checkThreshold } = await import('./guardrails.js');
-      const failed = checkThreshold(config.threshold, report.diff.monthly_cost_change, currency);
+      const { checkBudgetThreshold } = await import('./guardrails.js');
+      const thresholdResult = await checkBudgetThreshold(config, report);
 
-      if (failed) {
-        throw new Error(
-          `Cost increase of ${report.diff.monthly_cost_change} ${currency} exceeds threshold ${config.threshold}`,
-        );
+      if (!thresholdResult.passed) {
+        const errorMessage = config.debug
+          ? `${thresholdResult.message} (exit code: ${thresholdResult.exitCode ?? 'N/A'})`
+          : thresholdResult.message;
+        throw new Error(errorMessage);
       }
       core.info(`✅ Cost within threshold: ${config.threshold}`);
       core.endGroup();

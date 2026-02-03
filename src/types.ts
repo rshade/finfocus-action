@@ -195,3 +195,32 @@ export interface ICommenter {
     budgetStatus?: BudgetStatus,
   ): Promise<void>;
 }
+
+/**
+ * Exit codes returned by finfocus CLI for budget threshold checks.
+ * Only applicable for finfocus v0.2.5 and above.
+ */
+export enum BudgetExitCode {
+  /** All thresholds passed */
+  PASS = 0,
+  /** Warning threshold breached */
+  WARNING = 1,
+  /** Critical threshold breached */
+  CRITICAL = 2,
+  /** Budget exceeded */
+  EXCEEDED = 3,
+}
+
+/**
+ * Result of a budget threshold check.
+ */
+export interface BudgetThresholdResult {
+  /** Whether the threshold check passed */
+  passed: boolean;
+  /** Severity level if threshold was breached */
+  severity: 'none' | 'warning' | 'critical' | 'exceeded';
+  /** The exit code returned by finfocus (if exit code method used) */
+  exitCode?: number;
+  /** Human-readable message for the result */
+  message: string;
+}

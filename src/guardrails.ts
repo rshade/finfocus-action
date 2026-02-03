@@ -1,4 +1,170 @@
 import * as core from '@actions/core';
+import * as exec from '@actions/exec';
+import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport } from './types.js';
+import { getFinfocusVersion, supportsExitCodes } from './install.js';
+
+/**
+ * Human-readable messages for each budget threshold result.
+ */
+export const BudgetThresholdMessages = {
+  PASS: 'Budget thresholds passed',
+  WARNING: 'Warning: Approaching budget threshold',
+  CRITICAL: 'Critical: Budget threshold breached',
+  EXCEEDED: 'Budget exceeded',
+} as const;
+
+/**
+ * Check budget threshold using finfocus exit codes (v0.2.5+).
+ * Runs `finfocus cost projected` and interprets the exit code.
+ *
+ * Exit codes:
+ * - 0: All thresholds passed
+ * - 1: Warning threshold breached
+ * - 2: Critical threshold breached
+ * - 3: Budget exceeded
+ *
+ * @param config - Action configuration
+ * @returns BudgetThresholdResult with pass/fail status and severity
+ */
+export async function checkBudgetThresholdWithExitCodes(
+  config: ActionConfiguration
+): Promise<BudgetThresholdResult> {
+  try {
+    const result = await exec.getExecOutput('finfocus', ['cost', 'projected', config.pulumiPlanJsonPath], {
+      ignoreReturnCode: true,
+      silent: !config.debug,
+    });
+
+    if (config.debug) {
+      core.debug(`Budget threshold check exit code: ${result.exitCode}`);
+      core.debug(`Budget threshold check stdout: ${result.stdout}`);
+    }
+
+    switch (result.exitCode) {
+      case BudgetExitCode.PASS:
+        return {
+          passed: true,
+          severity: 'none',
+          exitCode: BudgetExitCode.PASS,
+          message: BudgetThresholdMessages.PASS,
+        };
+      case BudgetExitCode.WARNING:
+        return {
+          passed: false,
+          severity: 'warning',
+          exitCode: BudgetExitCode.WARNING,
+          message: BudgetThresholdMessages.WARNING,
+        };
+      case BudgetExitCode.CRITICAL:
+        return {
+          passed: false,
+          severity: 'critical',
+          exitCode: BudgetExitCode.CRITICAL,
+          message: BudgetThresholdMessages.CRITICAL,
+        };
+      case BudgetExitCode.EXCEEDED:
+        return {
+          passed: false,
+          severity: 'exceeded',
+          exitCode: BudgetExitCode.EXCEEDED,
+          message: BudgetThresholdMessages.EXCEEDED,
+        };
+      default:
+        throw new Error(`Unexpected finfocus exit code: ${result.exitCode}`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Unexpected finfocus exit code')) {
+      throw error;
+    }
+    throw new Error(
+      `Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+/**
+ * Check budget threshold using JSON parsing (fallback for finfocus < v0.2.5).
+ * Uses the existing checkThreshold() function to compare cost difference against threshold.
+ *
+ * @param config - Action configuration
+ * @param report - Finfocus report with cost data
+ * @returns BudgetThresholdResult with pass/fail status
+ */
+export function checkBudgetThresholdWithJson(
+  config: ActionConfiguration,
+  report: FinfocusReport
+): BudgetThresholdResult {
+  if (!config.threshold) {
+    return {
+      passed: true,
+      severity: 'none',
+      message: 'No threshold configured',
+    };
+  }
+
+  if (!report.diff) {
+    return {
+      passed: true,
+      severity: 'none',
+      message: 'No cost diff data available',
+    };
+  }
+
+  const currency = report.summary?.currency ?? report.currency ?? 'USD';
+  const failed = checkThreshold(config.threshold, report.diff.monthly_cost_change, currency);
+
+  if (failed) {
+    return {
+      passed: false,
+      severity: 'exceeded',
+      message: `Cost increase of ${report.diff.monthly_cost_change} ${currency} exceeds threshold ${config.threshold}`,
+    };
+  }
+
+  return {
+    passed: true,
+    severity: 'none',
+    message: `Cost within budget threshold (${report.diff.monthly_cost_change} ${currency} < ${config.threshold})`,
+  };
+}
+
+/**
+ * Main budget threshold check orchestrator.
+ * Detects finfocus version and uses exit codes (v0.2.5+) or JSON parsing (older versions).
+ *
+ * @param config - Action configuration
+ * @param report - Finfocus report with cost data (used for JSON fallback)
+ * @returns BudgetThresholdResult with pass/fail status and severity
+ */
+export async function checkBudgetThreshold(
+  config: ActionConfiguration,
+  report: FinfocusReport
+): Promise<BudgetThresholdResult> {
+  const version = await getFinfocusVersion();
+
+  // Handle version detection failure (getFinfocusVersion returns '0.0.0' on failure)
+  if (version === '0.0.0') {
+    core.warning('Could not detect finfocus version, falling back to JSON parsing');
+    return checkBudgetThresholdWithJson(config, report);
+  }
+
+  if (config.debug) {
+    core.debug(`Detected finfocus version: ${version}`);
+  }
+
+  const useExitCodes = supportsExitCodes(version);
+
+  if (config.debug) {
+    core.debug(`Using exit codes: ${useExitCodes}`);
+  }
+
+  if (useExitCodes) {
+    return checkBudgetThresholdWithExitCodes(config);
+  }
+
+  core.warning('finfocus version < 0.2.5, falling back to JSON parsing for threshold check');
+  return checkBudgetThresholdWithJson(config, report);
+}
 
 export function checkThreshold(threshold: string | null, diff: number, currency: string): boolean {
   if (!threshold) return false;

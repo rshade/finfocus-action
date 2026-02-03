@@ -9,6 +9,44 @@ import { IInstaller, ActionConfiguration } from './types.js';
 const REPO_OWNER = 'rshade';
 const REPO_NAME = 'finfocus';
 
+/**
+ * Minimum finfocus version that supports exit codes for budget threshold checks.
+ */
+const EXIT_CODE_MIN_VERSION = '0.2.5';
+
+/**
+ * Get the installed finfocus version by running `finfocus --version`.
+ * Returns '0.0.0' if version cannot be determined.
+ */
+export async function getFinfocusVersion(): Promise<string> {
+  try {
+    const output = await exec.getExecOutput('finfocus', ['--version'], {
+      ignoreReturnCode: true,
+      silent: true,
+    });
+    // Parse "finfocus v0.2.5" or "finfocus 0.2.5" format
+    const match = output.stdout.match(/v?(\d+\.\d+\.\d+)/);
+    return match ? match[1] : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+/**
+ * Check if the given version supports exit codes for budget threshold checks.
+ * Requires finfocus v0.2.5 or higher.
+ */
+export function supportsExitCodes(version: string): boolean {
+  const [major, minor, patch] = version.split('.').map(Number);
+  const [minMajor, minMinor, minPatch] = EXIT_CODE_MIN_VERSION.split('.').map(Number);
+
+  if (major > minMajor) return true;
+  if (major < minMajor) return false;
+  if (minor > minMinor) return true;
+  if (minor < minMinor) return false;
+  return patch >= minPatch;
+}
+
 export class Installer implements IInstaller {
   async install(version: string, config?: ActionConfiguration): Promise<string> {
     const debug = config?.debug === true;

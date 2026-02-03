@@ -29,6 +29,7 @@ Initial release with core functionality:
 - [x] #15 - Cost optimization recommendations in PR comments
 - [x] #16 - Historical cost tracking with `finfocus cost actual`
 - [x] #17 - Sustainability/carbon footprint metrics (GreenOps)
+- [x] #18 - Budget thresholds and cost governance controls
 - [x] Carbon guardrails (`fail-on-carbon-increase` threshold)
 - [x] Environmental impact equivalents (trees, miles, electricity days)
 - [x] Resource-level sustainability breakdown
@@ -42,8 +43,10 @@ Focus: Budget controls, filtering, and better cost breakdowns.
 
 | Issue | Title | Status | Priority |
 |-------|-------|--------|----------|
-| #18 | Budget thresholds and cost governance controls | Open | High |
 | #20 | Resource filtering and grouping options | Open | High |
+| #46 | Budget health suite integration (finfocus v0.2.5) | Open | High |
+| #47 | Scoped budgets (per-provider, per-type, per-tag) | Open | High |
+| #48 | Native exit codes for budget guardrails | Open | High |
 
 **Key deliverables:**
 
@@ -51,6 +54,8 @@ Focus: Budget controls, filtering, and better cost breakdowns.
 - Monthly budget limits with warning mode
 - Budget override mechanism via PR labels
 - Budget utilization tracking and alerts
+- Budget health scoring and forecasting (v0.2.5 unblocked)
+- Per-provider, per-type, and per-tag budget scopes (v0.2.6 unblocked)
 - Filter costs by resource type, tag, or provider
 - Group-by options (provider, service, type, tag)
 - Show-only-changes mode for focused PR comments
@@ -63,6 +68,7 @@ Focus: Budget controls, filtering, and better cost breakdowns.
 - Filter syntax follows finfocus CLI conventions (`type=aws:ec2/*`,
   `tag:env=prod`)
 - Grouping respects CONTEXT.md boundaries (no custom aggregation logic)
+- Budget health uses native finfocus exit codes for threshold enforcement
 
 ## Near-Term Vision
 
@@ -73,6 +79,7 @@ Focus: Enable downstream integrations and data export.
 | Issue | Title | Status | Priority |
 |-------|-------|--------|----------|
 | #21 | JSON/artifact output for downstream processing | Open | Medium |
+| #49 | NDJSON format and pagination for large reports | Open | Medium |
 
 **Key deliverables:**
 
@@ -80,7 +87,8 @@ Focus: Enable downstream integrations and data export.
 - GitHub artifact upload for cost reports
 - New outputs: `report-json`, `summary-json`, `recommendations-json`,
   `sustainability-json`
-- Support for NDJSON streaming format
+- Support for NDJSON streaming format (v0.2.5 unblocked)
+- Pagination for large cost reports (`max-resources` limit)
 - Workflow-consumable outputs for downstream jobs
 - Artifact retention policy configuration
 
@@ -175,9 +183,11 @@ Some roadmap items depend on upstream finfocus features:
 | Roadmap Item | finfocus Dependency | Status |
 |--------------|---------------------|--------|
 | FOCUS format export | finfocus #382 (JSON-LD export) | Planned |
-| Advanced forecasting | finfocus #364 (Cost Time Machine) | Planned v0.3.0 |
-| Per-provider budgets | finfocus #263 (Budget scoping) | Planned v0.3.0 |
-| Budget health | finfocus #267 (Budget health calculation) | Planned v0.3.0 |
+| Advanced forecasting | finfocus #364 (Cost Time Machine) | ✅ Available v0.2.5 |
+| Per-provider budgets | finfocus #263 (Budget scoping) | ✅ Available v0.2.6 |
+| Budget health | finfocus #267 (Budget health) | ✅ Available v0.2.5 |
+| Budget exit codes | finfocus #496 (Native exit codes) | ✅ Available v0.2.5 |
+| NDJSON streaming | finfocus #488 (NDJSON output) | ✅ Available v0.2.5 |
 | OpenCost mapping | finfocus #383 (OpenCost compatibility) | Planned |
 
 ## Maintenance

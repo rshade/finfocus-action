@@ -38,7 +38,7 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual` commands; calculates sustainability metrics; extracts budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
 | `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
-| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails |
+| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks with exit code support (v0.2.5+) |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
 
 ### Data Flow
@@ -57,7 +57,7 @@ main.ts
         └─> Analyzer.runActualCosts()     # finfocus cost actual
         └─> Analyzer.extractBudgetStatus() # Optional: extract budget info from output
         └─> Commenter.upsertComment()     # GitHub API (includes budget status)
-        └─> checkThreshold() / checkCarbonThreshold()  # Guardrails
+        └─> checkBudgetThreshold()  # Guardrails (uses exit codes for v0.2.5+, JSON fallback for older)
 ```
 
 ### Key Interfaces (types.ts)
@@ -70,6 +70,8 @@ main.ts
 - `BudgetConfiguration`: Budget settings with amount, currency, period, and alerts
 - `BudgetStatus`: Current budget status with spent, remaining, percent used, and triggered alerts
 - `BudgetAlert`: Individual budget alert with threshold and type
+- `BudgetExitCode`: Enum for finfocus v0.2.5+ exit codes (0=pass, 1=warning, 2=critical, 3=exceeded)
+- `BudgetThresholdResult`: Result of budget threshold check with severity and message
 
 ## Code Conventions
 
@@ -108,3 +110,12 @@ main.ts
 - Budget configuration is written to `~/.finfocus/config.yaml` for finfocus CLI to read
 - Budget status extraction returns undefined when using `--output json` (forward compatible for future finfocus CLI support)
 - **JSON format compatibility**: finfocus v0.2.4+ wraps JSON output in a `"finfocus"` key. The action handles both wrapped and unwrapped formats for backward compatibility (see `src/analyze.ts:131`)
+- **Exit code support**: finfocus v0.2.5+ returns exit codes for budget thresholds (0=pass, 1=warning, 2=critical, 3=exceeded). The action auto-detects version and falls back to JSON parsing for older versions.
+
+## Active Technologies
+
+- TypeScript 5.9+ (ES modules) + @actions/core, @actions/exec (for running finfocus CLI)
+
+## Recent Changes
+
+- 001-guardrails-exit-codes: Implemented budget threshold checking with finfocus exit codes (v0.2.5+). Added `BudgetExitCode` enum, `BudgetThresholdResult` interface, `checkBudgetThreshold()` orchestrator, and backward-compatible JSON fallback for older versions.

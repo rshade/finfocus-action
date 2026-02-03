@@ -83,6 +83,19 @@ Track your cloud spending against monthly, quarterly, or yearly budgets with aut
 
 When configured, the PR comment will include a budget status section showing:
 
+### Budget Threshold Exit Codes (finfocus v0.2.5+)
+
+When using finfocus v0.2.5 or higher with budget thresholds, the action interprets CLI exit codes for precise budget status:
+
+| Exit Code | Status | Description |
+| :-------- | :----- | :---------- |
+| 0 | Pass | All budget thresholds passed |
+| 1 | Warning | Approaching budget threshold |
+| 2 | Critical | Budget threshold breached |
+| 3 | Exceeded | Budget has been exceeded |
+
+For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks, maintaining backward compatibility.
+
 - Current spend vs. budget
 - Remaining budget
 - Usage percentage with visual progress bar
