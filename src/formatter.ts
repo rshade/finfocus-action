@@ -6,8 +6,34 @@ import {
   SustainabilityReport,
   EquivalencyMetrics,
   BudgetStatus,
+  BudgetHealthReport,
 } from './types.js';
 
+/**
+ * Get currency symbol for display formatting.
+ * @param currency - Currency code (e.g., 'USD', 'EUR')
+ * @returns Currency symbol (e.g., '$', '€') or the code itself if unknown
+ */
+export function getCurrencySymbol(currency: string = 'USD'): string {
+  const symbols: Record<string, string> = {
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥',
+    CNY: '¥',
+  };
+  return symbols[currency.toUpperCase()] || currency;
+}
+
+/**
+ * Converts a total CO2e amount into illustrative environmental equivalents.
+ *
+ * @param totalCO2e - Total greenhouse gas emissions in kilograms of CO2e
+ * @returns An object with:
+ *  - `trees`: estimated number of trees required to sequester the given CO2e (approximate, based on ~22 kg CO2/year per tree),
+ *  - `milesDriven`: estimated miles driven equivalent (approximate, based on ~0.4 kg CO2 per mile),
+ *  - `homeElectricityDays`: estimated number of average home electricity days equivalent (approximate, using ~30 kWh/day and ~0.42 kg CO2/kWh)
+ */
 export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
   // Source: EPA Greenhouse Gas Equivalencies Calculator
   // Note: These are approximations for illustrative purposes.
@@ -67,25 +93,20 @@ function createTUIBox(lines: string[], width: number = 42): string {
   return [top, ...formattedLines, bottom].join('\n');
 }
 
+/**
+ * Renders a TUI-style budget status section as a GitHub code block.
+ *
+ * If `budgetStatus` is omitted or its `configured` flag is false, returns an empty string.
+ *
+ * @param budgetStatus - Budget status data used to render amount, period, current spend, progress bar, status message, and any triggered alerts
+ * @returns A markdown code block containing a bordered TUI box summarizing the budget (amount, spend, percent used, status, and triggered alerts), or an empty string when no budget is configured
+ */
 function formatBudgetSection(budgetStatus?: BudgetStatus): string {
   if (!budgetStatus || !budgetStatus.configured) {
     return '';
   }
 
   const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
-
-  // Simple currency symbol mapping
-  const getCurrencySymbol = (curr: string = 'USD'): string => {
-    const symbols: Record<string, string> = {
-      USD: '$',
-      EUR: '€',
-      GBP: '£',
-      JPY: '¥',
-      CNY: '¥',
-    };
-    return symbols[curr.toUpperCase()] || curr;
-  };
-
   const currencySymbol = getCurrencySymbol(currency);
 
   // Determine status message
@@ -136,6 +157,126 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
   return '\n```\n' + createTUIBox(lines) + '\n```\n';
 }
 
+/**
+ * Map a budget health status to its corresponding emoji icon.
+ *
+ * @param status - Health status value; expected: "healthy", "warning", "critical", or "exceeded"
+ * @returns The emoji icon for the provided status, `❓` if the status is unrecognized
+ */
+function getHealthStatusIcon(status: string): string {
+  const icons: Record<string, string> = {
+    healthy: '🟢',
+    warning: '🟡',
+    critical: '🔴',
+    exceeded: '⛔',
+  };
+  return icons[status] || '❓';
+}
+
+/**
+ * Builds a TUI-styled Budget Health section for inclusion in a markdown comment.
+ *
+ * Produces a monospaced box showing health score or status, budget, spent, runway,
+ * a progress bar, and any triggered alerts. Returns an empty string when `budgetHealth`
+ * is not present or not configured.
+ *
+ * @param budgetHealth - Budget health report data used to populate the section; if not configured the function returns an empty string
+ * @param config - Optional action configuration. Respects `showBudgetForecast` (controls forecast line) and `budgetAlertThreshold` (used for warning messaging)
+ * @returns A markdown-formatted code block containing the TUI budget health box, or an empty string if budget health is not configured
+ */
+function formatBudgetHealthSection(
+  budgetHealth: BudgetHealthReport,
+  config?: ActionConfiguration,
+): string {
+  if (!budgetHealth || !budgetHealth.configured) {
+    return '';
+  }
+
+  const { amount, period, spent, percentUsed, alerts, currency, healthScore, forecast, runwayDays, healthStatus } = budgetHealth;
+  const currencySymbol = getCurrencySymbol(currency);
+  const statusIcon = getHealthStatusIcon(healthStatus);
+
+  // Build TUI box content
+  const lines: string[] = [];
+  lines.push('BUDGET HEALTH');
+  lines.push('────────────────────────────────────────');
+
+  // Health score with visual indicator
+  if (healthScore !== undefined) {
+    lines.push(`Health Score: ${statusIcon} ${healthScore}/100`);
+  } else {
+    lines.push(`Status: ${statusIcon} ${healthStatus}`);
+  }
+
+  lines.push(`Budget: ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
+
+  if (spent !== undefined && percentUsed !== undefined) {
+    lines.push(`Spent: ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%)`);
+  }
+
+  // Forecast (if enabled and available)
+  const showForecast = config?.showBudgetForecast !== false;
+  if (showForecast && forecast) {
+    lines.push(`Forecast: ${forecast} (end of period)`);
+  }
+
+  // Runway
+  if (runwayDays !== undefined) {
+    const runwayText = runwayDays === Infinity || runwayDays < 0
+      ? 'Unlimited'
+      : `${runwayDays} days remaining`;
+    lines.push(`Runway: ${runwayText}`);
+  }
+
+  lines.push(''); // Empty line
+
+  // Progress bar with block characters
+  if (percentUsed !== undefined) {
+    const progressBar = generateTUIProgressBar(percentUsed);
+    lines.push(`${progressBar} ${percentUsed.toFixed(0)}%`);
+  }
+
+  // Determine status message based on health status
+  if (healthStatus === 'exceeded') {
+    lines.push('⚠ CRITICAL - budget exceeded');
+  } else if (healthStatus === 'critical') {
+    lines.push('⚠ CRITICAL - budget health critical');
+  } else if (healthStatus === 'warning') {
+    lines.push('⚠ WARNING - budget health warning');
+  } else if (percentUsed !== undefined && percentUsed >= 100) {
+    lines.push('⚠ CRITICAL - budget exceeded');
+  } else if (percentUsed !== undefined && percentUsed >= (config?.budgetAlertThreshold ?? 80)) {
+    lines.push(`⚠ WARNING - spend exceeds ${config?.budgetAlertThreshold ?? 80}% threshold`);
+  }
+
+  // Add triggered alerts to the TUI box
+  if (alerts && alerts.length > 0) {
+    const triggeredAlerts = alerts.filter((a) => a.triggered);
+    if (triggeredAlerts.length > 0) {
+      lines.push(''); // Empty line before alerts
+      triggeredAlerts.forEach((a) => {
+        const icon = a.type === 'actual' ? '💰' : '📊';
+        lines.push(`${icon} ${a.threshold}% ${a.type} threshold exceeded`);
+      });
+    }
+  }
+
+  // Wrap in TUI box and code block for GitHub
+  return '\n```\n' + createTUIBox(lines) + '\n```\n';
+}
+
+/**
+ * Render the Sustainability section as a Markdown string for inclusion in the comment body.
+ *
+ * Builds a "Sustainability Impact" block showing total carbon, month-over-month change, and carbon intensity.
+ * When enabled via config, includes environmental equivalents (trees, miles driven, home electricity days).
+ * When a finfocusReport with resource data is provided, includes a top-10 resources-by-carbon table.
+ *
+ * @param report - Sustainability metrics (must include `totalCO2e`, `totalCO2eDiff`, and `carbonIntensity`)
+ * @param config - Optional action configuration; honors `includeSustainability` and `sustainabilityEquivalents` flags
+ * @param finfocusReport - Optional finfocus report used to generate a Resources by Carbon Impact table when present
+ * @returns A Markdown string containing the formatted Sustainability section, or an empty string if sustainability is not enabled
+ */
 function formatSustainabilitySection(
   report: SustainabilityReport,
   config?: ActionConfiguration,
@@ -206,6 +347,18 @@ ${equivalentsSection}${resourceTable}
 `;
 }
 
+/**
+ * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
+ *
+ * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
+ * @param config - Optional action configuration that controls formatting and which sections to show
+ * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
+ * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
+ * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
+ * @param budgetStatus - Optional basic budget status used when detailed budget health is not provided
+ * @param budgetHealth - Optional detailed budget health report used in preference to budgetStatus
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget/budget health, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ */
 export function formatCommentBody(
   report: FinfocusReport,
   config?: ActionConfiguration,
@@ -213,6 +366,7 @@ export function formatCommentBody(
   actualCostReport?: ActualCostReport,
   sustainabilityReport?: SustainabilityReport,
   budgetStatus?: BudgetStatus,
+  budgetHealth?: BudgetHealthReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -356,7 +510,10 @@ ${recRows}
     ? formatSustainabilitySection(sustainabilityReport, config, report)
     : '';
 
-  const budgetSection = formatBudgetSection(budgetStatus);
+  // Use budget health section if available, otherwise fall back to basic budget status
+  const budgetSection = budgetHealth
+    ? formatBudgetHealthSection(budgetHealth, config)
+    : formatBudgetSection(budgetStatus);
 
   return `## 💰 Cloud Cost Estimate
 

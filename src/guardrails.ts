@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
-import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport } from './types.js';
+import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport } from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
 
 /**
@@ -196,6 +196,16 @@ export function checkThreshold(threshold: string | null, diff: number, currency:
   return false;
 }
 
+/**
+ * Determines whether a carbon threshold is exceeded.
+ *
+ * Accepts absolute thresholds (e.g., "10kg" or "10.5kgCO2e") or percent thresholds (e.g., "10%").
+ *
+ * @param threshold - Threshold string to evaluate; absolute values are interpreted in kilograms and percent values compare (diff / baseTotal) * 100.
+ * @param diff - Change in carbon emissions (in kilograms).
+ * @param baseTotal - Base total emissions (in kilograms) used for percent comparisons.
+ * @returns `true` if the provided `diff` exceeds the parsed threshold, `false` otherwise. Malformed thresholds or percent checks with `baseTotal <= 0` return `false`.
+ */
 export function checkCarbonThreshold(
   threshold: string | null,
   diff: number,
@@ -227,4 +237,56 @@ export function checkCarbonThreshold(
     `Malformed carbon threshold input: "${threshold}". Expected format like "10kg" or "10%". Skipping guardrail.`,
   );
   return false;
+}
+
+/**
+ * Evaluate the configured budget-health threshold against a budget health report.
+ *
+ * @param config - Action configuration containing an optional `failOnBudgetHealth` threshold
+ * @param budgetHealth - Budget health report providing `healthScore` and `healthStatus`
+ * @returns A `BudgetThresholdResult` containing pass/fail outcome, `severity`, and an explanatory `message`
+ */
+export function checkBudgetHealthThreshold(
+  config: ActionConfiguration,
+  budgetHealth: BudgetHealthReport,
+): BudgetThresholdResult {
+  // If no threshold is configured, pass
+  if (!config.failOnBudgetHealth) {
+    return {
+      passed: true,
+      severity: 'none',
+      message: 'No health threshold configured',
+    };
+  }
+
+  const threshold = config.failOnBudgetHealth;
+  const score = budgetHealth.healthScore;
+
+  // If health score is not available, we cannot evaluate the threshold
+  if (score === undefined) {
+    core.warning('Budget health score not available, cannot evaluate threshold');
+    return {
+      passed: true,
+      severity: 'none',
+      message: 'Budget health score not available',
+    };
+  }
+
+  // Check if score is below threshold
+  if (score < threshold) {
+    const severity = budgetHealth.healthStatus === 'exceeded' ? 'exceeded' :
+                     budgetHealth.healthStatus === 'critical' ? 'critical' : 'warning';
+
+    return {
+      passed: false,
+      severity,
+      message: `Budget health score ${score} is below threshold ${threshold}`,
+    };
+  }
+
+  return {
+    passed: true,
+    severity: 'none',
+    message: `Budget health score ${score} meets threshold ${threshold}`,
+  };
 }

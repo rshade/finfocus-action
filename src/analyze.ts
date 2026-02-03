@@ -11,7 +11,12 @@ import {
   RecommendationsReport,
   ActualCostReport,
   BudgetStatus,
+  BudgetHealthReport,
+  BudgetHealthStatus,
+  FinfocusBudgetStatusResponse,
 } from './types.js';
+import { getFinfocusVersion, supportsExitCodes } from './install.js';
+import { getCurrencySymbol } from './formatter.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
@@ -728,4 +733,171 @@ export class Analyzer implements IAnalyzer {
     }
     return output.stdout.trim();
   }
+
+  /**
+   * Run budget status analysis using finfocus CLI.
+   * Returns BudgetHealthReport with health score, forecast, and runway.
+   * Falls back to local calculation for finfocus < 0.2.5.
+   */
+  async runBudgetStatus(config: ActionConfiguration): Promise<BudgetHealthReport | undefined> {
+    // Check if budget is configured
+    if (!config.budgetAmount || config.budgetAmount <= 0) {
+      return undefined;
+    }
+
+    const debug = config?.debug === true;
+    if (debug) {
+      core.info('=== Running budget status analysis ===');
+    }
+
+    // Check finfocus version
+    const version = await getFinfocusVersion();
+    if (!supportsExitCodes(version)) {
+      if (debug) {
+        core.info(`  finfocus version ${version} < 0.2.5, using fallback calculation`);
+      }
+      core.warning('Budget health features require finfocus v0.2.5+, using fallback calculation');
+      return this.calculateBudgetHealthFallback(config);
+    }
+
+    // Run finfocus budget status
+    const args = ['budget', 'status', '--output', 'json'];
+    if (debug) {
+      core.info(`  Command: finfocus ${args.join(' ')}`);
+    }
+
+    const output = await exec.getExecOutput('finfocus', args, {
+      silent: !debug,
+      ignoreReturnCode: true,
+    });
+
+    if (output.exitCode !== 0) {
+      if (debug) {
+        core.info(`  finfocus budget status failed with exit code ${output.exitCode}`);
+        core.info(`  stderr: ${output.stderr}`);
+      }
+      core.warning(`finfocus budget status failed: ${output.stderr}`);
+      return this.calculateBudgetHealthFallback(config);
+    }
+
+    return this.parseBudgetStatusResponse(output.stdout, config);
+  }
+
+  /**
+   * Parse the JSON response from finfocus budget status command.
+   */
+  private parseBudgetStatusResponse(
+    stdout: string,
+    config: ActionConfiguration,
+  ): BudgetHealthReport | undefined {
+    const debug = config?.debug === true;
+
+    if (!stdout || stdout.trim() === '') {
+      if (debug) {
+        core.info('  Empty stdout from finfocus budget status');
+      }
+      core.warning('Empty response from finfocus budget status');
+      return this.calculateBudgetHealthFallback(config);
+    }
+
+    try {
+      const parsed = JSON.parse(stdout);
+      // Handle wrapped format (finfocus v0.2.4+) where output may be wrapped
+      const response = (parsed.finfocus ? parsed.finfocus : parsed) as FinfocusBudgetStatusResponse;
+
+      if (debug) {
+        core.info(`  Parsed budget status response: ${JSON.stringify(response)}`);
+      }
+
+      // Validate required fields
+      if (typeof response.health_score !== 'number' || !Number.isFinite(response.health_score)) {
+        core.warning('Invalid health_score in finfocus budget status response');
+        return this.calculateBudgetHealthFallback(config);
+      }
+
+      const healthStatus = this.computeHealthStatus(
+        response.health_score,
+        response.spent,
+        response.budget.amount,
+      );
+
+      // Format currency for display
+      const currencySymbol = getCurrencySymbol(response.budget.currency);
+      const forecastValue = typeof response.forecast === 'number' && Number.isFinite(response.forecast)
+        ? response.forecast
+        : 0;
+      const forecast = forecastValue > 0
+        ? `${currencySymbol}${forecastValue.toFixed(2)}`
+        : 'N/A';
+
+      return {
+        configured: true,
+        amount: response.budget.amount,
+        currency: response.budget.currency,
+        period: response.budget.period,
+        spent: response.spent,
+        remaining: response.remaining,
+        percentUsed: response.percent_used,
+        healthScore: response.health_score,
+        forecast,
+        forecastAmount: response.forecast,
+        runwayDays: response.runway_days,
+        healthStatus,
+      };
+    } catch (err) {
+      if (debug) {
+        core.info(`  Failed to parse budget status JSON: ${err instanceof Error ? err.message : String(err)}`);
+        core.info(`  Raw stdout: ${stdout.substring(0, 500)}`);
+      }
+      core.warning(`Failed to parse finfocus budget status response: ${err instanceof Error ? err.message : String(err)}`);
+      return this.calculateBudgetHealthFallback(config);
+    }
+  }
+
+  /**
+   * Calculate budget health locally when finfocus < 0.2.5.
+   * Returns undefined since we cannot determine actual health metrics without CLI support.
+   * This causes the PR comment to fall back to the basic budget status section instead.
+   */
+  private calculateBudgetHealthFallback(config: ActionConfiguration): BudgetHealthReport | undefined {
+    if (!config.budgetAmount || config.budgetAmount <= 0) {
+      return undefined;
+    }
+
+    const debug = config?.debug === true;
+    if (debug) {
+      core.info('=== Budget health fallback: returning undefined (requires finfocus v0.2.5+) ===');
+    }
+
+    // Return undefined to indicate budget health metrics are unavailable.
+    // This causes formatCommentBody to fall back to formatBudgetSection (basic status)
+    // rather than showing potentially misleading health data.
+    return undefined;
+  }
+
+  /**
+   * Compute health status based on health score and spend vs budget.
+   */
+  private computeHealthStatus(
+    healthScore: number,
+    spent: number,
+    budgetAmount: number,
+  ): BudgetHealthStatus {
+    // Exceeded takes priority if spent > budget
+    if (spent > budgetAmount) {
+      return 'exceeded';
+    }
+
+    // Otherwise use health score thresholds
+    if (healthScore >= 80) {
+      return 'healthy';
+    } else if (healthScore >= 50) {
+      return 'warning';
+    } else if (healthScore > 0) {
+      return 'critical';
+    } else {
+      return 'exceeded';
+    }
+  }
+
 }

@@ -23,6 +23,12 @@ export interface ActionConfiguration {
   budgetCurrency?: string;
   budgetPeriod?: string;
   budgetAlerts?: string;
+  /** Percentage threshold to trigger budget alert (default: 80) */
+  budgetAlertThreshold?: number;
+  /** Health score threshold to fail action (optional) */
+  failOnBudgetHealth?: number;
+  /** Whether to show budget forecast in PR comment (default: true) */
+  showBudgetForecast?: boolean;
 }
 
 export interface BudgetAlert {
@@ -50,6 +56,47 @@ export interface BudgetStatus {
     type: string;
     triggered: boolean;
   }>;
+}
+
+/**
+ * Budget health status levels.
+ * Used to classify the overall health of budget consumption.
+ */
+export type BudgetHealthStatus = 'healthy' | 'warning' | 'critical' | 'exceeded';
+
+/**
+ * Budget health report extending BudgetStatus with health-specific fields.
+ * Returned from finfocus v0.2.5+ or calculated locally for older versions.
+ */
+export interface BudgetHealthReport extends BudgetStatus {
+  /** Health score from 0-100 (100 = fully healthy) */
+  healthScore?: number;
+  /** Projected end-of-period spend (formatted string, e.g., "$1,890.00") */
+  forecast?: string;
+  /** Forecast as raw number for calculations */
+  forecastAmount?: number;
+  /** Days until budget exhausted at current burn rate */
+  runwayDays?: number;
+  /** Computed status based on health score and spend */
+  healthStatus: BudgetHealthStatus;
+}
+
+/**
+ * Raw JSON response from `finfocus budget status --output json` (v0.2.5+).
+ */
+export interface FinfocusBudgetStatusResponse {
+  health_score: number;
+  status: string;
+  spent: number;
+  remaining: number;
+  percent_used: number;
+  forecast: number;
+  runway_days: number;
+  budget: {
+    amount: number;
+    currency: string;
+    period: string;
+  };
 }
 
 export interface ActualCostItem {
@@ -162,6 +209,7 @@ export interface IAnalyzer {
     report: FinfocusReport,
   ): BudgetStatus | undefined;
   extractBudgetStatus(stdout: string): BudgetStatus | undefined;
+  runBudgetStatus(config: ActionConfiguration): Promise<BudgetHealthReport | undefined>;
 }
 
 export interface RecommendationsSummary {
@@ -193,6 +241,7 @@ export interface ICommenter {
     actualCostReport?: ActualCostReport,
     sustainabilityReport?: SustainabilityReport,
     budgetStatus?: BudgetStatus,
+    budgetHealth?: BudgetHealthReport,
   ): Promise<void>;
 }
 

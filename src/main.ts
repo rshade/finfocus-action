@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport } from './types.js';
+import { ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport, BudgetHealthReport } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
@@ -79,6 +79,13 @@ function logAnalyzerOutput(): void {
   }
 }
 
+/**
+ * Orchestrates the GitHub Action: installs finfocus (and optional plugins), runs cost/sustainability/recommendation/actual-cost analyses, evaluates budget and budget-health, enforces guardrails, sets action outputs, and optionally posts or updates a PR comment.
+ *
+ * This function reads action inputs to build its configuration, performs installation and analysis steps, emits outputs for costs, sustainability, recommendations, actuals and budget metrics, and applies configured guardrails that may cause the action to fail or warn depending on settings.
+ *
+ * @throws Error if configured guardrails fail (for example cost threshold, carbon increase, or budget health checks) or other unrecoverable conditions occur.
+ */
 async function run(): Promise<void> {
   const startTime = Date.now();
   let config: ActionConfiguration | undefined;
@@ -130,6 +137,12 @@ async function run(): Promise<void> {
     const budgetCurrency = core.getInput('budget_currency') || 'USD';
     const budgetPeriod = core.getInput('budget_period') || 'monthly';
     const budgetAlerts = core.getInput('budget_alerts') || '';
+    const budgetAlertThresholdRaw = core.getInput('budget_alert_threshold');
+    const budgetAlertThreshold = budgetAlertThresholdRaw ? parseInt(budgetAlertThresholdRaw) : 80;
+    const failOnBudgetHealthRaw = core.getInput('fail_on_budget_health');
+    const failOnBudgetHealth = failOnBudgetHealthRaw ? parseInt(failOnBudgetHealthRaw) : undefined;
+    const showBudgetForecastRaw = core.getInput('show_budget_forecast');
+    const showBudgetForecast = parseBoolean(showBudgetForecastRaw, true);
 
     config = {
       pulumiPlanJsonPath,
@@ -156,6 +169,9 @@ async function run(): Promise<void> {
       budgetCurrency,
       budgetPeriod,
       budgetAlerts,
+      budgetAlertThreshold,
+      failOnBudgetHealth,
+      showBudgetForecast,
     };
 
     if (config.debug) {
@@ -364,6 +380,7 @@ async function run(): Promise<void> {
 
     // Calculate budget status if budget is configured
     let budgetStatus;
+    let budgetHealth: BudgetHealthReport | undefined;
     if (config.budgetAmount && config.budgetAmount > 0) {
       core.info('');
       core.startGroup('📊 Calculating budget status');
@@ -380,6 +397,31 @@ async function run(): Promise<void> {
         );
       }
       core.endGroup();
+
+      // Run budget health analysis (enhanced metrics)
+      core.info('');
+      core.startGroup('📊 Running budget health analysis');
+      const budgetHealthStart = Date.now();
+      budgetHealth = await analyzer.runBudgetStatus(config);
+      if (config.debug) {
+        core.info(`Budget health analysis took: ${Date.now() - budgetHealthStart}ms`);
+      }
+      if (budgetHealth) {
+        core.setOutput('budget-health-score', budgetHealth.healthScore?.toString() ?? '');
+        core.setOutput('budget-forecast', budgetHealth.forecast ?? '');
+        core.setOutput('budget-runway-days', budgetHealth.runwayDays?.toString() ?? '');
+        core.setOutput('budget-status', budgetHealth.healthStatus);
+        core.info(
+          `📊 Budget Health: ${budgetHealth.healthScore ?? 'N/A'}/100 (${budgetHealth.healthStatus})`,
+        );
+        if (budgetHealth.forecast) {
+          core.info(`📊 Budget Forecast: ${budgetHealth.forecast}`);
+        }
+        if (budgetHealth.runwayDays !== undefined) {
+          core.info(`📊 Budget Runway: ${budgetHealth.runwayDays} days`);
+        }
+      }
+      core.endGroup();
     }
 
     if (config.postComment && config.githubToken) {
@@ -394,6 +436,7 @@ async function run(): Promise<void> {
         actualCostReport,
         sustainabilityReport,
         budgetStatus,
+        budgetHealth,
       );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
@@ -421,10 +464,10 @@ async function run(): Promise<void> {
       core.info('');
       core.startGroup('🌱 Checking sustainability guardrails');
       const { checkCarbonThreshold } = await import('./guardrails.js');
-      
+
       // Calculate base total for percent check
       const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
-      
+
       const failed = checkCarbonThreshold(
         config.failOnCarbonIncrease,
         sustainabilityReport.totalCO2eDiff,
@@ -437,6 +480,23 @@ async function run(): Promise<void> {
         );
       }
       core.info(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
+      core.endGroup();
+    }
+
+    // Check budget health threshold if configured
+    if (config.failOnBudgetHealth && budgetHealth) {
+      core.info('');
+      core.startGroup('📊 Checking budget health guardrails');
+      const { checkBudgetHealthThreshold } = await import('./guardrails.js');
+      const healthResult = checkBudgetHealthThreshold(config, budgetHealth);
+
+      if (!healthResult.passed) {
+        const errorMessage = config.debug
+          ? `${healthResult.message} (status: ${budgetHealth.healthStatus})`
+          : healthResult.message;
+        throw new Error(errorMessage);
+      }
+      core.info(`✅ Budget health score meets threshold: ${config.failOnBudgetHealth}`);
       core.endGroup();
     }
 
