@@ -98,6 +98,18 @@ inputs:
     description: 'Budget alerts in JSON format: [{"threshold": 80, "type": "actual"}, {"threshold": 100, "type": "forecasted"}]'
     required: false
     default: ''
+  budget-alert-threshold:
+    description: 'Percentage threshold to trigger budget alert in PR comment'
+    required: false
+    default: '80'
+  fail-on-budget-health:
+    description: 'Fail if budget health score falls below this value (0-100)'
+    required: false
+    default: ''
+  show-budget-forecast:
+    description: 'Display budget forecast in PR comment'
+    required: false
+    default: 'true'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -132,6 +144,27 @@ outputs:
   carbon-intensity:
     description: 'Carbon intensity per dollar spent (gCO2e/USD)'
     value: ${{ steps.run.outputs.carbon-intensity }}
+  budget-spent:
+    description: 'Current budget spend amount'
+    value: ${{ steps.run.outputs.budget-spent }}
+  budget-remaining:
+    description: 'Remaining budget amount'
+    value: ${{ steps.run.outputs.budget-remaining }}
+  budget-percent-used:
+    description: 'Percentage of budget used'
+    value: ${{ steps.run.outputs.budget-percent-used }}
+  budget-health-score:
+    description: 'Budget health score (0-100)'
+    value: ${{ steps.run.outputs.budget-health-score }}
+  budget-forecast:
+    description: 'Projected end-of-period spend'
+    value: ${{ steps.run.outputs.budget-forecast }}
+  budget-runway-days:
+    description: 'Days until budget exhausted at current rate'
+    value: ${{ steps.run.outputs.budget-runway-days }}
+  budget-status:
+    description: "Budget health status: 'healthy' | 'warning' | 'critical' | 'exceeded'"
+    value: ${{ steps.run.outputs.budget-status }}
 
 runs:
   using: 'composite'
@@ -165,6 +198,9 @@ runs:
         INPUT_BUDGET_CURRENCY: ${{ inputs.budget-currency }}
         INPUT_BUDGET_PERIOD: ${{ inputs.budget-period }}
         INPUT_BUDGET_ALERTS: ${{ inputs.budget-alerts }}
+        INPUT_BUDGET_ALERT_THRESHOLD: ${{ inputs.budget-alert-threshold }}
+        INPUT_FAIL_ON_BUDGET_HEALTH: ${{ inputs.fail-on-budget-health }}
+        INPUT_SHOW_BUDGET_FORECAST: ${{ inputs.show-budget-forecast }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

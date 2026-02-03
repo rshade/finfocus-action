@@ -6,7 +6,24 @@ import {
   SustainabilityReport,
   EquivalencyMetrics,
   BudgetStatus,
+  BudgetHealthReport,
 } from './types.js';
+
+/**
+ * Get currency symbol for display formatting.
+ * @param currency - Currency code (e.g., 'USD', 'EUR')
+ * @returns Currency symbol (e.g., '$', '€') or the code itself if unknown
+ */
+export function getCurrencySymbol(currency: string = 'USD'): string {
+  const symbols: Record<string, string> = {
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥',
+    CNY: '¥',
+  };
+  return symbols[currency.toUpperCase()] || currency;
+}
 
 export function calculateEquivalents(totalCO2e: number): EquivalencyMetrics {
   // Source: EPA Greenhouse Gas Equivalencies Calculator
@@ -73,19 +90,6 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
   }
 
   const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
-
-  // Simple currency symbol mapping
-  const getCurrencySymbol = (curr: string = 'USD'): string => {
-    const symbols: Record<string, string> = {
-      USD: '$',
-      EUR: '€',
-      GBP: '£',
-      JPY: '¥',
-      CNY: '¥',
-    };
-    return symbols[curr.toUpperCase()] || curr;
-  };
-
   const currencySymbol = getCurrencySymbol(currency);
 
   // Determine status message
@@ -118,6 +122,104 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
 
   if (statusMessage) {
     lines.push(statusMessage);
+  }
+
+  // Add triggered alerts to the TUI box
+  if (alerts && alerts.length > 0) {
+    const triggeredAlerts = alerts.filter((a) => a.triggered);
+    if (triggeredAlerts.length > 0) {
+      lines.push(''); // Empty line before alerts
+      triggeredAlerts.forEach((a) => {
+        const icon = a.type === 'actual' ? '💰' : '📊';
+        lines.push(`${icon} ${a.threshold}% ${a.type} threshold exceeded`);
+      });
+    }
+  }
+
+  // Wrap in TUI box and code block for GitHub
+  return '\n```\n' + createTUIBox(lines) + '\n```\n';
+}
+
+/**
+ * Get status icon for budget health status
+ */
+function getHealthStatusIcon(status: string): string {
+  const icons: Record<string, string> = {
+    healthy: '🟢',
+    warning: '🟡',
+    critical: '🔴',
+    exceeded: '⛔',
+  };
+  return icons[status] || '❓';
+}
+
+/**
+ * Format budget health section with visual indicators.
+ * Displays health score, forecast, runway, and progress bar.
+ */
+function formatBudgetHealthSection(
+  budgetHealth: BudgetHealthReport,
+  config?: ActionConfiguration,
+): string {
+  if (!budgetHealth || !budgetHealth.configured) {
+    return '';
+  }
+
+  const { amount, period, spent, percentUsed, alerts, currency, healthScore, forecast, runwayDays, healthStatus } = budgetHealth;
+  const currencySymbol = getCurrencySymbol(currency);
+  const statusIcon = getHealthStatusIcon(healthStatus);
+
+  // Build TUI box content
+  const lines: string[] = [];
+  lines.push('BUDGET HEALTH');
+  lines.push('────────────────────────────────────────');
+
+  // Health score with visual indicator
+  if (healthScore !== undefined) {
+    lines.push(`Health Score: ${statusIcon} ${healthScore}/100`);
+  } else {
+    lines.push(`Status: ${statusIcon} ${healthStatus}`);
+  }
+
+  lines.push(`Budget: ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
+
+  if (spent !== undefined && percentUsed !== undefined) {
+    lines.push(`Spent: ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%)`);
+  }
+
+  // Forecast (if enabled and available)
+  const showForecast = config?.showBudgetForecast !== false;
+  if (showForecast && forecast) {
+    lines.push(`Forecast: ${forecast} (end of period)`);
+  }
+
+  // Runway
+  if (runwayDays !== undefined) {
+    const runwayText = runwayDays === Infinity || runwayDays < 0
+      ? 'Unlimited'
+      : `${runwayDays} days remaining`;
+    lines.push(`Runway: ${runwayText}`);
+  }
+
+  lines.push(''); // Empty line
+
+  // Progress bar with block characters
+  if (percentUsed !== undefined) {
+    const progressBar = generateTUIProgressBar(percentUsed);
+    lines.push(`${progressBar} ${percentUsed.toFixed(0)}%`);
+  }
+
+  // Determine status message based on health status
+  if (healthStatus === 'exceeded') {
+    lines.push('⚠ CRITICAL - budget exceeded');
+  } else if (healthStatus === 'critical') {
+    lines.push('⚠ CRITICAL - budget health critical');
+  } else if (healthStatus === 'warning') {
+    lines.push('⚠ WARNING - budget health warning');
+  } else if (percentUsed !== undefined && percentUsed >= 100) {
+    lines.push('⚠ CRITICAL - budget exceeded');
+  } else if (percentUsed !== undefined && percentUsed >= (config?.budgetAlertThreshold ?? 80)) {
+    lines.push(`⚠ WARNING - spend exceeds ${config?.budgetAlertThreshold ?? 80}% threshold`);
   }
 
   // Add triggered alerts to the TUI box
@@ -213,6 +315,7 @@ export function formatCommentBody(
   actualCostReport?: ActualCostReport,
   sustainabilityReport?: SustainabilityReport,
   budgetStatus?: BudgetStatus,
+  budgetHealth?: BudgetHealthReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -356,7 +459,10 @@ ${recRows}
     ? formatSustainabilitySection(sustainabilityReport, config, report)
     : '';
 
-  const budgetSection = formatBudgetSection(budgetStatus);
+  // Use budget health section if available, otherwise fall back to basic budget status
+  const budgetSection = budgetHealth
+    ? formatBudgetHealthSection(budgetHealth, config)
+    : formatBudgetSection(budgetStatus);
 
   return `## 💰 Cloud Cost Estimate
 

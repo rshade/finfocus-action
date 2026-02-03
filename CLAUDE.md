@@ -35,10 +35,10 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `install.ts` | `Installer` | Downloads finfocus binary from GitHub releases, caches with `@actions/tool-cache` |
 | `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI |
 | `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
-| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual` commands; calculates sustainability metrics; extracts budget status |
+| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual`, `budget status` commands; calculates sustainability metrics; extracts budget status and health |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
-| `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
-| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks with exit code support (v0.2.5+) |
+| `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status, budget health |
+| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks with exit code support (v0.2.5+); budget health threshold checks |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
 
 ### Data Flow
@@ -56,8 +56,10 @@ main.ts
         └─> Analyzer.runRecommendations() # finfocus cost recommendations
         └─> Analyzer.runActualCosts()     # finfocus cost actual
         └─> Analyzer.extractBudgetStatus() # Optional: extract budget info from output
-        └─> Commenter.upsertComment()     # GitHub API (includes budget status)
+        └─> Analyzer.runBudgetStatus()    # Optional: budget health (v0.2.5+)
+        └─> Commenter.upsertComment()     # GitHub API (includes budget status and health)
         └─> checkBudgetThreshold()  # Guardrails (uses exit codes for v0.2.5+, JSON fallback for older)
+        └─> checkBudgetHealthThreshold()  # Guardrails (fail if health score below threshold)
 ```
 
 ### Key Interfaces (types.ts)
@@ -72,6 +74,9 @@ main.ts
 - `BudgetAlert`: Individual budget alert with threshold and type
 - `BudgetExitCode`: Enum for finfocus v0.2.5+ exit codes (0=pass, 1=warning, 2=critical, 3=exceeded)
 - `BudgetThresholdResult`: Result of budget threshold check with severity and message
+- `BudgetHealthStatus`: Type for health status levels ('healthy' | 'warning' | 'critical' | 'exceeded')
+- `BudgetHealthReport`: Extended budget status with healthScore, forecast, forecastAmount, runwayDays
+- `FinfocusBudgetStatusResponse`: Raw JSON response from finfocus budget status command
 
 ## Code Conventions
 
@@ -113,9 +118,20 @@ main.ts
 - **Exit code support**: finfocus v0.2.5+ returns exit codes for budget thresholds (0=pass, 1=warning, 2=critical, 3=exceeded). The action auto-detects version and falls back to JSON parsing for older versions.
 
 ## Active Technologies
+- TypeScript 5.9+ (ES2022 target, NodeNext module resolution) + @actions/core ^2.0.2, @actions/exec ^2.0.0, @actions/github ^7.0.0, @actions/tool-cache ^3.0.0 (001-budget-health-suite)
+- N/A (stateless action) (001-budget-health-suite)
 
 - TypeScript 5.9+ (ES modules) + @actions/core, @actions/exec (for running finfocus CLI)
 
 ## Recent Changes
+
+- 001-budget-health-suite: Implemented comprehensive budget health suite integration for finfocus v0.2.5+:
+  - Added `BudgetHealthStatus` type, `BudgetHealthReport` and `FinfocusBudgetStatusResponse` interfaces
+  - Added `runBudgetStatus()` method to Analyzer with fallback for older versions
+  - Added `formatBudgetHealthSection()` to formatter with visual health indicators (🟢/🟡/🔴/⛔)
+  - Added `checkBudgetHealthThreshold()` to guardrails for fail-on-budget-health
+  - New action inputs: budget-alert-threshold, fail-on-budget-health, show-budget-forecast
+  - New action outputs: budget-health-score, budget-forecast, budget-runway-days, budget-status
+  - TUI box display with progress bar and runway information
 
 - 001-guardrails-exit-codes: Implemented budget threshold checking with finfocus exit codes (v0.2.5+). Added `BudgetExitCode` enum, `BudgetThresholdResult` interface, `checkBudgetThreshold()` orchestrator, and backward-compatible JSON fallback for older versions.

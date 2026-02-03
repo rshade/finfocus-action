@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
-import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport } from './types.js';
+import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport } from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
 
 /**
@@ -227,4 +227,57 @@ export function checkCarbonThreshold(
     `Malformed carbon threshold input: "${threshold}". Expected format like "10kg" or "10%". Skipping guardrail.`,
   );
   return false;
+}
+
+/**
+ * Check if budget health score meets the configured threshold.
+ * Fails the action if the health score is below the threshold.
+ *
+ * @param config - Action configuration with failOnBudgetHealth threshold
+ * @param budgetHealth - Budget health report with health score
+ * @returns BudgetThresholdResult with pass/fail status
+ */
+export function checkBudgetHealthThreshold(
+  config: ActionConfiguration,
+  budgetHealth: BudgetHealthReport,
+): BudgetThresholdResult {
+  // If no threshold is configured, pass
+  if (!config.failOnBudgetHealth) {
+    return {
+      passed: true,
+      severity: 'none',
+      message: 'No health threshold configured',
+    };
+  }
+
+  const threshold = config.failOnBudgetHealth;
+  const score = budgetHealth.healthScore;
+
+  // If health score is not available, we cannot evaluate the threshold
+  if (score === undefined) {
+    core.warning('Budget health score not available, cannot evaluate threshold');
+    return {
+      passed: true,
+      severity: 'none',
+      message: 'Budget health score not available',
+    };
+  }
+
+  // Check if score is below threshold
+  if (score < threshold) {
+    const severity = budgetHealth.healthStatus === 'exceeded' ? 'exceeded' :
+                     budgetHealth.healthStatus === 'critical' ? 'critical' : 'warning';
+
+    return {
+      passed: false,
+      severity,
+      message: `Budget health score ${score} is below threshold ${threshold}`,
+    };
+  }
+
+  return {
+    passed: true,
+    severity: 'none',
+    message: `Budget health score ${score} meets threshold ${threshold}`,
+  };
 }

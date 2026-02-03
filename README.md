@@ -83,6 +83,90 @@ Track your cloud spending against monthly, quarterly, or yearly budgets with aut
 
 When configured, the PR comment will include a budget status section showing:
 
+### Budget Health Suite (finfocus v0.2.5+)
+
+The Budget Health Suite provides comprehensive budget monitoring with health scores, forecasting, and runway analysis. When enabled, the PR comment includes a TUI-style budget health display:
+
+```text
+╭────────────────────────────────────────────╮
+│ BUDGET HEALTH                              │
+│ ────────────────────────────────────────── │
+│ Health Score: 🟢 85/100                    │
+│ Budget: $2,000.00/monthly                  │
+│ Spent: $1,234.56 (62%)                     │
+│ Forecast: $1,890.00 (end of period)        │
+│ Runway: 12 days remaining                  │
+│                                            │
+│ █████████████████████░░░░░░░░░ 62%         │
+╰────────────────────────────────────────────╯
+```
+
+**Health Status Indicators:**
+
+| Status | Icon | Health Score | Description |
+| :----- | :--: | :----------- | :---------- |
+| Healthy | 🟢 | 80-100 | Normal operation |
+| Warning | 🟡 | 50-79 | Approaching limit |
+| Critical | 🔴 | 1-49 | Budget concerns |
+| Exceeded | ⛔ | 0 or spent > budget | Over budget |
+
+**Budget Health Configuration:**
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    budget-amount: 2000
+    budget-currency: USD
+    budget-period: monthly
+    budget-alert-threshold: 80        # Trigger alert when usage exceeds 80%
+    fail-on-budget-health: 50         # Fail build if health score drops below 50
+    show-budget-forecast: true        # Show projected end-of-period spend
+```
+
+| Input | Description | Required | Default |
+| :--- | :--- | :--- | :--- |
+| `budget-alert-threshold` | Percentage threshold to trigger budget alert in PR comment. | No | `80` |
+| `fail-on-budget-health` | Fail action if budget health score falls below this value (0-100). | No | `""` |
+| `show-budget-forecast` | Display budget forecast in PR comment (`true`/`false`). | No | `true` |
+
+**Budget Health Outputs:**
+
+| Output | Description |
+| :----- | :---------- |
+| `budget-health-score` | Budget health score (0-100). |
+| `budget-forecast` | Projected end-of-period spend (e.g., "$1,890.00"). |
+| `budget-runway-days` | Days until budget exhausted at current rate. |
+| `budget-status` | Budget health status: `healthy`, `warning`, `critical`, or `exceeded`. |
+
+#### Example: Using Budget Health Outputs in Downstream Jobs
+
+```yaml
+jobs:
+  cost-estimate:
+    runs-on: ubuntu-latest
+    outputs:
+      health-score: ${{ steps.finfocus.outputs.budget-health-score }}
+      status: ${{ steps.finfocus.outputs.budget-status }}
+    steps:
+      - uses: rshade/finfocus-action@v1
+        id: finfocus
+        with:
+          pulumi-plan-json: plan.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          budget-amount: 2000
+
+  notify:
+    needs: cost-estimate
+    runs-on: ubuntu-latest
+    if: needs.cost-estimate.outputs.status == 'critical'
+    steps:
+      - run: |
+          echo "Budget health is critical! Score: ${{ needs.cost-estimate.outputs.health-score }}"
+          # Send notification to Slack, PagerDuty, etc.
+```
+
 ### Budget Threshold Exit Codes (finfocus v0.2.5+)
 
 When using finfocus v0.2.5 or higher with budget thresholds, the action interprets CLI exit codes for precise budget status:
@@ -95,6 +179,8 @@ When using finfocus v0.2.5 or higher with budget thresholds, the action interpre
 | 3 | Exceeded | Budget has been exceeded |
 
 For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks, maintaining backward compatibility.
+
+**Budget Status Display (when budget configured):**
 
 - Current spend vs. budget
 - Remaining budget
@@ -113,6 +199,13 @@ For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for
 | `actual-cost-period`     | The date range for actual costs (e.g., 2025-01-01 to 2025-01-07). |
 | `total-carbon-footprint` | Total estimated CO2 emissions (kgCO2e/month).                     |
 | `carbon-intensity`       | Carbon intensity per dollar spent (gCO2e/USD).                    |
+| `budget-spent`           | Current budget spend amount.                                      |
+| `budget-remaining`       | Remaining budget amount.                                          |
+| `budget-percent-used`    | Percentage of budget used.                                        |
+| `budget-health-score`    | Budget health score (0-100).                                      |
+| `budget-forecast`        | Projected end-of-period spend.                                    |
+| `budget-runway-days`     | Days until budget exhausted at current rate.                      |
+| `budget-status`          | Budget health status: `healthy`, `warning`, `critical`, `exceeded`. |
 
 ## Development
 

@@ -1,5 +1,5 @@
 import { formatCommentBody } from '../../src/formatter.js';
-import { FinfocusReport, ActionConfiguration, ActualCostReport } from '../../src/types.js';
+import { FinfocusReport, ActionConfiguration, ActualCostReport, BudgetHealthReport } from '../../src/types.js';
 
 describe('formatCommentBody', () => {
   const mockReport: FinfocusReport = {
@@ -289,6 +289,157 @@ describe('formatCommentBody', () => {
       const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
 
       expect(result).not.toContain('threshold exceeded');
+    });
+  });
+
+  describe('Budget Health Display (FR-010)', () => {
+    const baseBudgetHealth: BudgetHealthReport = {
+      configured: true,
+      amount: 2000,
+      currency: 'USD',
+      period: 'monthly',
+      spent: 1234.56,
+      remaining: 765.44,
+      percentUsed: 61.7,
+      healthScore: 85,
+      forecast: '$1,890.00',
+      forecastAmount: 1890,
+      runwayDays: 12,
+      healthStatus: 'healthy',
+    };
+
+    it('should display health score with healthy status icon (green)', () => {
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
+
+      expect(result).toContain('BUDGET HEALTH');
+      expect(result).toContain('🟢');
+      expect(result).toContain('85/100');
+    });
+
+    it('should display health score with warning status icon (yellow)', () => {
+      const warningHealth: BudgetHealthReport = {
+        ...baseBudgetHealth,
+        healthScore: 65,
+        healthStatus: 'warning',
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, warningHealth);
+
+      expect(result).toContain('🟡');
+      expect(result).toContain('65/100');
+    });
+
+    it('should display health score with critical status icon (red)', () => {
+      const criticalHealth: BudgetHealthReport = {
+        ...baseBudgetHealth,
+        healthScore: 35,
+        healthStatus: 'critical',
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, criticalHealth);
+
+      expect(result).toContain('🔴');
+      expect(result).toContain('35/100');
+    });
+
+    it('should display health score with exceeded status icon', () => {
+      const exceededHealth: BudgetHealthReport = {
+        ...baseBudgetHealth,
+        healthScore: 0,
+        healthStatus: 'exceeded',
+        spent: 2200,
+        remaining: -200,
+        percentUsed: 110,
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, exceededHealth);
+
+      expect(result).toContain('⛔');
+      expect(result).toContain('exceeded');
+    });
+
+    it('should display forecast when showBudgetForecast is true (default)', () => {
+      const config: ActionConfiguration = {
+        showBudgetForecast: true,
+      } as ActionConfiguration;
+
+      const result = formatCommentBody(mockReport, config, undefined, undefined, undefined, undefined, baseBudgetHealth);
+
+      expect(result).toContain('Forecast: $1,890.00');
+      expect(result).toContain('end of period');
+    });
+
+    it('should hide forecast when showBudgetForecast is false', () => {
+      const config: ActionConfiguration = {
+        showBudgetForecast: false,
+      } as ActionConfiguration;
+
+      const result = formatCommentBody(mockReport, config, undefined, undefined, undefined, undefined, baseBudgetHealth);
+
+      expect(result).not.toContain('Forecast');
+    });
+
+    it('should display runway days', () => {
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
+
+      expect(result).toContain('Runway: 12 days remaining');
+    });
+
+    it('should display TUI box with progress bar', () => {
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
+
+      expect(result).toContain('```');
+      expect(result).toContain('╭');
+      expect(result).toContain('╮');
+      expect(result).toContain('╰');
+      expect(result).toContain('╯');
+      expect(result).toContain('█');
+      expect(result).toContain('░');
+    });
+
+    it('should show alert when percentUsed exceeds budgetAlertThreshold', () => {
+      const config: ActionConfiguration = {
+        budgetAlertThreshold: 60,
+      } as ActionConfiguration;
+
+      const result = formatCommentBody(mockReport, config, undefined, undefined, undefined, undefined, baseBudgetHealth);
+
+      expect(result).toContain('⚠ WARNING');
+      expect(result).toContain('60%');
+    });
+
+    it('should not show alert when percentUsed is below budgetAlertThreshold', () => {
+      const config: ActionConfiguration = {
+        budgetAlertThreshold: 80,
+      } as ActionConfiguration;
+
+      const lowUsageHealth: BudgetHealthReport = {
+        ...baseBudgetHealth,
+        percentUsed: 50,
+        healthStatus: 'healthy',
+      };
+
+      const result = formatCommentBody(mockReport, config, undefined, undefined, undefined, undefined, lowUsageHealth);
+
+      expect(result).not.toContain('⚠ WARNING');
+    });
+
+    it('should prefer BudgetHealthReport over BudgetStatus when both provided', () => {
+      const budgetStatus = {
+        configured: true,
+        amount: 1000,
+        currency: 'USD',
+        period: 'monthly',
+        spent: 500,
+        remaining: 500,
+        percentUsed: 50,
+      };
+
+      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus, baseBudgetHealth);
+
+      // Should show BUDGET HEALTH (from BudgetHealthReport), not BUDGET STATUS (from BudgetStatus)
+      expect(result).toContain('BUDGET HEALTH');
+      expect(result).toContain('85/100');
     });
   });
 });
