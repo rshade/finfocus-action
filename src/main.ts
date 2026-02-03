@@ -79,6 +79,12 @@ function logAnalyzerOutput(): void {
   }
 }
 
+/**
+ * Orchestrates the GitHub Action: installs finfocus (and optional plugins), runs cost/sustainability/recommendation/actual-cost analyses, evaluates budget and budget-health, enforces guardrails, sets action outputs, and optionally posts or updates a PR comment.
+ *
+ * This function reads action inputs to build its configuration, performs installation and analysis steps, emits outputs for costs, sustainability, recommendations, actuals and budget metrics, and applies configured guardrails that may cause the action to fail or warn depending on settings.
+ *
+ * @throws Error if configured guardrails fail (for example cost threshold, carbon increase, or budget health checks) or other unrecoverable conditions occur.
 async function run(): Promise<void> {
   const startTime = Date.now();
   let config: ActionConfiguration | undefined;

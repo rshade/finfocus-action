@@ -196,6 +196,16 @@ export function checkThreshold(threshold: string | null, diff: number, currency:
   return false;
 }
 
+/**
+ * Determines whether a carbon threshold is exceeded.
+ *
+ * Accepts absolute thresholds (e.g., "10kg" or "10.5kgCO2e") or percent thresholds (e.g., "10%").
+ *
+ * @param threshold - Threshold string to evaluate; absolute values are interpreted in kilograms and percent values compare (diff / baseTotal) * 100.
+ * @param diff - Change in carbon emissions (in kilograms).
+ * @param baseTotal - Base total emissions (in kilograms) used for percent comparisons.
+ * @returns `true` if the provided `diff` exceeds the parsed threshold, `false` otherwise. Malformed thresholds or percent checks with `baseTotal <= 0` return `false`.
+ */
 export function checkCarbonThreshold(
   threshold: string | null,
   diff: number,
@@ -230,12 +240,11 @@ export function checkCarbonThreshold(
 }
 
 /**
- * Check if budget health score meets the configured threshold.
- * Fails the action if the health score is below the threshold.
+ * Evaluate the configured budget-health threshold against a budget health report.
  *
- * @param config - Action configuration with failOnBudgetHealth threshold
- * @param budgetHealth - Budget health report with health score
- * @returns BudgetThresholdResult with pass/fail status
+ * @param config - Action configuration containing an optional `failOnBudgetHealth` threshold
+ * @param budgetHealth - Budget health report providing `healthScore` and `healthStatus`
+ * @returns A `BudgetThresholdResult` containing pass/fail outcome, `severity`, and an explanatory `message`
  */
 export function checkBudgetHealthThreshold(
   config: ActionConfiguration,
