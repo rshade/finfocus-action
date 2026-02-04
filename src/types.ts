@@ -29,6 +29,10 @@ export interface ActionConfiguration {
   failOnBudgetHealth?: number;
   /** Whether to show budget forecast in PR comment (default: true) */
   showBudgetForecast?: boolean;
+  /** Scoped budget configuration as YAML multiline string */
+  budgetScopes?: string;
+  /** Fail action if any scope exceeds budget */
+  failOnBudgetScopeBreach?: boolean;
 }
 
 export interface BudgetAlert {
@@ -210,6 +214,7 @@ export interface IAnalyzer {
   ): BudgetStatus | undefined;
   extractBudgetStatus(stdout: string): BudgetStatus | undefined;
   runBudgetStatus(config: ActionConfiguration): Promise<BudgetHealthReport | undefined>;
+  runScopedBudgetStatus(config: ActionConfiguration): Promise<ScopedBudgetReport | undefined>;
 }
 
 export interface RecommendationsSummary {
@@ -242,6 +247,7 @@ export interface ICommenter {
     sustainabilityReport?: SustainabilityReport,
     budgetStatus?: BudgetStatus,
     budgetHealth?: BudgetHealthReport,
+    scopedBudgetReport?: ScopedBudgetReport,
   ): Promise<void>;
 }
 
@@ -272,4 +278,138 @@ export interface BudgetThresholdResult {
   exitCode?: number;
   /** Human-readable message for the result */
   message: string;
+}
+
+// ============================================================================
+// Scoped Budgets Types (finfocus v0.2.6+)
+// ============================================================================
+
+/**
+ * Type of budget scope.
+ * - provider: Cloud provider (aws, gcp, azure)
+ * - type: Resource type (compute, storage, networking)
+ * - tag: Cost allocation tag (key:value format)
+ */
+export type BudgetScopeType = 'provider' | 'type' | 'tag';
+
+/**
+ * A single scoped budget configuration parsed from user input.
+ */
+export interface BudgetScope {
+  /** Full scope identifier (e.g., "provider/aws", "tag/env:prod") */
+  scope: string;
+
+  /** Scope category */
+  scopeType: BudgetScopeType;
+
+  /** Scope key within category (e.g., "aws", "compute", "env:prod") */
+  scopeKey: string;
+
+  /** Budget limit amount */
+  amount: number;
+}
+
+/**
+ * Alert configuration and status for a scope.
+ */
+export interface ScopedBudgetAlert {
+  /** Threshold percentage */
+  threshold: number;
+
+  /** Alert type */
+  type: 'actual' | 'forecasted';
+
+  /** Whether alert is triggered */
+  triggered: boolean;
+}
+
+/**
+ * Status of a single scoped budget returned from finfocus CLI.
+ */
+export interface ScopedBudgetStatus {
+  /** Full scope identifier */
+  scope: string;
+
+  /** Scope category */
+  scopeType: BudgetScopeType;
+
+  /** Scope key within category */
+  scopeKey: string;
+
+  /** Amount spent in this scope */
+  spent: number;
+
+  /** Budget limit for this scope */
+  budget: number;
+
+  /** Currency code */
+  currency: string;
+
+  /** Percentage of budget used (0-100+) */
+  percentUsed: number;
+
+  /** Health status */
+  status: BudgetHealthStatus;
+
+  /** Triggered alerts for this scope */
+  alerts: ScopedBudgetAlert[];
+}
+
+/**
+ * Represents a scope that failed to process.
+ */
+export interface ScopedBudgetFailure {
+  /** Scope that failed */
+  scope: string;
+
+  /** Error message */
+  error: string;
+}
+
+/**
+ * Collection of all scope statuses returned from finfocus CLI.
+ */
+export interface ScopedBudgetReport {
+  /** Array of scope statuses */
+  scopes: ScopedBudgetStatus[];
+
+  /** Scopes that failed to process */
+  failed: ScopedBudgetFailure[];
+}
+
+/**
+ * Raw scope entry from finfocus CLI v0.2.6+ JSON response.
+ */
+export interface FinfocusScopeEntry {
+  scope: string;
+  type: string;
+  key: string;
+  spent: number;
+  budget: number;
+  currency: string;
+  percent_used: number;
+  status: string;
+  alerts?: Array<{
+    threshold: number;
+    type: string;
+    triggered: boolean;
+  }>;
+}
+
+/**
+ * Raw JSON response from `finfocus budget status --output json` (v0.2.6+) with scopes.
+ */
+export interface FinfocusScopedBudgetResponse {
+  finfocus?: {
+    scopes?: FinfocusScopeEntry[];
+    errors?: Array<{
+      scope: string;
+      error: string;
+    }>;
+  };
+  scopes?: FinfocusScopeEntry[];
+  errors?: Array<{
+    scope: string;
+    error: string;
+  }>;
 }

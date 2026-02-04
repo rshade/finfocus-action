@@ -167,6 +167,112 @@ jobs:
           # Send notification to Slack, PagerDuty, etc.
 ```
 
+### Scoped Budgets (finfocus v0.2.6+)
+
+Scoped budgets allow you to set granular budget limits per cloud provider, resource type, or cost allocation tag. This enables multi-cloud cost governance, resource category tracking, and organizational chargeback scenarios.
+
+#### Provider Budgets
+
+Set separate budgets for each cloud provider:
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    budget-amount: 2000
+    budget-currency: USD
+    budget-scopes: |
+      provider/aws: 1000
+      provider/gcp: 500
+      provider/azure: 500
+```
+
+#### Resource Type Budgets
+
+Track spending by resource category:
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    budget-amount: 2000
+    budget-scopes: |
+      type/compute: 1200
+      type/storage: 500
+      type/networking: 300
+```
+
+#### Tag-Based Budgets
+
+Enforce budgets by cost allocation tags:
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    budget-amount: 5000
+    budget-scopes: |
+      tag/env:prod: 3000
+      tag/env:staging: 1500
+      tag/env:dev: 500
+```
+
+#### Combined Scopes with Enforcement
+
+Mix all scope types and enable enforcement:
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    budget-amount: 10000
+    budget-scopes: |
+      provider/aws: 6000
+      provider/gcp: 4000
+      type/compute: 5000
+      tag/team:platform: 4000
+    fail-on-budget-scope-breach: true
+```
+
+**Scoped Budget Display:**
+
+When scoped budgets are configured, the PR comment includes a "Budget Status by Scope" table sorted by usage (highest first):
+
+| Scope | Spent | Budget | Status |
+|:------|------:|-------:|:------:|
+| provider/aws | $900.00 | $1,000.00 | 90% |
+| type/compute | $600.00 | $1,200.00 | 50% |
+| tag/env:prod | $800.00 | $800.00 | 100% |
+
+**Scoped Budget Inputs:**
+
+| Input | Description | Required | Default |
+| :--- | :--- | :--- | :--- |
+| `budget-scopes` | YAML multiline string of scope:amount pairs. | No | `""` |
+| `fail-on-budget-scope-breach` | Fail action if any scope exceeds budget. | No | `false` |
+
+**Scoped Budget Outputs:**
+
+| Output | Description |
+| :----- | :---------- |
+| `budget-scopes-status` | JSON array of scope statuses from finfocus CLI. |
+
+**Scope Format Reference:**
+
+| Type | Format | Example |
+|------|--------|---------|
+| Provider | `provider/{name}` | `provider/aws`, `provider/gcp`, `provider/azure` |
+| Type | `type/{category}` | `type/compute`, `type/storage`, `type/networking` |
+| Tag | `tag/{key:value}` | `tag/env:prod`, `tag/team:platform` |
+
+**Notes:**
+
+- Soft limit of 20 scopes recommended (warning logged if exceeded)
+- Scopes use the global currency and period settings
+- Resources can count toward multiple scopes (e.g., both `provider/aws` and `type/compute`)
+- Invalid scopes are logged as warnings and skipped
+
 ### Budget Threshold Exit Codes (finfocus v0.2.5+)
 
 When using finfocus v0.2.5 or higher with budget thresholds, the action interprets CLI exit codes for precise budget status:
@@ -206,6 +312,7 @@ For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for
 | `budget-forecast`        | Projected end-of-period spend.                                    |
 | `budget-runway-days`     | Days until budget exhausted at current rate.                      |
 | `budget-status`          | Budget health status: `healthy`, `warning`, `critical`, `exceeded`. |
+| `budget-scopes-status`   | JSON array of scoped budget statuses (finfocus v0.2.6+).          |
 
 ## Development
 

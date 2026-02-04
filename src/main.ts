@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport, BudgetHealthReport } from './types.js';
+import { ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport, BudgetHealthReport, ScopedBudgetReport } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
@@ -144,6 +144,11 @@ async function run(): Promise<void> {
     const showBudgetForecastRaw = core.getInput('show_budget_forecast');
     const showBudgetForecast = parseBoolean(showBudgetForecastRaw, true);
 
+    // Scoped budgets (finfocus v0.2.6+)
+    const budgetScopes = core.getInput('budget_scopes') || '';
+    const failOnBudgetScopeBreachRaw = core.getInput('fail_on_budget_scope_breach');
+    const failOnBudgetScopeBreach = parseBoolean(failOnBudgetScopeBreachRaw, false);
+
     config = {
       pulumiPlanJsonPath,
       githubToken,
@@ -172,6 +177,8 @@ async function run(): Promise<void> {
       budgetAlertThreshold,
       failOnBudgetHealth,
       showBudgetForecast,
+      budgetScopes,
+      failOnBudgetScopeBreach,
     };
 
     if (config.debug) {
@@ -424,6 +431,26 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
+    // Run scoped budget analysis if scopes are configured
+    let scopedBudgetReport: ScopedBudgetReport | undefined;
+    if (config.budgetScopes && config.budgetScopes.trim() !== '') {
+      core.info('');
+      core.startGroup('📊 Running scoped budget analysis');
+      const scopedBudgetStart = Date.now();
+      scopedBudgetReport = await analyzer.runScopedBudgetStatus(config);
+      if (config.debug) {
+        core.info(`Scoped budget analysis took: ${Date.now() - scopedBudgetStart}ms`);
+      }
+      if (scopedBudgetReport) {
+        core.setOutput('budget-scopes-status', JSON.stringify(scopedBudgetReport.scopes));
+        core.info(`📊 Scoped Budgets: ${scopedBudgetReport.scopes.length} scope(s) analyzed`);
+        if (scopedBudgetReport.failed.length > 0) {
+          core.warning(`${scopedBudgetReport.failed.length} scope(s) failed to process`);
+        }
+      }
+      core.endGroup();
+    }
+
     if (config.postComment && config.githubToken) {
       core.info('');
       core.startGroup('💬 Posting PR comment');
@@ -437,6 +464,7 @@ async function run(): Promise<void> {
         sustainabilityReport,
         budgetStatus,
         budgetHealth,
+        scopedBudgetReport,
       );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
@@ -497,6 +525,20 @@ async function run(): Promise<void> {
         throw new Error(errorMessage);
       }
       core.info(`✅ Budget health score meets threshold: ${config.failOnBudgetHealth}`);
+      core.endGroup();
+    }
+
+    // Check scoped budget breach if configured
+    if (config.failOnBudgetScopeBreach && scopedBudgetReport) {
+      core.info('');
+      core.startGroup('📊 Checking scoped budget guardrails');
+      const { checkScopedBudgetBreach } = await import('./guardrails.js');
+      const scopedResult = checkScopedBudgetBreach(scopedBudgetReport, config.failOnBudgetScopeBreach);
+
+      if (!scopedResult.passed) {
+        throw new Error(scopedResult.message);
+      }
+      core.info(`✅ All scoped budgets within limits`);
       core.endGroup();
     }
 

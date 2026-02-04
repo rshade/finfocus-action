@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
-import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport } from './types.js';
+import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport, ScopedBudgetReport } from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
 
 /**
@@ -288,5 +288,54 @@ export function checkBudgetHealthThreshold(
     passed: true,
     severity: 'none',
     message: `Budget health score ${score} meets threshold ${threshold}`,
+  };
+}
+
+/**
+ * Check if any scoped budget has been breached.
+ * A scope is considered breached if its percentUsed >= 100 and status is 'exceeded' or 'critical'.
+ * Failed scopes are excluded from breach evaluation.
+ *
+ * @param report - Scoped budget report from finfocus CLI
+ * @param failOnBreach - Whether to fail the action on breach
+ * @returns BudgetThresholdResult with pass/fail status
+ */
+export function checkScopedBudgetBreach(
+  report: ScopedBudgetReport | undefined,
+  failOnBreach: boolean,
+): BudgetThresholdResult {
+  // If no report or breach check disabled, pass
+  if (!report || !failOnBreach) {
+    return {
+      passed: true,
+      severity: 'none',
+      message: failOnBreach ? 'No scoped budget data available' : 'Scoped budget breach check disabled',
+    };
+  }
+
+  // Find breached scopes (percentUsed >= 100)
+  const breachedScopes = report.scopes.filter(
+    (s) => s.percentUsed >= 100 || s.status === 'exceeded' || s.status === 'critical',
+  );
+
+  if (breachedScopes.length === 0) {
+    return {
+      passed: true,
+      severity: 'none',
+      message: `All ${report.scopes.length} scoped budgets within limits`,
+    };
+  }
+
+  // Determine severity from worst breach
+  const hasExceeded = breachedScopes.some((s) => s.status === 'exceeded');
+  const hasCritical = breachedScopes.some((s) => s.status === 'critical');
+  const severity = hasExceeded ? 'exceeded' : hasCritical ? 'critical' : 'warning';
+
+  const scopeNames = breachedScopes.map((s) => s.scope).join(', ');
+
+  return {
+    passed: false,
+    severity,
+    message: `Budget exceeded for scopes: ${scopeNames}`,
   };
 }
