@@ -110,6 +110,20 @@ inputs:
     description: 'Display budget forecast in PR comment'
     required: false
     default: 'true'
+  budget-scopes:
+    description: |
+      YAML multiline string of scoped budgets. Each line is "scope: amount".
+      Scope formats: provider/aws, type/compute, tag/env:prod
+      Example:
+        provider/aws: 1000
+        provider/gcp: 500
+        type/compute: 1200
+    required: false
+    default: ''
+  fail-on-budget-scope-breach:
+    description: 'Fail the action if any scoped budget is exceeded (true/false)'
+    required: false
+    default: 'false'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -165,6 +179,9 @@ outputs:
   budget-status:
     description: "Budget health status: 'healthy' | 'warning' | 'critical' | 'exceeded'"
     value: ${{ steps.run.outputs.budget-status }}
+  budget-scopes-status:
+    description: 'JSON array of scoped budget statuses from finfocus CLI'
+    value: ${{ steps.run.outputs.budget-scopes-status }}
 
 runs:
   using: 'composite'
@@ -201,6 +218,8 @@ runs:
         INPUT_BUDGET_ALERT_THRESHOLD: ${{ inputs.budget-alert-threshold }}
         INPUT_FAIL_ON_BUDGET_HEALTH: ${{ inputs.fail-on-budget-health }}
         INPUT_SHOW_BUDGET_FORECAST: ${{ inputs.show-budget-forecast }}
+        INPUT_BUDGET_SCOPES: ${{ inputs.budget-scopes }}
+        INPUT_FAIL_ON_BUDGET_SCOPE_BREACH: ${{ inputs.fail-on-budget-scope-breach }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

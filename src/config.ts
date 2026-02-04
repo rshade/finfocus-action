@@ -3,7 +3,106 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-import { ActionConfiguration, BudgetConfiguration, BudgetAlert } from './types.js';
+import { ActionConfiguration, BudgetConfiguration, BudgetAlert, BudgetScope, BudgetScopeType } from './types.js';
+
+/** Soft limit for number of scopes before warning is logged */
+export const SCOPE_SOFT_LIMIT = 20;
+
+/** Regex pattern for validating scope format: provider/aws, type/compute, tag/env:prod */
+const SCOPE_PATTERN = /^(provider|type|tag)\/([a-zA-Z0-9_:.-]+)$/;
+
+/**
+ * Parse budget scopes from YAML multiline input string.
+ * Each line should be in format: "scope: amount"
+ * Valid scope formats: provider/aws, type/compute, tag/env:prod
+ *
+ * Invalid scopes are logged as warnings and skipped.
+ * A warning is logged if more than SCOPE_SOFT_LIMIT scopes are configured.
+ *
+ * @param input - YAML multiline string of scope:amount pairs
+ * @returns Array of parsed BudgetScope objects
+ */
+export function parseBudgetScopes(input: string): BudgetScope[] {
+  if (!input || input.trim() === '') {
+    return [];
+  }
+
+  const scopes: BudgetScope[] = [];
+  const lines = input.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+
+  for (const line of lines) {
+    // Skip comment lines
+    if (line.startsWith('#')) {
+      continue;
+    }
+
+    // Parse "scope: amount" format
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) {
+      core.warning(`Invalid scope format (missing colon): "${line}". Skipping.`);
+      continue;
+    }
+
+    // Handle tag scopes that may have colons in the value (e.g., tag/env:prod: 1000)
+    // For tag scopes, split on the last colon before the amount
+    // Format: tag/key:value: amount OR provider/name: amount
+    const scopeKey = line.substring(0, colonIndex).trim();
+    const amountStr = line.substring(colonIndex + 1).trim();
+
+    // Check if this might be a tag scope with a value that contains colons
+    // We need to find where the scope ends and the amount begins
+    // tag/k8s:app:nginx: 500 -> scope = tag/k8s:app:nginx, amount = 500
+    let scope = scopeKey;
+    let amount = parseFloat(amountStr);
+
+    // If amount is not a valid number, it might be part of the scope (tag value)
+    // Keep looking for the actual amount at the end
+    if (isNaN(amount) && amountStr.includes(':')) {
+      // Try to find the last colon that separates scope from amount
+      const fullLine = line;
+      const lastColonIndex = fullLine.lastIndexOf(':');
+      if (lastColonIndex > colonIndex) {
+        scope = fullLine.substring(0, lastColonIndex).trim();
+        amount = parseFloat(fullLine.substring(lastColonIndex + 1).trim());
+      }
+    }
+
+    // Validate scope format
+    const match = scope.match(SCOPE_PATTERN);
+    if (!match) {
+      core.warning(
+        `Invalid scope format: "${scope}". Expected: provider/*, type/*, or tag/*. Skipping.`,
+      );
+      continue;
+    }
+
+    // Validate amount
+    if (isNaN(amount) || amount <= 0) {
+      core.warning(`Invalid amount for scope "${scope}": "${amountStr}". Must be a positive number. Skipping.`);
+      continue;
+    }
+
+    const scopeType = match[1] as BudgetScopeType;
+    const scopeValue = match[2];
+
+    scopes.push({
+      scope,
+      scopeType,
+      scopeKey: scopeValue,
+      amount,
+    });
+  }
+
+  // Warn if exceeding soft limit
+  if (scopes.length > SCOPE_SOFT_LIMIT) {
+    core.warning(
+      `Configured ${scopes.length} scopes (exceeds recommended limit of ${SCOPE_SOFT_LIMIT}). ` +
+        `Performance and PR comment readability may be impacted.`,
+    );
+  }
+
+  return scopes;
+}
 
 export interface IConfigManager {
   writeConfig(config: ActionConfiguration): Promise<void>;
@@ -29,6 +128,12 @@ export class ConfigManager implements IConfigManager {
     // Parse and validate inputs
     const budgetConfig = this.parseBudgetConfig(config);
 
+    // Parse scoped budgets if configured
+    const scopes = config.budgetScopes ? parseBudgetScopes(config.budgetScopes) : [];
+    if (debug && scopes.length > 0) {
+      core.info(`  Parsed ${scopes.length} scoped budgets`);
+    }
+
     // Define config directory
     const configDir = path.join(os.homedir(), '.finfocus');
     if (debug) core.info(`  Config directory: ${configDir}`);
@@ -40,7 +145,7 @@ export class ConfigManager implements IConfigManager {
     }
 
     // Generate YAML content
-    const yamlContent = this.generateYaml(budgetConfig);
+    const yamlContent = this.generateYaml(budgetConfig, scopes);
 
     // Write config file
     const configPath = path.join(configDir, 'config.yaml');
@@ -126,7 +231,7 @@ export class ConfigManager implements IConfigManager {
     }
   }
 
-  private generateYaml(config: BudgetConfiguration): string {
+  private generateYaml(config: BudgetConfiguration, scopes?: BudgetScope[]): string {
     const lines: string[] = [];
 
     lines.push('# finfocus budget configuration');
@@ -142,6 +247,15 @@ export class ConfigManager implements IConfigManager {
       for (const alert of config.alerts) {
         lines.push(`    - threshold: ${alert.threshold}`);
         lines.push(`      type: ${alert.type}`);
+      }
+    }
+
+    // Add scoped budgets section if configured
+    if (scopes && scopes.length > 0) {
+      lines.push('  scopes:');
+      for (const scope of scopes) {
+        lines.push(`    ${scope.scope}:`);
+        lines.push(`      amount: ${scope.amount}`);
       }
     }
 

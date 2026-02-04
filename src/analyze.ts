@@ -14,8 +14,15 @@ import {
   BudgetHealthReport,
   BudgetHealthStatus,
   FinfocusBudgetStatusResponse,
+  ScopedBudgetReport,
+  ScopedBudgetStatus,
+  ScopedBudgetFailure,
+  FinfocusScopedBudgetResponse,
+  FinfocusScopeEntry,
+  BudgetScopeType,
 } from './types.js';
-import { getFinfocusVersion, supportsExitCodes } from './install.js';
+import { getFinfocusVersion, supportsExitCodes, supportsScopedBudgets } from './install.js';
+import { parseBudgetScopes } from './config.js';
 import { getCurrencySymbol } from './formatter.js';
 
 export class Analyzer implements IAnalyzer {
@@ -897,6 +904,130 @@ export class Analyzer implements IAnalyzer {
       return 'critical';
     } else {
       return 'exceeded';
+    }
+  }
+
+  // ============================================================================
+  // Scoped Budgets (finfocus v0.2.6+)
+  // ============================================================================
+
+  /**
+   * Run scoped budget status analysis using finfocus CLI.
+   * Returns ScopedBudgetReport with status for each configured scope.
+   * Returns undefined if no scopes are configured or CLI version is too old.
+   */
+  async runScopedBudgetStatus(config: ActionConfiguration): Promise<ScopedBudgetReport | undefined> {
+    // Check if scopes are configured
+    if (!config.budgetScopes || config.budgetScopes.trim() === '') {
+      return undefined;
+    }
+
+    const scopes = parseBudgetScopes(config.budgetScopes);
+    if (scopes.length === 0) {
+      return undefined;
+    }
+
+    const debug = config?.debug === true;
+    if (debug) {
+      core.info('=== Running scoped budget status analysis ===');
+      core.info(`  Configured ${scopes.length} scopes`);
+    }
+
+    // Check finfocus version
+    const version = await getFinfocusVersion();
+    if (!supportsScopedBudgets(version)) {
+      const errorMsg = `Scoped budgets require finfocus v0.2.6+. Current version: ${version}`;
+      throw new Error(errorMsg);
+    }
+
+    // Run finfocus budget status --output json
+    const args = ['budget', 'status', '--output', 'json'];
+    if (debug) {
+      core.info(`  Command: finfocus ${args.join(' ')}`);
+    }
+
+    const output = await exec.getExecOutput('finfocus', args, {
+      silent: !debug,
+      ignoreReturnCode: true,
+    });
+
+    if (output.exitCode !== 0) {
+      if (debug) {
+        core.info(`  finfocus budget status failed with exit code ${output.exitCode}`);
+        core.info(`  stderr: ${output.stderr}`);
+      }
+      core.warning(`finfocus budget status failed: ${output.stderr}`);
+      return {
+        scopes: [],
+        failed: scopes.map((s) => ({ scope: s.scope, error: output.stderr || 'Unknown error' })),
+      };
+    }
+
+    return this.parseScopedBudgetResponse(output.stdout, config);
+  }
+
+  /**
+   * Parse the JSON response from finfocus budget status command for scoped budgets.
+   * Handles both wrapped (finfocus key) and unwrapped formats.
+   */
+  parseScopedBudgetResponse(
+    stdout: string,
+    config?: ActionConfiguration,
+  ): ScopedBudgetReport {
+    const debug = config?.debug === true;
+
+    if (!stdout || stdout.trim() === '') {
+      if (debug) {
+        core.info('  Empty stdout from finfocus budget status');
+      }
+      return { scopes: [], failed: [] };
+    }
+
+    try {
+      const parsed = JSON.parse(stdout) as FinfocusScopedBudgetResponse;
+
+      // Handle wrapped format (finfocus v0.2.4+)
+      const scopeEntries = parsed.finfocus?.scopes ?? parsed.scopes ?? [];
+      const errorEntries = parsed.finfocus?.errors ?? parsed.errors ?? [];
+
+      if (debug) {
+        core.info(`  Found ${scopeEntries.length} scope entries, ${errorEntries.length} errors`);
+      }
+
+      // Map scope entries to ScopedBudgetStatus
+      const scopes: ScopedBudgetStatus[] = scopeEntries.map((entry: FinfocusScopeEntry) => {
+        const scopeType = entry.type as BudgetScopeType;
+        return {
+          scope: entry.scope,
+          scopeType,
+          scopeKey: entry.key,
+          spent: entry.spent,
+          budget: entry.budget,
+          currency: entry.currency,
+          percentUsed: entry.percent_used,
+          status: entry.status as BudgetHealthStatus,
+          alerts: (entry.alerts ?? []).map((a) => ({
+            threshold: a.threshold,
+            type: a.type as 'actual' | 'forecasted',
+            triggered: a.triggered,
+          })),
+        };
+      });
+
+      // Map error entries to ScopedBudgetFailure
+      const failed: ScopedBudgetFailure[] = errorEntries.map((e) => ({
+        scope: e.scope,
+        error: e.error,
+      }));
+
+      return { scopes, failed };
+    } catch (err) {
+      if (debug) {
+        core.info(`  Failed to parse scoped budget JSON: ${err instanceof Error ? err.message : String(err)}`);
+        core.info(`  Raw stdout: ${stdout.substring(0, 500)}`);
+      }
+      core.warning(`Failed to parse finfocus scoped budget response: ${err instanceof Error ? err.message : String(err)}`);
+      return { scopes: [], failed: [] };
     }
   }
 

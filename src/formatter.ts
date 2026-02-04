@@ -8,6 +8,9 @@ import {
   BudgetStatus,
   BudgetHealthReport,
   Recommendation,
+  ScopedBudgetReport,
+  ScopedBudgetStatus,
+  BudgetHealthStatus,
 } from './types.js';
 
 /**
@@ -323,6 +326,81 @@ function formatBudgetHealthSection(
   return '\n' + lines.join('\n') + '\n';
 }
 
+// ============================================================================
+// Scoped Budget Formatting (finfocus v0.2.6+)
+// ============================================================================
+
+/**
+ * Get status icon for scoped budget based on health status.
+ * @param status - Health status value
+ * @returns Emoji icon for the status
+ */
+export function getScopeStatusIcon(status: BudgetHealthStatus): string {
+  const icons: Record<BudgetHealthStatus, string> = {
+    healthy: '🟢',
+    warning: '🟡',
+    critical: '🔴',
+    exceeded: '⛔',
+  };
+  return icons[status] || '❓';
+}
+
+/**
+ * Format a single scope row for the table.
+ */
+function formatScopeRow(scope: ScopedBudgetStatus): string {
+  const currencySymbol = getCurrencySymbol(scope.currency);
+  const icon = getScopeStatusIcon(scope.status);
+  const percentDisplay = scope.percentUsed.toFixed(0);
+
+  return `| ${scope.scope} | ${currencySymbol}${scope.spent.toFixed(2)} | ${currencySymbol}${scope.budget.toFixed(2)} | ${icon} ${percentDisplay}% |`;
+}
+
+/**
+ * Format the scoped budget section for PR comments.
+ * Displays a "Budget Status by Scope" table sorted by percentUsed descending.
+ *
+ * @param report - Scoped budget report from finfocus CLI
+ * @returns Markdown string with scope budget table, or empty string if no scopes/failures
+ */
+export function formatScopedBudgetSection(
+  report: ScopedBudgetReport | undefined,
+): string {
+  if (!report || (report.scopes.length === 0 && report.failed.length === 0)) {
+    return '';
+  }
+
+  // Sort scopes by percentUsed descending (highest usage first)
+  const sortedScopes = [...report.scopes].sort((a, b) => b.percentUsed - a.percentUsed);
+
+  // Build table rows
+  const tableRows = sortedScopes.map((scope) => formatScopeRow(scope)).join('\n');
+
+  // Build section
+  let section = '\n### 📊 Budget Status by Scope\n';
+
+  // Only include table if there are successful scopes
+  if (sortedScopes.length > 0) {
+    section += `
+| Scope | Spent | Budget | Status |
+|:------|------:|-------:|:------:|
+${tableRows}
+`;
+  }
+
+  // Add failed scopes warning if any
+  if (report.failed.length > 0) {
+    section += `
+> **Note:** ${report.failed.length} scope(s) failed to process:
+`;
+    for (const failure of report.failed) {
+      section += `> - \`${failure.scope}\`: ${failure.error}\n`;
+    }
+  }
+
+  return section;
+}
+
 /**
  * Render the Sustainability section as a Markdown string for inclusion in the comment body.
  *
@@ -418,6 +496,7 @@ ${equivalentsSection}${resourceTable}
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional basic budget status used when detailed budget health is not provided
  * @param budgetHealth - Optional detailed budget health report used in preference to budgetStatus
+ * @param scopedBudgetReport - Optional scoped budget report with per-scope status (finfocus v0.2.6+)
  * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget/budget health, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
  */
 export function formatCommentBody(
@@ -428,6 +507,7 @@ export function formatCommentBody(
   sustainabilityReport?: SustainabilityReport,
   budgetStatus?: BudgetStatus,
   budgetHealth?: BudgetHealthReport,
+  scopedBudgetReport?: ScopedBudgetReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -592,6 +672,9 @@ ${recRows}
     ? formatBudgetHealthSection(budgetHealth, config)
     : formatBudgetSection(budgetStatus);
 
+  // Format scoped budget section (finfocus v0.2.6+)
+  const scopedBudgetSection = formatScopedBudgetSection(scopedBudgetReport);
+
   // Calculate percent used for dashboard (prefer health report, then budget status)
   const percentUsed = budgetHealth?.percentUsed ?? budgetStatus?.percentUsed;
 
@@ -605,7 +688,7 @@ ${recRows}
   return `## Cloud Cost Estimate
 
 ${dashboardSummary}
-${budgetSection}
+${budgetSection}${scopedBudgetSection}
 <details>
 <summary><strong>📈 Cost Details</strong></summary>
 

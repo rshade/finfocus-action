@@ -57,9 +57,11 @@ main.ts
         └─> Analyzer.runActualCosts()     # finfocus cost actual
         └─> Analyzer.extractBudgetStatus() # Optional: extract budget info from output
         └─> Analyzer.runBudgetStatus()    # Optional: budget health (v0.2.5+)
-        └─> Commenter.upsertComment()     # GitHub API (includes budget status and health)
+        └─> Analyzer.runScopedBudgetStatus() # Optional: scoped budgets (v0.2.6+)
+        └─> Commenter.upsertComment()     # GitHub API (includes budget status, health, scoped)
         └─> checkBudgetThreshold()  # Guardrails (uses exit codes for v0.2.5+, JSON fallback for older)
         └─> checkBudgetHealthThreshold()  # Guardrails (fail if health score below threshold)
+        └─> checkScopedBudgetBreach()     # Guardrails (fail if any scope exceeds budget)
 ```
 
 ### Key Interfaces (types.ts)
@@ -77,6 +79,11 @@ main.ts
 - `BudgetHealthStatus`: Type for health status levels ('healthy' | 'warning' | 'critical' | 'exceeded')
 - `BudgetHealthReport`: Extended budget status with healthScore, forecast, forecastAmount, runwayDays
 - `FinfocusBudgetStatusResponse`: Raw JSON response from finfocus budget status command
+- `BudgetScopeType`: Type for scope categories ('provider' | 'type' | 'tag')
+- `BudgetScope`: Parsed scope configuration with scope, scopeType, scopeKey, amount
+- `ScopedBudgetStatus`: Status of a single scope with spent, budget, percentUsed, status
+- `ScopedBudgetReport`: Collection of scope statuses and failed scopes
+- `FinfocusScopedBudgetResponse`: Raw JSON response with scopes array
 
 ## Code Conventions
 
@@ -120,6 +127,7 @@ main.ts
 ## Active Technologies
 - TypeScript 5.9+ (ES2022 target, NodeNext module resolution) + @actions/core ^2.0.2, @actions/exec ^2.0.0, @actions/github ^7.0.0, @actions/tool-cache ^3.0.0 (001-budget-health-suite)
 - N/A (stateless action) (001-budget-health-suite)
+- N/A (stateless action - config written to ~/.finfocus/config.yaml) (001-scoped-budgets)
 
 - TypeScript 5.9+ (ES modules) + @actions/core, @actions/exec (for running finfocus CLI)
 
@@ -135,3 +143,15 @@ main.ts
   - TUI box display with progress bar and runway information
 
 - 001-guardrails-exit-codes: Implemented budget threshold checking with finfocus exit codes (v0.2.5+). Added `BudgetExitCode` enum, `BudgetThresholdResult` interface, `checkBudgetThreshold()` orchestrator, and backward-compatible JSON fallback for older versions.
+
+- 001-scoped-budgets: Implemented scoped budget support for finfocus v0.2.6+:
+  - Added `BudgetScopeType`, `BudgetScope`, `ScopedBudgetStatus`, `ScopedBudgetAlert`, `ScopedBudgetReport`, `ScopedBudgetFailure`, `FinfocusScopedBudgetResponse`, `FinfocusScopeEntry` types
+  - Added `parseBudgetScopes()` function in config.ts for YAML multiline input parsing
+  - Extended `generateYaml()` to include `budget.scopes` section
+  - Added `runScopedBudgetStatus()` and `parseScopedBudgetResponse()` to Analyzer
+  - Added `formatScopedBudgetSection()` and `getScopeStatusIcon()` to formatter
+  - Added `checkScopedBudgetBreach()` to guardrails for fail-on-budget-scope-breach
+  - New action inputs: budget-scopes, fail-on-budget-scope-breach
+  - New action output: budget-scopes-status
+  - Version check fails action if scopes configured but CLI < v0.2.6
+  - Soft limit warning at >20 scopes
