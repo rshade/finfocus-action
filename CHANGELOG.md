@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.1.0...finfocus-action-v1.2.0) (2026-02-05)
+
+
+### Added
+
+* **budget:** support scoped budgets (per-provider, per-type, per-tag) ([#59](https://github.com/rshade/finfocus-action/issues/59)) ([f822ce7](https://github.com/rshade/finfocus-action/commit/f822ce709490eda88f691cbeb5a4a9fe1210f133)), closes [#47](https://github.com/rshade/finfocus-action/issues/47)
+
+
+### Fixed
+
+* **ci:** prevent changelog duplication by building dist into release PR ([#61](https://github.com/rshade/finfocus-action/issues/61)) ([de0869e](https://github.com/rshade/finfocus-action/commit/de0869e63e9110d541cf5a5f6d21e23852434899)), closes [#58](https://github.com/rshade/finfocus-action/issues/58)
+* **deps:** update dependency @actions/exec to v3 ([#41](https://github.com/rshade/finfocus-action/issues/41)) ([d2c4935](https://github.com/rshade/finfocus-action/commit/d2c4935cb80d88b8e4b7a10813d01b6c83eafa7a))
+* **formatter:** calculate achievable savings excluding mutually exclu… ([#57](https://github.com/rshade/finfocus-action/issues/57)) ([a1da5b9](https://github.com/rshade/finfocus-action/commit/a1da5b9c3525f4a5f65aebeedd88d28919185b74))
+
 ## [1.1.0](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.0.0...finfocus-action-v1.1.0) (2026-02-03)
 
 
