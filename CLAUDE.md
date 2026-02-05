@@ -128,6 +128,7 @@ main.ts
 - TypeScript 5.9+ (ES2022 target, NodeNext module resolution) + @actions/core ^2.0.2, @actions/exec ^2.0.0, @actions/github ^7.0.0, @actions/tool-cache ^3.0.0 (001-budget-health-suite)
 - N/A (stateless action) (001-budget-health-suite)
 - N/A (stateless action - config written to ~/.finfocus/config.yaml) (001-scoped-budgets)
+- GitHub Actions YAML + Bash + googleapis/release-please-action@v4, actions/checkout@v6, actions/setup-node@v6 (001-fix-release-dist)
 
 - TypeScript 5.9+ (ES modules) + @actions/core, @actions/exec (for running finfocus CLI)
 

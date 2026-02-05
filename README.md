@@ -314,6 +314,25 @@ For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for
 | `budget-status`          | Budget health status: `healthy`, `warning`, `critical`, `exceeded`. |
 | `budget-scopes-status`   | JSON array of scoped budget statuses (finfocus v0.2.6+).          |
 
+## Release Workflow
+
+Releases are automated via [release-please](https://github.com/googleapis/release-please-action). The workflow has three jobs:
+
+1. **release-please**: Creates or updates a release PR with version bumps and changelog
+2. **update-dist**: When a release PR exists, checks out the PR branch, builds `dist/`, and commits it back. This ensures the compiled action is included in the release without creating orphaned commits
+3. **update-tags**: After a release is published, updates the floating `v1` and `v1.x` tags so consumers using `@v1` get the latest release
+
+### Prerequisites
+
+A Personal Access Token (PAT) named `RELEASE_PLEASE_TOKEN` must be configured as a repository secret with:
+
+- `contents: write` permission
+- `workflows` scope (required to push commits that modify workflow files)
+
+### Important
+
+Do not manually merge release PRs before the `update-dist` job completes. The job adds the compiled `dist/` directory to the PR branch, and merging early would result in a release without the built action.
+
 ## Development
 
 ```bash
