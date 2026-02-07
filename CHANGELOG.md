@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.2.0...finfocus-action-v1.2.1) (2026-02-07)
+
+
+### Fixed
+
+* **ci:** use npm install instead of npm ci in update-tags job ([#67](https://github.com/rshade/finfocus-action/issues/67)) ([0481f70](https://github.com/rshade/finfocus-action/commit/0481f70125c21d3b7872c29b31b22dc42346a80c))
+
 ## [1.2.0](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.1.0...finfocus-action-v1.2.0) (2026-02-05)
 
 
