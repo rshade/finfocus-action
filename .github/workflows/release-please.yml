@@ -34,10 +34,8 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Build dist/ and update floating version tags (v1, v1.2) after a release.
-  # The release-please tag (finfocus-action-v*) stays on main (no dist/).
-  # Floating consumer tags point to a separate commit with dist/ built,
-  # so consumers using @v1 or @v1.2 get the compiled action.
+  # Update floating version tags (v1, v1.2) after a release.
+  # dist/ is committed to main, so no build step is needed.
   update-tags:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
@@ -48,22 +46,10 @@ jobs:
           ref: ${{ needs.release-please.outputs.tag_name }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: '.nvmrc'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build dist
-        run: npm run build
-
-      - name: Create floating tags with dist
+      - name: Update floating tags
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f dist/
-          git commit -m "chore: build dist for release ${{ needs.release-please.outputs.tag_name }}"
           git tag -f v${{ needs.release-please.outputs.major }}
           git push -f origin v${{ needs.release-please.outputs.major }}
           git tag -f v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}
