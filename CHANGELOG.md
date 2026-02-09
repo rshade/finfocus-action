@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.2.1...finfocus-action-v1.2.2) (2026-02-09)
+
+
+### Fixed
+
+* **ci:** commit dist/ to main and simplify release workflow ([#71](https://github.com/rshade/finfocus-action/issues/71)) ([c513366](https://github.com/rshade/finfocus-action/commit/c513366b28ac1da0e20bbeeae0154ae0d29c3b63)), closes [#58](https://github.com/rshade/finfocus-action/issues/58)
+
 ## [1.2.1](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.2.0...finfocus-action-v1.2.1) (2026-02-07)
 
 
