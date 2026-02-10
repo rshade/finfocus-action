@@ -1,0 +1,57 @@
+name: "Demo: Analyzer Mode (local)"
+
+on:
+  pull_request:
+    paths: ['examples/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  analyzer-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v6
+
+      - name: Login to Pulumi local backend
+        run: pulumi login --local
+
+      - name: Install AWS Pulumi plugin
+        run: pulumi plugin install resource aws
+        working-directory: examples/pulumi-aws-demo
+
+      - name: Initialize stack
+        run: pulumi stack init dev --non-interactive || pulumi stack select dev
+        working-directory: examples/pulumi-aws-demo
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ""
+
+      - name: Setup FinFocus Analyzer Mode
+        id: finfocus
+        uses: ./
+        with:
+          analyzer-mode: "true"
+          install-plugins: aws-public
+
+      - name: Run Pulumi Preview with Cost Analysis
+        uses: pulumi/actions@v6
+        with:
+          command: preview
+          stack-name: dev
+          comment-on-pr: true
+          work-dir: examples/pulumi-aws-demo
+          policyPacks: ${{ steps.finfocus.outputs.policy-pack-path }}
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ""

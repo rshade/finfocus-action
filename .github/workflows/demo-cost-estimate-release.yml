@@ -1,0 +1,62 @@
+name: "Demo: Cost Estimate (release)"
+
+on:
+  pull_request:
+    paths: ['examples/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  cost-estimate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v6
+
+      - name: Login to Pulumi local backend
+        run: pulumi login --local
+
+      - name: Install AWS Pulumi plugin
+        run: pulumi plugin install resource aws
+        working-directory: examples/pulumi-aws-demo
+
+      - name: Initialize stack
+        run: pulumi stack init dev --non-interactive || pulumi stack select dev
+        working-directory: examples/pulumi-aws-demo
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ""
+
+      - name: Generate preview JSON
+        run: |
+          pulumi preview --json --non-interactive --logtostderr > plan.json
+          python3 -c "import json; json.load(open('plan.json'))" || { echo "Invalid JSON"; cat plan.json; exit 1; }
+        working-directory: examples/pulumi-aws-demo
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ""
+
+      - name: Run FinFocus Cost Estimation
+        uses: rshade/finfocus-action@v1
+        with:
+          pulumi-plan-json: examples/pulumi-aws-demo/plan.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          install-plugins: aws-public
+          post-comment: "true"
+          include-recommendations: true
+          budget-amount: 105
+          budget-currency: USD
+          budget-period: monthly
+          budget-alert-threshold: 80
+          fail-on-budget-health: 50
+          show-budget-forecast: true

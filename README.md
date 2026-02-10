@@ -314,6 +314,18 @@ For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for
 | `budget-status`          | Budget health status: `healthy`, `warning`, `critical`, `exceeded`. |
 | `budget-scopes-status`   | JSON array of scoped budget statuses (finfocus v0.2.6+).          |
 
+## Examples
+
+### Pulumi AWS Demo
+
+A complete working example is available in
+[`examples/pulumi-aws-demo/`](examples/pulumi-aws-demo/).
+It provisions sample AWS EC2 infrastructure and demonstrates
+both Standard Mode and Analyzer Mode with budget tracking.
+
+See the [example README](examples/pulumi-aws-demo/README.md)
+for setup instructions.
+
 ## Release Workflow
 
 Releases are automated via [release-please](https://github.com/googleapis/release-please-action). The workflow has three jobs:
