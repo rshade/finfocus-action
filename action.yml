@@ -149,6 +149,9 @@ outputs:
   budget-percent-used:
     description: 'Percentage of budget used'
     value: ${{ steps.run.outputs.budget-percent-used }}
+  unpriced-resource-count:
+    description: 'Number of resources that could not be priced'
+    value: ${{ steps.run.outputs.unpriced-resource-count }}
 
 runs:
   using: 'composite'

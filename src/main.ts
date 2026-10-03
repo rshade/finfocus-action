@@ -319,9 +319,20 @@ async function run(): Promise<void> {
     core.setOutput('currency', currency);
     core.info(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
 
+    // Set unpriced resource count (v0.4.1)
+    const unpricedCount = report.errors?.length ?? 0;
+    core.setOutput('unpriced-resource-count', unpricedCount.toString());
+    if (unpricedCount > 0) {
+      core.info(`⚠️  ${unpricedCount} resource(s) could not be priced`);
+    }
+
     if (report.diff) {
-      core.setOutput('cost-diff', report.diff.monthly_cost_change.toString());
-      core.info(`📈 Cost change: ${report.diff.monthly_cost_change} ${currency}`);
+      // Handle both new v0.4.1 format and legacy format
+      const monthlyChange = 'monthly_cost_change' in report.diff
+        ? (report.diff as any).monthly_cost_change
+        : (report.diff as any).totalDelta ?? 0;
+      core.setOutput('cost-diff', monthlyChange.toString());
+      core.info(`📈 Cost change: ${monthlyChange} ${currency}`);
     }
 
     let sustainabilityReport: SustainabilityReport | undefined;

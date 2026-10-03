@@ -36932,7 +36932,10 @@ class Analyzer {
                 main_core/* info */.pq(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
                 main_core/* info */.pq(`  currency: ${report.currency}`);
                 if (report.diff) {
-                    main_core/* info */.pq(`  diff.monthly_cost_change: ${report.diff.monthly_cost_change}`);
+                    const diffChange = 'monthly_cost_change' in report.diff
+                        ? report.diff.monthly_cost_change
+                        : report.diff.totalDelta;
+                    main_core/* info */.pq(`  diff change: ${diffChange}`);
                 }
             }
             return report;
@@ -41964,6 +41967,74 @@ ${detailParts.join(' · ')}
 ${deltasTable}`;
 }
 /**
+ * Extract monthly cost change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * @param diff - The diff object from the report
+ * @returns The monthly cost change, or 0 if not available
+ */
+function extractMonthlyCostChange(diff) {
+    if (!diff)
+        return 0;
+    // v0.4.1 format: totalDelta
+    if ('totalDelta' in diff)
+        return diff.totalDelta;
+    // v0.4.0 format: monthly_cost_change
+    if ('monthly_cost_change' in diff)
+        return diff.monthly_cost_change;
+    return 0;
+}
+/**
+ * Extract percent change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * @param diff - The diff object from the report
+ * @returns The percent change, or 0 if not available
+ */
+function extractPercentChange(diff) {
+    if (!diff)
+        return 0;
+    // v0.4.1 format: no percent field, need to calculate from totalBefore/totalAfter
+    if ('totalBefore' in diff && 'totalAfter' in diff) {
+        if (diff.totalBefore === 0)
+            return diff.totalAfter > 0 ? 100 : 0;
+        return ((diff.totalAfter - diff.totalBefore) / diff.totalBefore) * 100;
+    }
+    // v0.4.0 format: percent_change
+    if ('percent_change' in diff)
+        return diff.percent_change;
+    return 0;
+}
+/**
+ * Format the unpriced resources section when resources could not be priced.
+ * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
+ * Includes a note that these resources are NOT included in the total cost.
+ *
+ * @param errors - Array of FinfocusReportError entries, or null/empty
+ * @returns Markdown string with the unpriced resources section, or empty string if no errors
+ */
+function formatUnpricedResourcesSection(errors) {
+    if (!errors || errors.length === 0) {
+        return '';
+    }
+    const displayErrors = errors.slice(0, 20);
+    const truncated = errors.length > 20 ? errors.length - 20 : 0;
+    const errorRows = displayErrors
+        .map((err) => {
+        const resourceIdShort = err.resourceId.split('::').pop() || err.resourceId;
+        return `| ${err.resourceType} | ${resourceIdShort} | ${err.pluginName} | ${err.message} |`;
+    })
+        .join('\n');
+    const truncatedNote = truncated > 0 ? `\nand ${truncated} more` : '';
+    return `
+<details>
+<summary><strong>⚠️ Resources Not Priced</strong> (${errors.length} ${errors.length === 1 ? 'resource' : 'resources'})</summary>
+
+| Type | Resource | Plugin | Reason |
+| :--- | :--- | :--- | :--- |
+${errorRows}${truncatedNote}
+
+*These resources could not be priced and are not included in the cost total above.*
+
+</details>`;
+}
+/**
  * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
  *
  * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
@@ -41980,14 +42051,16 @@ function formatCommentBody(report, config, recommendationsReport, actualCostRepo
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
     const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
     const total = totalMonthly.toFixed(2);
-    const diff = report.diff ? report.diff.monthly_cost_change.toFixed(2) : '0.00';
-    const percent = report.diff ? report.diff.percent_change.toFixed(2) : '0.00';
+    const monthlyCostChange = extractMonthlyCostChange(report.diff);
+    const percentChange = extractPercentChange(report.diff);
+    const diff = monthlyCostChange.toFixed(2);
+    const percent = percentChange.toFixed(2);
     let diffText = `${diff} ${currency}`;
     if (report.diff) {
-        if (report.diff.monthly_cost_change > 0) {
+        if (monthlyCostChange > 0) {
             diffText = `📈 +${diffText}`;
         }
-        else if (report.diff.monthly_cost_change < 0) {
+        else if (monthlyCostChange < 0) {
             diffText = `📉 ${diffText}`;
         }
     }
@@ -42118,6 +42191,7 @@ ${recRows}
         ? formatSustainabilitySection(sustainabilityReport, config, report)
         : '';
     const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
+    const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
     // Basic budget status section (local math; finfocus has no budget status command)
     const budgetSection = formatBudgetSection(budgetStatus);
     // Calculate percent used for dashboard from budget status
@@ -42141,7 +42215,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
@@ -42611,9 +42685,19 @@ async function run() {
         main_core/* setOutput */.uH('total-monthly-cost', totalMonthlyCost.toString());
         main_core/* setOutput */.uH('currency', currency);
         main_core/* info */.pq(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
+        // Set unpriced resource count (v0.4.1)
+        const unpricedCount = report.errors?.length ?? 0;
+        main_core/* setOutput */.uH('unpriced-resource-count', unpricedCount.toString());
+        if (unpricedCount > 0) {
+            main_core/* info */.pq(`⚠️  ${unpricedCount} resource(s) could not be priced`);
+        }
         if (report.diff) {
-            main_core/* setOutput */.uH('cost-diff', report.diff.monthly_cost_change.toString());
-            main_core/* info */.pq(`📈 Cost change: ${report.diff.monthly_cost_change} ${currency}`);
+            // Handle both new v0.4.1 format and legacy format
+            const monthlyChange = 'monthly_cost_change' in report.diff
+                ? report.diff.monthly_cost_change
+                : report.diff.totalDelta ?? 0;
+            main_core/* setOutput */.uH('cost-diff', monthlyChange.toString());
+            main_core/* info */.pq(`📈 Cost change: ${monthlyChange} ${currency}`);
         }
         let sustainabilityReport;
         if (config.includeSustainability) {

@@ -104,15 +104,32 @@ export interface FinfocusSummary {
     byAdapter?: Record<string, number>;
     resources?: FinfocusResource[];
 }
+export interface FinfocusReportError {
+    resourceType: string;
+    resourceId: string;
+    pluginName: string;
+    message: string;
+}
+export interface FinfocusReportDiff {
+    totalBefore: number;
+    totalAfter: number;
+    totalDelta: number;
+    currency: string;
+    creates: number;
+    updates: number;
+    deletes: number;
+    unchanged: number;
+}
 export interface FinfocusReport {
     summary: FinfocusSummary;
     resources?: FinfocusResource[];
-    projected_monthly_cost?: number;
-    currency?: string;
-    diff?: {
+    errors?: FinfocusReportError[] | null;
+    diff?: FinfocusReportDiff | {
         monthly_cost_change: number;
         percent_change: number;
     };
+    projected_monthly_cost?: number;
+    currency?: string;
 }
 export interface CostAssessment {
     totalMonthlyCost: number;

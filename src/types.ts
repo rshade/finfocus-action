@@ -116,16 +116,36 @@ export interface FinfocusSummary {
   resources?: FinfocusResource[];
 }
 
+export interface FinfocusReportError {
+  resourceType: string;
+  resourceId: string;
+  pluginName: string;
+  message: string;
+}
+
+export interface FinfocusReportDiff {
+  totalBefore: number;
+  totalAfter: number;
+  totalDelta: number;
+  currency: string;
+  creates: number;
+  updates: number;
+  deletes: number;
+  unchanged: number;
+}
+
 export interface FinfocusReport {
   summary: FinfocusSummary;
   resources?: FinfocusResource[];
-  // Legacy fields for backward compatibility
-  projected_monthly_cost?: number;
-  currency?: string;
-  diff?: {
+  // New fields for v0.4.1
+  errors?: FinfocusReportError[] | null;
+  diff?: FinfocusReportDiff | {
     monthly_cost_change: number;
     percent_change: number;
   };
+  // Legacy fields for backward compatibility
+  projected_monthly_cost?: number;
+  currency?: string;
 }
 
 export interface CostAssessment {
