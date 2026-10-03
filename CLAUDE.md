@@ -39,10 +39,10 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `install.ts` | `Installer` | Downloads finfocus binary from GitHub releases, caches with `@actions/tool-cache` |
 | `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI |
 | `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
-| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual`, `budget status` commands; calculates sustainability metrics; extracts budget status and health |
+| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual` commands; calculates sustainability metrics and budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
-| `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status, budget health |
-| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code); budget health threshold checks |
+| `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
+| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code) |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
 
 ### Data Flow
@@ -59,13 +59,10 @@ main.ts
         └─> Analyzer.calculateSustainabilityMetrics()
         └─> Analyzer.runRecommendations() # finfocus cost recommendations
         └─> Analyzer.runActualCosts()     # finfocus cost actual
+        └─> Analyzer.calculateBudgetStatus() # Local budget math (no CLI call)
         └─> Analyzer.extractBudgetStatus() # Optional: extract budget info from output
-        └─> Analyzer.runBudgetStatus()    # Optional: budget health (v0.2.5+)
-        └─> Analyzer.runScopedBudgetStatus() # Optional: scoped budgets (v0.2.6+)
-        └─> Commenter.upsertComment()     # GitHub API (includes budget status, health, scoped)
+        └─> Commenter.upsertComment()     # GitHub API (includes budget status)
         └─> checkBudgetThreshold()  # Guardrails (runs cost projected with --exit-on-threshold --exit-code 10, JSON fallback for older)
-        └─> checkBudgetHealthThreshold()  # Guardrails (fail if health score below threshold)
-        └─> checkScopedBudgetBreach()     # Guardrails (fail if any scope exceeds budget)
 ```
 
 ### Key Interfaces (types.ts)
@@ -81,14 +78,6 @@ main.ts
 - `BudgetExitCode`: Enum for threshold check exit codes (0=pass, 10=threshold breached; 10 is
   action-owned via `--exit-code`, finfocus v0.4.0 reserves 1=internal_error and 2=validation_error)
 - `BudgetThresholdResult`: Result of budget threshold check with severity and message
-- `BudgetHealthStatus`: Type for health status levels ('healthy' | 'warning' | 'critical' | 'exceeded')
-- `BudgetHealthReport`: Extended budget status with healthScore, forecast, forecastAmount, runwayDays
-- `FinfocusBudgetStatusResponse`: Raw JSON response from finfocus budget status command
-- `BudgetScopeType`: Type for scope categories ('provider' | 'type' | 'tag')
-- `BudgetScope`: Parsed scope configuration with scope, scopeType, scopeKey, amount
-- `ScopedBudgetStatus`: Status of a single scope with spent, budget, percentUsed, status
-- `ScopedBudgetReport`: Collection of scope statuses and failed scopes
-- `FinfocusScopedBudgetResponse`: Raw JSON response with scopes array
 
 ## Code Conventions
 
@@ -125,7 +114,10 @@ main.ts
   in the finfocus report
 - The analyzer mode creates a Pulumi policy pack at `~/.finfocus/analyzer/` with a binary named `pulumi-analyzer-policy-finfocus`
 - Budget tracking is opt-in: ConfigManager only runs when `budget-amount` is provided
-- Budget configuration is written to `~/.finfocus/config.yaml` for finfocus CLI to read
+- Budget configuration is written as `cost.budgets.global` in `~/.finfocus/config.yaml` (the
+  scoped schema finfocus v0.4.0 reads; a top-level `budget:` key is ignored)
+- finfocus v0.4.0 has no `budget status` command; budget health and scoped-budget features were
+  removed. Budget enforcement works via `--exit-on-threshold --exit-code 10` (action-owned)
 - Budget status extraction returns undefined when using `--output json` (forward compatible for
   future finfocus CLI support)
 - **JSON format compatibility**: finfocus v0.2.4+ wraps JSON output in a `"finfocus"` key. The

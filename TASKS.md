@@ -100,9 +100,10 @@ list the commands tried. Do not invent an exit code.
 
 **Status:** DONE — verify: `npx markdownlint-cli2 README.md CLAUDE.md TASKS.md`
 reports 0 issues. README gained a Compatibility section (tested: v0.4.0 pinned
-+ latest via the CI contract matrix); `action.yml` `finfocus-version` now says
-`latest` follows breaking changes. Required a `.markdownlint-cli2.jsonc` config
-+ reflow of 28 pre-existing over-long lines (decision logged in the report).
+and latest via the CI contract matrix); `action.yml` `finfocus-version` now
+says `latest` follows breaking changes. Required a `.markdownlint-cli2.jsonc`
+config and reflow of 28 pre-existing over-long lines (decision logged in the
+report).
 
 State the tested finfocus range in the README and `action.yml` input docs, and
 make the `finfocus-version` description say that `latest` follows breaking
@@ -130,7 +131,20 @@ fields, the delivery is a core issue draft in `.superpowers/issue-drafts/`
 
 ### AC-3.2 Remove or replace the dead calls
 
-**Status:** TODO. Depends on AC-3.1.
+**Status:** DONE (removed, not replaced — AC-3.1 is BLOCKED-ON-INPUT pending a
+core JSON budget field). Deleted `runBudgetStatus`/`runScopedBudgetStatus` and
+the budget-health + scoped-budget features (inputs `budget-alert-threshold`,
+`fail-on-budget-health`, `show-budget-forecast`, `budget-scopes`,
+`fail-on-budget-scope-breach`; outputs `budget-health-score`,
+`budget-forecast`, `budget-runway-days`, `budget-status`,
+`budget-scopes-status`; formatter/comment/guardrails pieces; 5 test files).
+`config.ts` now writes the schema finfocus actually reads
+(`cost.budgets.global`) instead of the ignored top-level `budget:` key.
+Verify: `npm test` (148 pass), `npm run lint`, markdownlint 0 issues, contract
+suite 18 checks including the new check 9 (every subcommand the action runs
+must exist in `finfocus --help`). Break check: added `budget status` to the
+check-9 list; suite failed naming it (`unknown command "budget"`); reverted.
+Kept: `calculateBudgetStatus` (local math) and the AC-2.x exit-code guardrail.
 
 Remove the two `budget status` calls and the features that cannot work, or
 replace them with the real source. Update `CLAUDE.md`, `README.md` and

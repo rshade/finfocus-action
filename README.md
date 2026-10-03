@@ -88,201 +88,13 @@ thresholds are exceeded.
 - `threshold`: Percentage of budget (0-100+)
 - `type`: `actual` (current spend) or `forecasted` (projected spend)
 
-When configured, the PR comment will include a budget status section showing:
+When configured, the PR comment includes a budget status section showing current spend vs. budget,
+remaining budget, usage percentage with a visual progress bar, and triggered alert notifications.
 
-### Budget Health Suite (finfocus v0.2.5+)
-
-The Budget Health Suite provides comprehensive budget monitoring with health scores, forecasting,
-and runway analysis. When enabled, the PR comment includes a TUI-style budget health display:
-
-```text
-╭────────────────────────────────────────────╮
-│ BUDGET HEALTH                              │
-│ ────────────────────────────────────────── │
-│ Health Score: 🟢 85/100                    │
-│ Budget: $2,000.00/monthly                  │
-│ Spent: $1,234.56 (62%)                     │
-│ Forecast: $1,890.00 (end of period)        │
-│ Runway: 12 days remaining                  │
-│                                            │
-│ █████████████████████░░░░░░░░░ 62%         │
-╰────────────────────────────────────────────╯
-```
-
-**Health Status Indicators:**
-
-| Status | Icon | Health Score | Description |
-| :----- | :--: | :----------- | :---------- |
-| Healthy | 🟢 | 80-100 | Normal operation |
-| Warning | 🟡 | 50-79 | Approaching limit |
-| Critical | 🔴 | 1-49 | Budget concerns |
-| Exceeded | ⛔ | 0 or spent > budget | Over budget |
-
-**Budget Health Configuration:**
-
-```yaml
-- uses: rshade/finfocus-action@v1
-  with:
-    pulumi-plan-json: plan.json
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    budget-amount: 2000
-    budget-currency: USD
-    budget-period: monthly
-    budget-alert-threshold: 80        # Trigger alert when usage exceeds 80%
-    fail-on-budget-health: 50         # Fail build if health score drops below 50
-    show-budget-forecast: true        # Show projected end-of-period spend
-```
-
-| Input | Description | Required | Default |
-| :--- | :--- | :--- | :--- |
-| `budget-alert-threshold` | Percentage threshold to trigger budget alert in PR comment. | No | `80` |
-| `fail-on-budget-health` | Fail action if budget health score falls below this value (0-100). | No | `""` |
-| `show-budget-forecast` | Display budget forecast in PR comment (`true`/`false`). | No | `true` |
-
-**Budget Health Outputs:**
-
-| Output | Description |
-| :----- | :---------- |
-| `budget-health-score` | Budget health score (0-100). |
-| `budget-forecast` | Projected end-of-period spend (e.g., "$1,890.00"). |
-| `budget-runway-days` | Days until budget exhausted at current rate. |
-| `budget-status` | Budget health status: `healthy`, `warning`, `critical`, or `exceeded`. |
-
-#### Example: Using Budget Health Outputs in Downstream Jobs
-
-```yaml
-jobs:
-  cost-estimate:
-    runs-on: ubuntu-latest
-    outputs:
-      health-score: ${{ steps.finfocus.outputs.budget-health-score }}
-      status: ${{ steps.finfocus.outputs.budget-status }}
-    steps:
-      - uses: rshade/finfocus-action@v1
-        id: finfocus
-        with:
-          pulumi-plan-json: plan.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          budget-amount: 2000
-
-  notify:
-    needs: cost-estimate
-    runs-on: ubuntu-latest
-    if: needs.cost-estimate.outputs.status == 'critical'
-    steps:
-      - run: |
-          echo "Budget health is critical! Score: ${{ needs.cost-estimate.outputs.health-score }}"
-          # Send notification to Slack, PagerDuty, etc.
-```
-
-### Scoped Budgets (finfocus v0.2.6+)
-
-Scoped budgets allow you to set granular budget limits per cloud provider, resource type, or cost
-allocation tag. This enables multi-cloud cost governance, resource category tracking, and
-organizational chargeback scenarios.
-
-#### Provider Budgets
-
-Set separate budgets for each cloud provider:
-
-```yaml
-- uses: rshade/finfocus-action@v1
-  with:
-    pulumi-plan-json: plan.json
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    budget-amount: 2000
-    budget-currency: USD
-    budget-scopes: |
-      provider/aws: 1000
-      provider/gcp: 500
-      provider/azure: 500
-```
-
-#### Resource Type Budgets
-
-Track spending by resource category:
-
-```yaml
-- uses: rshade/finfocus-action@v1
-  with:
-    pulumi-plan-json: plan.json
-    budget-amount: 2000
-    budget-scopes: |
-      type/compute: 1200
-      type/storage: 500
-      type/networking: 300
-```
-
-#### Tag-Based Budgets
-
-Enforce budgets by cost allocation tags:
-
-```yaml
-- uses: rshade/finfocus-action@v1
-  with:
-    pulumi-plan-json: plan.json
-    budget-amount: 5000
-    budget-scopes: |
-      tag/env:prod: 3000
-      tag/env:staging: 1500
-      tag/env:dev: 500
-```
-
-#### Combined Scopes with Enforcement
-
-Mix all scope types and enable enforcement:
-
-```yaml
-- uses: rshade/finfocus-action@v1
-  with:
-    pulumi-plan-json: plan.json
-    budget-amount: 10000
-    budget-scopes: |
-      provider/aws: 6000
-      provider/gcp: 4000
-      type/compute: 5000
-      tag/team:platform: 4000
-    fail-on-budget-scope-breach: true
-```
-
-**Scoped Budget Display:**
-
-When scoped budgets are configured, the PR comment includes a "Budget Status by Scope" table sorted
-by usage (highest first):
-
-| Scope | Spent | Budget | Status |
-|:------|------:|-------:|:------:|
-| provider/aws | $900.00 | $1,000.00 | 90% |
-| type/compute | $600.00 | $1,200.00 | 50% |
-| tag/env:prod | $800.00 | $800.00 | 100% |
-
-**Scoped Budget Inputs:**
-
-| Input | Description | Required | Default |
-| :--- | :--- | :--- | :--- |
-| `budget-scopes` | YAML multiline string of scope:amount pairs. | No | `""` |
-| `fail-on-budget-scope-breach` | Fail action if any scope exceeds budget. | No | `false` |
-
-**Scoped Budget Outputs:**
-
-| Output | Description |
-| :----- | :---------- |
-| `budget-scopes-status` | JSON array of scope statuses from finfocus CLI. |
-
-**Scope Format Reference:**
-
-| Type | Format | Example |
-|------|--------|---------|
-| Provider | `provider/{name}` | `provider/aws`, `provider/gcp`, `provider/azure` |
-| Type | `type/{category}` | `type/compute`, `type/storage`, `type/networking` |
-| Tag | `tag/{key:value}` | `tag/env:prod`, `tag/team:platform` |
-
-**Notes:**
-
-- Soft limit of 20 scopes recommended (warning logged if exceeded)
-- Scopes use the global currency and period settings
-- Resources can count toward multiple scopes (e.g., both `provider/aws` and `type/compute`)
-- Invalid scopes are logged as warnings and skipped
+> **Note:** The budget health and scoped-budget features were removed because finfocus has no
+> `budget status` command in v0.4.0. Budget enforcement works via `--exit-on-threshold` with the
+> action-owned exit code 10, and the action writes the budget as `cost.budgets.global` to
+> `~/.finfocus/config.yaml`.
 
 ### Budget Threshold Exit Codes
 
@@ -299,13 +111,6 @@ does not interpret finfocus exit codes as budget severities. Instead it runs
 
 For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks,
 maintaining backward compatibility.
-
-**Budget Status Display (when budget configured):**
-
-- Current spend vs. budget
-- Remaining budget
-- Usage percentage with visual progress bar
-- Triggered alert notifications
 
 ## Compatibility
 
@@ -337,11 +142,6 @@ released binaries.
 | `budget-spent`           | Current budget spend amount.                                      |
 | `budget-remaining`       | Remaining budget amount.                                          |
 | `budget-percent-used`    | Percentage of budget used.                                        |
-| `budget-health-score`    | Budget health score (0-100).                                      |
-| `budget-forecast`        | Projected end-of-period spend.                                    |
-| `budget-runway-days`     | Days until budget exhausted at current rate.                      |
-| `budget-status`          | Budget health status: `healthy`, `warning`, `critical`, `exceeded`. |
-| `budget-scopes-status`   | JSON array of scoped budget statuses (finfocus v0.2.6+).          |
 
 ## Release Workflow
 

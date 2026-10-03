@@ -83,7 +83,7 @@ inputs:
     required: false
     default: ''
   budget-amount:
-    description: 'Budget amount for cost tracking (e.g., 1000)'
+    description: 'Budget amount for cost tracking (e.g., 1000). Written as cost.budgets.global in ~/.finfocus/config.yaml so finfocus enforces it via --exit-on-threshold'
     required: false
     default: ''
   budget-currency:
@@ -98,32 +98,6 @@ inputs:
     description: 'Budget alerts in JSON format: [{"threshold": 80, "type": "actual"}, {"threshold": 100, "type": "forecasted"}]'
     required: false
     default: ''
-  budget-alert-threshold:
-    description: 'Percentage threshold to trigger budget alert in PR comment'
-    required: false
-    default: '80'
-  fail-on-budget-health:
-    description: 'Fail if budget health score falls below this value (0-100)'
-    required: false
-    default: ''
-  show-budget-forecast:
-    description: 'Display budget forecast in PR comment'
-    required: false
-    default: 'true'
-  budget-scopes:
-    description: |
-      YAML multiline string of scoped budgets. Each line is "scope: amount".
-      Scope formats: provider/aws, type/compute, tag/env:prod
-      Example:
-        provider/aws: 1000
-        provider/gcp: 500
-        type/compute: 1200
-    required: false
-    default: ''
-  fail-on-budget-scope-breach:
-    description: 'Fail the action if any scoped budget is exceeded (true/false)'
-    required: false
-    default: 'false'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -167,21 +141,6 @@ outputs:
   budget-percent-used:
     description: 'Percentage of budget used'
     value: ${{ steps.run.outputs.budget-percent-used }}
-  budget-health-score:
-    description: 'Budget health score (0-100)'
-    value: ${{ steps.run.outputs.budget-health-score }}
-  budget-forecast:
-    description: 'Projected end-of-period spend'
-    value: ${{ steps.run.outputs.budget-forecast }}
-  budget-runway-days:
-    description: 'Days until budget exhausted at current rate'
-    value: ${{ steps.run.outputs.budget-runway-days }}
-  budget-status:
-    description: "Budget health status: 'healthy' | 'warning' | 'critical' | 'exceeded'"
-    value: ${{ steps.run.outputs.budget-status }}
-  budget-scopes-status:
-    description: 'JSON array of scoped budget statuses from finfocus CLI'
-    value: ${{ steps.run.outputs.budget-scopes-status }}
 
 runs:
   using: 'composite'
@@ -215,11 +174,6 @@ runs:
         INPUT_BUDGET_CURRENCY: ${{ inputs.budget-currency }}
         INPUT_BUDGET_PERIOD: ${{ inputs.budget-period }}
         INPUT_BUDGET_ALERTS: ${{ inputs.budget-alerts }}
-        INPUT_BUDGET_ALERT_THRESHOLD: ${{ inputs.budget-alert-threshold }}
-        INPUT_FAIL_ON_BUDGET_HEALTH: ${{ inputs.fail-on-budget-health }}
-        INPUT_SHOW_BUDGET_FORECAST: ${{ inputs.show-budget-forecast }}
-        INPUT_BUDGET_SCOPES: ${{ inputs.budget-scopes }}
-        INPUT_FAIL_ON_BUDGET_SCOPE_BREACH: ${{ inputs.fail-on-budget-scope-breach }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

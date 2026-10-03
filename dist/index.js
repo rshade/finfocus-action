@@ -31172,11 +31172,8 @@ function formatEnvelopeError(envelope, exitCode) {
 __nccwpck_require__.d(__webpack_exports__, {
   PQ: () => (/* binding */ Installer),
   g5: () => (/* binding */ getFinfocusVersion),
-  X7: () => (/* binding */ supportsExitCodes),
-  $R: () => (/* binding */ supportsScopedBudgets)
+  X7: () => (/* binding */ supportsExitCodes)
 });
-
-// UNUSED EXPORTS: requiresScopedBudgetVersion
 
 // EXTERNAL MODULE: external "os"
 var external_os_ = __nccwpck_require__(857);
@@ -32808,10 +32805,6 @@ const REPO_NAME = 'finfocus';
  */
 const EXIT_CODE_MIN_VERSION = '0.2.5';
 /**
- * Minimum finfocus version that supports scoped budgets.
- */
-const SCOPED_BUDGET_MIN_VERSION = '0.2.6';
-/**
  * Get the installed finfocus version by running `finfocus --version`.
  * Returns '0.0.0' if version cannot be determined.
  */
@@ -32837,13 +32830,6 @@ function supportsExitCodes(version) {
     return compareVersions(version, EXIT_CODE_MIN_VERSION) >= 0;
 }
 /**
- * Check if the given version supports scoped budgets.
- * Requires finfocus v0.2.6 or higher.
- */
-function supportsScopedBudgets(version) {
-    return compareVersions(version, SCOPED_BUDGET_MIN_VERSION) >= 0;
-}
-/**
  * Compare two semantic versions.
  * @returns -1 if a < b, 0 if a == b, 1 if a > b
  */
@@ -32863,18 +32849,6 @@ function compareVersions(a, b) {
     if (aPatch < bPatch)
         return -1;
     return 0;
-}
-/**
- * Require a minimum finfocus version for scoped budgets.
- * Throws an error if the installed version is below v0.2.6.
- *
- * @param version - The installed finfocus version
- * @throws Error if version is below minimum required for scoped budgets
- */
-function requiresScopedBudgetVersion(version) {
-    if (!supportsScopedBudgets(version)) {
-        throw new Error(`Scoped budgets require finfocus v${SCOPED_BUDGET_MIN_VERSION}+. Current version: ${version}`);
-    }
 }
 class Installer {
     async install(version, config) {
@@ -36798,831 +36772,9 @@ class PluginManager {
     }
 }
 
-;// CONCATENATED MODULE: ./src/config.ts
-
-
-
-
-/** Soft limit for number of scopes before warning is logged */
-const SCOPE_SOFT_LIMIT = 20;
-/** Regex pattern for validating scope format: provider/aws, type/compute, tag/env:prod */
-const SCOPE_PATTERN = /^(provider|type|tag)\/([a-zA-Z0-9_:.-]+)$/;
-/**
- * Parse budget scopes from YAML multiline input string.
- * Each line should be in format: "scope: amount"
- * Valid scope formats: provider/aws, type/compute, tag/env:prod
- *
- * Invalid scopes are logged as warnings and skipped.
- * A warning is logged if more than SCOPE_SOFT_LIMIT scopes are configured.
- *
- * @param input - YAML multiline string of scope:amount pairs
- * @returns Array of parsed BudgetScope objects
- */
-function parseBudgetScopes(input) {
-    if (!input || input.trim() === '') {
-        return [];
-    }
-    const scopes = [];
-    const lines = input.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
-    for (const line of lines) {
-        // Skip comment lines
-        if (line.startsWith('#')) {
-            continue;
-        }
-        // Parse "scope: amount" format
-        const colonIndex = line.indexOf(':');
-        if (colonIndex === -1) {
-            main_core/* warning */.$e(`Invalid scope format (missing colon): "${line}". Skipping.`);
-            continue;
-        }
-        // Handle tag scopes that may have colons in the value (e.g., tag/env:prod: 1000)
-        // For tag scopes, split on the last colon before the amount
-        // Format: tag/key:value: amount OR provider/name: amount
-        const scopeKey = line.substring(0, colonIndex).trim();
-        const amountStr = line.substring(colonIndex + 1).trim();
-        // Check if this might be a tag scope with a value that contains colons
-        // We need to find where the scope ends and the amount begins
-        // tag/k8s:app:nginx: 500 -> scope = tag/k8s:app:nginx, amount = 500
-        let scope = scopeKey;
-        let amount = parseFloat(amountStr);
-        // If amount is not a valid number, it might be part of the scope (tag value)
-        // Keep looking for the actual amount at the end
-        if (isNaN(amount) && amountStr.includes(':')) {
-            // Try to find the last colon that separates scope from amount
-            const fullLine = line;
-            const lastColonIndex = fullLine.lastIndexOf(':');
-            if (lastColonIndex > colonIndex) {
-                scope = fullLine.substring(0, lastColonIndex).trim();
-                amount = parseFloat(fullLine.substring(lastColonIndex + 1).trim());
-            }
-        }
-        // Validate scope format
-        const match = scope.match(SCOPE_PATTERN);
-        if (!match) {
-            main_core/* warning */.$e(`Invalid scope format: "${scope}". Expected: provider/*, type/*, or tag/*. Skipping.`);
-            continue;
-        }
-        // Validate amount
-        if (isNaN(amount) || amount <= 0) {
-            main_core/* warning */.$e(`Invalid amount for scope "${scope}": "${amountStr}". Must be a positive number. Skipping.`);
-            continue;
-        }
-        const scopeType = match[1];
-        const scopeValue = match[2];
-        scopes.push({
-            scope,
-            scopeType,
-            scopeKey: scopeValue,
-            amount,
-        });
-    }
-    // Warn if exceeding soft limit
-    if (scopes.length > SCOPE_SOFT_LIMIT) {
-        main_core/* warning */.$e(`Configured ${scopes.length} scopes (exceeds recommended limit of ${SCOPE_SOFT_LIMIT}). ` +
-            `Performance and PR comment readability may be impacted.`);
-    }
-    return scopes;
-}
-class ConfigManager {
-    async writeConfig(config) {
-        const debug = config?.debug === true;
-        // Validate budget amount
-        if (!config.budgetAmount || config.budgetAmount <= 0) {
-            main_core/* warning */.$e('Budget amount is not configured or invalid. Skipping budget configuration.');
-            return;
-        }
-        if (debug) {
-            main_core/* info */.pq('=== ConfigManager: Writing budget configuration ===');
-            main_core/* info */.pq(`  Budget amount: ${config.budgetAmount}`);
-            main_core/* info */.pq(`  Currency: ${config.budgetCurrency || 'USD'}`);
-            main_core/* info */.pq(`  Period: ${config.budgetPeriod || 'monthly'}`);
-        }
-        // Parse and validate inputs
-        const budgetConfig = this.parseBudgetConfig(config);
-        // Parse scoped budgets if configured
-        const scopes = config.budgetScopes ? parseBudgetScopes(config.budgetScopes) : [];
-        if (debug && scopes.length > 0) {
-            main_core/* info */.pq(`  Parsed ${scopes.length} scoped budgets`);
-        }
-        // Define config directory
-        const configDir = external_path_.join(external_os_.homedir(), '.finfocus');
-        if (debug)
-            main_core/* info */.pq(`  Config directory: ${configDir}`);
-        // Create directory if it doesn't exist
-        if (!external_fs_.existsSync(configDir)) {
-            if (debug)
-                main_core/* info */.pq('  Creating config directory...');
-            external_fs_.mkdirSync(configDir, { recursive: true });
-        }
-        // Generate YAML content
-        const yamlContent = this.generateYaml(budgetConfig, scopes);
-        // Write config file
-        const configPath = external_path_.join(configDir, 'config.yaml');
-        if (debug) {
-            main_core/* info */.pq(`  Writing config to: ${configPath}`);
-            main_core/* info */.pq(`  Config content:\n${yamlContent}`);
-        }
-        external_fs_.writeFileSync(configPath, yamlContent, 'utf8');
-        if (debug)
-            main_core/* info */.pq('  Budget configuration written successfully');
-        else
-            main_core/* info */.pq('Budget configuration created successfully');
-    }
-    parseBudgetConfig(config) {
-        const amount = config.budgetAmount || 0;
-        const currency = config.budgetCurrency || 'USD';
-        const period = this.validatePeriod(config.budgetPeriod || 'monthly');
-        const alerts = this.parseAlerts(config.budgetAlerts);
-        return {
-            amount,
-            currency,
-            period,
-            alerts,
-        };
-    }
-    validatePeriod(period) {
-        const validPeriods = ['monthly', 'quarterly', 'yearly'];
-        if (!validPeriods.includes(period)) {
-            main_core/* warning */.$e(`Invalid budget period "${period}". Supported: ${validPeriods.join(', ')}. Defaulting to "monthly".`);
-            return 'monthly';
-        }
-        return period;
-    }
-    parseAlerts(alertsInput) {
-        // Default alerts if none provided
-        const defaultAlerts = [
-            { threshold: 80, type: 'actual' },
-            { threshold: 100, type: 'forecasted' },
-        ];
-        if (!alertsInput || alertsInput.trim() === '') {
-            return defaultAlerts;
-        }
-        try {
-            const parsed = JSON.parse(alertsInput);
-            // Validate parsed alerts
-            if (!Array.isArray(parsed)) {
-                main_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
-                return defaultAlerts;
-            }
-            const validAlerts = parsed.filter((alert) => {
-                if (typeof alert.threshold !== 'number' || alert.threshold <= 0) {
-                    main_core/* warning */.$e(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
-                    return false;
-                }
-                if (alert.type !== 'actual' && alert.type !== 'forecasted') {
-                    main_core/* warning */.$e(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
-                    return false;
-                }
-                return true;
-            });
-            if (validAlerts.length === 0) {
-                main_core/* warning */.$e('No valid alerts found. Using default alerts.');
-                return defaultAlerts;
-            }
-            return validAlerts;
-        }
-        catch (err) {
-            main_core/* warning */.$e(`Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`);
-            return defaultAlerts;
-        }
-    }
-    generateYaml(config, scopes) {
-        const lines = [];
-        lines.push('# finfocus budget configuration');
-        lines.push('# Generated by finfocus-action');
-        lines.push('');
-        lines.push('budget:');
-        lines.push(`  amount: ${config.amount}`);
-        lines.push(`  currency: ${config.currency}`);
-        lines.push(`  period: ${config.period}`);
-        if (config.alerts && config.alerts.length > 0) {
-            lines.push('  alerts:');
-            for (const alert of config.alerts) {
-                lines.push(`    - threshold: ${alert.threshold}`);
-                lines.push(`      type: ${alert.type}`);
-            }
-        }
-        // Add scoped budgets section if configured
-        if (scopes && scopes.length > 0) {
-            lines.push('  scopes:');
-            for (const scope of scopes) {
-                lines.push(`    ${scope.scope}:`);
-                lines.push(`      amount: ${scope.amount}`);
-            }
-        }
-        lines.push('');
-        return lines.join('\n');
-    }
-}
-
-;// CONCATENATED MODULE: ./src/formatter.ts
-/**
- * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
- *
- * finfocus CLI returns multiple options per resource_id + action_type to give users choices
- * (e.g., resize to medium vs resize to small). Since users can only pick ONE option per
- * resource/action, summing all options inflates the total. This function groups by
- * resource_id + action_type and takes the max savings per group for an accurate total.
- *
- * @param recommendations - Array of recommendations from finfocus, or undefined
- * @returns Total achievable savings (max per resource+action_type group)
- */
-function calculateAchievableSavings(recommendations) {
-    if (!recommendations || recommendations.length === 0) {
-        return 0;
-    }
-    const groups = new Map();
-    for (const rec of recommendations) {
-        const key = `${rec.resource_id}::${rec.action_type}`;
-        const current = groups.get(key) ?? 0;
-        groups.set(key, Math.max(current, rec.estimated_savings));
-    }
-    return Array.from(groups.values()).reduce((sum, val) => sum + val, 0);
-}
-/**
- * Get currency symbol for display formatting.
- * @param currency - Currency code (e.g., 'USD', 'EUR')
- * @returns Currency symbol (e.g., '$', '€') or the code itself if unknown
- */
-function getCurrencySymbol(currency = 'USD') {
-    const symbols = {
-        USD: '$',
-        EUR: '€',
-        GBP: '£',
-        JPY: '¥',
-        CNY: '¥',
-    };
-    return symbols[currency.toUpperCase()] || currency;
-}
-/**
- * Converts a total CO2e amount into illustrative environmental equivalents.
- *
- * @param totalCO2e - Total greenhouse gas emissions in kilograms of CO2e
- * @returns An object with:
- *  - `trees`: estimated number of trees required to sequester the given CO2e (approximate, based on ~22 kg CO2/year per tree),
- *  - `milesDriven`: estimated miles driven equivalent (approximate, based on ~0.4 kg CO2 per mile),
- *  - `homeElectricityDays`: estimated number of average home electricity days equivalent (approximate, using ~30 kWh/day and ~0.42 kg CO2/kWh)
- */
-function calculateEquivalents(totalCO2e) {
-    // Source: EPA Greenhouse Gas Equivalencies Calculator
-    // Note: These are approximations for illustrative purposes.
-    // Trees: 1 tree absorbs ~22 kg CO₂/year (Illustrative; varies by species/age/location)
-    const trees = (totalCO2e * 12) / 22;
-    // Miles driven: ~0.4 kg CO₂/mile (Approx. based on average passenger vehicle)
-    const milesDriven = totalCO2e / 0.4;
-    // Home electricity: ~0.42 kg CO₂/kWh (Approx; EPA US avg is 0.394 kg/kWh), avg home uses ~30 kWh/day
-    const homeElectricityDays = totalCO2e / (30 * 0.42);
-    return {
-        trees,
-        milesDriven,
-        homeElectricityDays,
-    };
-}
-/**
- * Generate a simple text-based progress bar using Unicode blocks
- * @param percent - Percentage value (0-100+, can exceed 100%)
- * @param width - Width of the progress bar in characters (default: 10)
- * @returns Progress bar string with filled (▓) and empty (░) blocks
- */
-function generateProgressBar(percent, width = 10) {
-    const capped = Math.min(100, percent);
-    const filled = Math.floor((capped / 100) * width);
-    const empty = width - filled;
-    return '▓'.repeat(filled) + '░'.repeat(empty);
-}
-/**
- * Get status icon for the dashboard based on budget percentage
- * @param percentUsed - Budget usage percentage
- * @returns Status icon emoji
- */
-function getDashboardStatusIcon(percentUsed) {
-    if (percentUsed === undefined)
-        return '—';
-    if (percentUsed >= 100)
-        return '⛔';
-    if (percentUsed >= 80)
-        return '🔴';
-    if (percentUsed >= 50)
-        return '🟡';
-    return '🟢';
-}
-/**
- * Formats the dashboard summary row - a 3-column at-a-glance status table
- * Shows: Monthly Cost | Budget Status | Potential Savings
- *
- * @param totalMonthly - Projected monthly cost
- * @param currency - Currency code
- * @param percentUsed - Budget usage percentage (optional)
- * @param totalSavings - Total potential savings from recommendations (optional)
- * @returns Markdown table string
- */
-function formatDashboardSummary(totalMonthly, currency, percentUsed, totalSavings) {
-    const currencySymbol = getCurrencySymbol(currency);
-    // Monthly cost column
-    const costDisplay = `**${currencySymbol}${totalMonthly.toFixed(2)}** ${currency}`;
-    // Budget status column
-    let budgetDisplay = '—';
-    if (percentUsed !== undefined) {
-        const icon = getDashboardStatusIcon(percentUsed);
-        budgetDisplay = `${icon} **${percentUsed.toFixed(0)}%** used`;
-    }
-    // Savings column
-    let savingsDisplay = '—';
-    if (totalSavings !== undefined && totalSavings > 0) {
-        savingsDisplay = `**${currencySymbol}${totalSavings.toFixed(2)}**/mo`;
-    }
-    return `| 💰 Monthly Cost | 📊 Budget Status | 💡 Potential Savings |
-|:---------------:|:----------------:|:--------------------:|
-| ${costDisplay} | ${budgetDisplay} | ${savingsDisplay} |
-`;
-}
-/**
- * Get GitHub alert type based on budget health status
- * Uses GitHub's blockquote alert syntax: [!NOTE], [!WARNING], [!CAUTION]
- * @param status - Health status or percentage
- * @returns GitHub alert type string
- */
-function getAlertType(status) {
-    if (typeof status === 'number') {
-        if (status >= 100)
-            return 'CAUTION';
-        if (status >= 80)
-            return 'WARNING';
-        return 'NOTE';
-    }
-    switch (status) {
-        case 'exceeded':
-        case 'critical':
-            return 'CAUTION';
-        case 'warning':
-            return 'WARNING';
-        default:
-            return 'NOTE';
-    }
-}
-/**
- * Renders budget status using GitHub's native alert syntax for better visual impact.
- *
- * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning state, [!NOTE] otherwise.
- * Displays budget amount, current spend, progress bar, and any triggered alerts.
- *
- * @param budgetStatus - Budget status data; returns empty string if not configured
- * @returns Markdown string with GitHub alert syntax, or empty string when budget not configured
- */
-function formatBudgetSection(budgetStatus) {
-    if (!budgetStatus || !budgetStatus.configured) {
-        return '';
-    }
-    const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
-    const currencySymbol = getCurrencySymbol(currency);
-    const alertType = getAlertType(percentUsed ?? 0);
-    // Build status title
-    let statusTitle = 'Budget Status';
-    if (percentUsed !== undefined) {
-        if (percentUsed >= 100) {
-            statusTitle = 'Budget Exceeded';
-        }
-        else if (percentUsed >= 80) {
-            statusTitle = 'Budget Warning';
-        }
-    }
-    // Build content lines
-    const lines = [];
-    lines.push(`> [!${alertType}]`);
-    lines.push(`> **${statusTitle}**`);
-    lines.push(`>`);
-    const budgetLine = `> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`;
-    lines.push(budgetLine);
-    if (spent !== undefined && percentUsed !== undefined) {
-        const progressBar = generateProgressBar(percentUsed);
-        lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
-    }
-    // Add triggered alerts
-    if (alerts && alerts.length > 0) {
-        const triggeredAlerts = alerts.filter((a) => a.triggered);
-        if (triggeredAlerts.length > 0) {
-            lines.push(`>`);
-            triggeredAlerts.forEach((a) => {
-                lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
-            });
-        }
-    }
-    return '\n' + lines.join('\n') + '\n';
-}
-/**
- * Map a budget health status to its corresponding emoji icon.
- *
- * @param status - Health status value; expected: "healthy", "warning", "critical", or "exceeded"
- * @returns The emoji icon for the provided status, `❓` if the status is unrecognized
- */
-function getHealthStatusIcon(status) {
-    const icons = {
-        healthy: '🟢',
-        warning: '🟡',
-        critical: '🔴',
-        exceeded: '⛔',
-    };
-    return icons[status] || '❓';
-}
-/**
- * Builds a Budget Health section using GitHub's native alert syntax.
- *
- * Shows health score/status, budget details, spend progress, forecast, and runway.
- * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning, [!NOTE] for healthy.
- *
- * @param budgetHealth - Budget health report; returns empty string if not configured
- * @param config - Optional config for showBudgetForecast and budgetAlertThreshold
- * @returns Markdown string with GitHub alert syntax, or empty string if not configured
- */
-function formatBudgetHealthSection(budgetHealth, config) {
-    if (!budgetHealth || !budgetHealth.configured) {
-        return '';
-    }
-    const { amount, period, spent, percentUsed, alerts, currency, healthScore, forecast, runwayDays, healthStatus } = budgetHealth;
-    const currencySymbol = getCurrencySymbol(currency);
-    const statusIcon = getHealthStatusIcon(healthStatus);
-    const alertType = getAlertType(healthStatus);
-    // Determine title based on status
-    let statusTitle = 'Budget Health';
-    if (healthStatus === 'exceeded') {
-        statusTitle = 'Budget Exceeded';
-    }
-    else if (healthStatus === 'critical') {
-        statusTitle = 'Budget Critical';
-    }
-    else if (healthStatus === 'warning') {
-        statusTitle = 'Budget Warning';
-    }
-    // Build content lines
-    const lines = [];
-    lines.push(`> [!${alertType}]`);
-    lines.push(`> **${statusTitle}** ${statusIcon}`);
-    lines.push(`>`);
-    // Health score
-    if (healthScore !== undefined) {
-        lines.push(`> **Health Score:** ${healthScore}/100`);
-    }
-    // Budget and spend with progress bar
-    lines.push(`> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
-    if (spent !== undefined && percentUsed !== undefined) {
-        const progressBar = generateProgressBar(percentUsed);
-        lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
-    }
-    // Forecast (if enabled)
-    const showForecast = config?.showBudgetForecast !== false;
-    if (showForecast && forecast) {
-        lines.push(`> **Forecast:** ${forecast}`);
-    }
-    // Runway
-    if (runwayDays !== undefined) {
-        const runwayText = runwayDays === Infinity || runwayDays < 0
-            ? 'Unlimited'
-            : `${runwayDays} days`;
-        lines.push(`> **Runway:** ${runwayText}`);
-    }
-    // Triggered alerts
-    if (alerts && alerts.length > 0) {
-        const triggeredAlerts = alerts.filter((a) => a.triggered);
-        if (triggeredAlerts.length > 0) {
-            lines.push(`>`);
-            triggeredAlerts.forEach((a) => {
-                lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
-            });
-        }
-    }
-    return '\n' + lines.join('\n') + '\n';
-}
-// ============================================================================
-// Scoped Budget Formatting (finfocus v0.2.6+)
-// ============================================================================
-/**
- * Get status icon for scoped budget based on health status.
- * @param status - Health status value
- * @returns Emoji icon for the status
- */
-function getScopeStatusIcon(status) {
-    const icons = {
-        healthy: '🟢',
-        warning: '🟡',
-        critical: '🔴',
-        exceeded: '⛔',
-    };
-    return icons[status] || '❓';
-}
-/**
- * Format a single scope row for the table.
- */
-function formatScopeRow(scope) {
-    const currencySymbol = getCurrencySymbol(scope.currency);
-    const icon = getScopeStatusIcon(scope.status);
-    const percentDisplay = scope.percentUsed.toFixed(0);
-    return `| ${scope.scope} | ${currencySymbol}${scope.spent.toFixed(2)} | ${currencySymbol}${scope.budget.toFixed(2)} | ${icon} ${percentDisplay}% |`;
-}
-/**
- * Format the scoped budget section for PR comments.
- * Displays a "Budget Status by Scope" table sorted by percentUsed descending.
- *
- * @param report - Scoped budget report from finfocus CLI
- * @returns Markdown string with scope budget table, or empty string if no scopes/failures
- */
-function formatScopedBudgetSection(report) {
-    if (!report || (report.scopes.length === 0 && report.failed.length === 0)) {
-        return '';
-    }
-    // Sort scopes by percentUsed descending (highest usage first)
-    const sortedScopes = [...report.scopes].sort((a, b) => b.percentUsed - a.percentUsed);
-    // Build table rows
-    const tableRows = sortedScopes.map((scope) => formatScopeRow(scope)).join('\n');
-    // Build section
-    let section = '\n### 📊 Budget Status by Scope\n';
-    // Only include table if there are successful scopes
-    if (sortedScopes.length > 0) {
-        section += `
-| Scope | Spent | Budget | Status |
-|:------|------:|-------:|:------:|
-${tableRows}
-`;
-    }
-    // Add failed scopes warning if any
-    if (report.failed.length > 0) {
-        section += `
-> **Note:** ${report.failed.length} scope(s) failed to process:
-`;
-        for (const failure of report.failed) {
-            section += `> - \`${failure.scope}\`: ${failure.error}\n`;
-        }
-    }
-    return section;
-}
-/**
- * Render the Sustainability section as a Markdown string for inclusion in the comment body.
- *
- * Builds a "Sustainability Impact" block showing total carbon, month-over-month change, and carbon intensity.
- * When enabled via config, includes environmental equivalents (trees, miles driven, home electricity days).
- * When a finfocusReport with resource data is provided, includes a top-10 resources-by-carbon table.
- *
- * @param report - Sustainability metrics (must include `totalCO2e`, `totalCO2eDiff`, and `carbonIntensity`)
- * @param config - Optional action configuration; honors `includeSustainability` and `sustainabilityEquivalents` flags
- * @param finfocusReport - Optional finfocus report used to generate a Resources by Carbon Impact table when present
- * @returns A Markdown string containing the formatted Sustainability section, or an empty string if sustainability is not enabled
- */
-function formatSustainabilitySection(report, config, finfocusReport) {
-    if (!config?.includeSustainability)
-        return '';
-    const { totalCO2e, totalCO2eDiff, carbonIntensity } = report;
-    const equivalents = config.sustainabilityEquivalents ? calculateEquivalents(totalCO2e) : undefined;
-    let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
-    if (totalCO2eDiff > 0)
-        diffText = `+${diffText}`;
-    let equivalentsSection = '';
-    if (equivalents) {
-        equivalentsSection = `
-<details>
-<summary>Environmental Equivalents</summary>
-
-- 🌲 Equivalent to planting **${equivalents.trees.toFixed(2)} trees** annually to offset
-- 🚗 Equivalent to driving **${equivalents.milesDriven.toFixed(2)} miles** per month
-- 💡 Equivalent to **${equivalents.homeElectricityDays.toFixed(2)} days** of home electricity use
-</details>
-`;
-    }
-    // Build Resource Breakdown by Carbon Impact
-    let resourceTable = '';
-    const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
-    if (resources.length > 0) {
-        const resourcesWithCarbon = resources
-            .filter(r => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
-            .sort((a, b) => (b.sustainability.carbon_footprint.value) - (a.sustainability.carbon_footprint.value));
-        if (resourcesWithCarbon.length > 0) {
-            const resourceRows = resourcesWithCarbon
-                .slice(0, 10) // Top 10 by carbon
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                const carbon = r.sustainability.carbon_footprint.value.toFixed(2);
-                const unit = r.sustainability.carbon_footprint.unit;
-                return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
-            })
-                .join('\n');
-            if (resourceRows) {
-                resourceTable = `
-### Resources by Carbon Impact
-
-| Resource | Type | CO₂/month |
-| :--- | :--- | ---: |
-${resourceRows}
-`;
-            }
-        }
-    }
-    return `
-
-<details>
-<summary><strong>🌱 Sustainability</strong> — ${totalCO2e.toFixed(2)} kgCO₂e/month</summary>
-
-| Metric | Value |
-| :--- | ---: |
-| **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
-| **Carbon Change** | ${diffText} |
-| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
-${equivalentsSection}${resourceTable}
-</details>
-`;
-}
-/**
- * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
- *
- * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
- * @param config - Optional action configuration that controls formatting and which sections to show
- * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
- * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
- * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
- * @param budgetStatus - Optional basic budget status used when detailed budget health is not provided
- * @param budgetHealth - Optional detailed budget health report used in preference to budgetStatus
- * @param scopedBudgetReport - Optional scoped budget report with per-scope status (finfocus v0.2.6+)
- * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget/budget health, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
- */
-function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, budgetHealth, scopedBudgetReport) {
-    // Handle both new and legacy report formats
-    const currency = report.summary?.currency ?? report.currency ?? 'USD';
-    const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
-    const total = totalMonthly.toFixed(2);
-    const diff = report.diff ? report.diff.monthly_cost_change.toFixed(2) : '0.00';
-    const percent = report.diff ? report.diff.percent_change.toFixed(2) : '0.00';
-    let diffText = `${diff} ${currency}`;
-    if (report.diff) {
-        if (report.diff.monthly_cost_change > 0) {
-            diffText = `📈 +${diffText}`;
-        }
-        else if (report.diff.monthly_cost_change < 0) {
-            diffText = `📉 ${diffText}`;
-        }
-    }
-    // Build resource breakdown if available
-    const resources = report.resources ?? report.summary?.resources ?? [];
-    let resourceTable = '';
-    const isDetailed = config?.detailedComment === true;
-    if (resources.length > 0) {
-        const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
-        if (isDetailed) {
-            // Detailed view: All resources with notes and breakdown
-            const resourceRows = sortedResources
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                const notes = r.notes ? `<br/>*${r.notes}*` : '';
-                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
-            })
-                .join('\n');
-            resourceTable = `
-
-<details>
-<summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
-
-| Resource | Type | Monthly Cost | Notes |
-| :--- | :--- | ---: | :--- |
-${resourceRows}
-
-</details>
-`;
-        }
-        else if (resources.length <= 20) {
-            // Standard view: Top resources in collapsible section
-            const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
-            const resourceRows = topResources
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-            })
-                .join('\n');
-            if (resourceRows) {
-                resourceTable = `
-
-<details>
-<summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
-
-| Resource | Type | Monthly Cost |
-| :--- | :--- | ---: |
-${resourceRows}
-
-</details>
-`;
-            }
-        }
-    }
-    // Build provider breakdown only if multiple providers
-    let providerBreakdown = '';
-    if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
-        const providerRows = Object.entries(report.summary.byProvider)
-            .filter(([, cost]) => cost > 0)
-            .sort(([, a], [, b]) => b - a)
-            .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
-            .join('\n');
-        if (providerRows) {
-            providerBreakdown = `
-
-<details>
-<summary><strong>☁️ Cost by Provider</strong></summary>
-
-| Provider | Monthly Cost |
-| :--- | ---: |
-${providerRows}
-
-</details>
-`;
-        }
-    }
-    // Build Actual Cost Section
-    let actualCostSection = '';
-    let actualCostRow = '';
-    if (actualCostReport && actualCostReport.total > 0) {
-        const actualTotal = actualCostReport.total.toFixed(2);
-        actualCostRow = `| **Actual (${config?.actualCostsPeriod || '7d'})** | ${actualTotal} ${actualCostReport.currency} |`;
-        // Actual Costs Breakdown Table (collapsible)
-        if (actualCostReport.items.length > 0) {
-            const actualRows = actualCostReport.items
-                .sort((a, b) => b.cost - a.cost)
-                .map((item) => `| ${item.name} | ${item.cost.toFixed(2)} ${item.currency} |`)
-                .join('\n');
-            actualCostSection = `
-
-<details>
-<summary><strong>💵 Actual Costs</strong> (${actualCostReport.startDate} to ${actualCostReport.endDate})</summary>
-
-| ${config?.actualCostsGroupBy || 'Provider'} | Cost |
-| :--- | ---: |
-| **Total** | **${actualTotal} ${actualCostReport.currency}** |
-${actualRows}
-
-</details>
-`;
-        }
-    }
-    const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
-    // Recommendations section - prominent since it's actionable
-    let recommendationsSection = '';
-    if (recommendationsReport && recommendationsReport.recommendations.length > 0) {
-        const totalSavings = recommendationsReport.summary.total_savings;
-        const savingsCurrency = recommendationsReport.summary.currency;
-        const recRows = recommendationsReport.recommendations
-            .map((r) => {
-            const name = r.resource_id.split('::').pop() || r.resource_id;
-            return `| ${name} | ${r.description} | ${r.estimated_savings.toFixed(2)} ${r.currency} |`;
-        })
-            .join('\n');
-        recommendationsSection = `
-
-<details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
-
-| Resource | Recommendation | Savings |
-| :--- | :--- | ---: |
-${recRows}
-
-</details>
-`;
-    }
-    const sustainabilitySection = sustainabilityReport
-        ? formatSustainabilitySection(sustainabilityReport, config, report)
-        : '';
-    // Use budget health section if available, otherwise fall back to basic budget status
-    const budgetSection = budgetHealth
-        ? formatBudgetHealthSection(budgetHealth, config)
-        : formatBudgetSection(budgetStatus);
-    // Format scoped budget section (finfocus v0.2.6+)
-    const scopedBudgetSection = formatScopedBudgetSection(scopedBudgetReport);
-    // Calculate percent used for dashboard (prefer health report, then budget status)
-    const percentUsed = budgetHealth?.percentUsed ?? budgetStatus?.percentUsed;
-    // Calculate achievable savings for dashboard (max per resource+action_type group)
-    // This avoids inflating the total by summing mutually exclusive options
-    const achievableSavings = calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
-    // Build dashboard summary row
-    const dashboardSummary = formatDashboardSummary(totalMonthly, currency, percentUsed, achievableSavings);
-    return `## Cloud Cost Estimate
-
-${dashboardSummary}
-${budgetSection}${scopedBudgetSection}
-<details>
-<summary><strong>📈 Cost Details</strong></summary>
-
-| Metric | Value |
-| :--- | ---: |
-| **Projected Monthly** | ${total} ${currency} |
-${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
-| **% Change** | ${percent}% |
-
-</details>
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
-
----
-<sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
-`;
-}
-
 // EXTERNAL MODULE: ./src/errors.ts
 var errors = __nccwpck_require__(3916);
 ;// CONCATENATED MODULE: ./src/analyze.ts
-
-
-
 
 
 
@@ -37773,7 +36925,7 @@ class Analyzer {
                 }
             }
         }
-        // Since finfocus currently might not provide total diff for sustainability, 
+        // Since finfocus currently might not provide total diff for sustainability,
         // we default to 0 for now unless we can calculate it from base state.
         // For V1 MVP, we will assume 0 or absolute value if base isn't available.
         // However, if we want to support diff, we'd need the base report which we don't have here.
@@ -38211,7 +37363,8 @@ class Analyzer {
                 alerts.push({
                     threshold: parseInt(alertMatch[1]),
                     type: alertMatch[2].toLowerCase(),
-                    triggered: alertMatch[3].toLowerCase().includes('triggered') && !alertMatch[3].toLowerCase().includes('not'),
+                    triggered: alertMatch[3].toLowerCase().includes('triggered') &&
+                        !alertMatch[3].toLowerCase().includes('not'),
                 });
             }
             return {
@@ -38246,250 +37399,6 @@ class Analyzer {
             throw new Error(`Could not find ${name} binary in PATH`);
         }
         return output.stdout.trim();
-    }
-    /**
-     * Run budget status analysis using finfocus CLI.
-     * Returns BudgetHealthReport with health score, forecast, and runway.
-     * Falls back to local calculation for finfocus < 0.2.5.
-     */
-    async runBudgetStatus(config) {
-        // Check if budget is configured
-        if (!config.budgetAmount || config.budgetAmount <= 0) {
-            return undefined;
-        }
-        const debug = config?.debug === true;
-        if (debug) {
-            main_core/* info */.pq('=== Running budget status analysis ===');
-        }
-        // Check finfocus version
-        const version = await (0,install/* getFinfocusVersion */.g5)();
-        if (!(0,install/* supportsExitCodes */.X7)(version)) {
-            if (debug) {
-                main_core/* info */.pq(`  finfocus version ${version} < 0.2.5, using fallback calculation`);
-            }
-            main_core/* warning */.$e('Budget health features require finfocus v0.2.5+, using fallback calculation');
-            return this.calculateBudgetHealthFallback(config);
-        }
-        // Run finfocus budget status
-        const args = ['budget', 'status', '--output', 'json'];
-        if (debug) {
-            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
-        }
-        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
-            silent: !debug,
-            ignoreReturnCode: true,
-        });
-        if (output.exitCode !== 0) {
-            if (debug) {
-                main_core/* info */.pq(`  finfocus budget status failed with exit code ${output.exitCode}`);
-                main_core/* info */.pq(`  stderr: ${output.stderr}`);
-            }
-            main_core/* warning */.$e(`finfocus budget status failed: ${output.stderr}`);
-            return this.calculateBudgetHealthFallback(config);
-        }
-        return this.parseBudgetStatusResponse(output.stdout, config);
-    }
-    /**
-     * Parse the JSON response from finfocus budget status command.
-     */
-    parseBudgetStatusResponse(stdout, config) {
-        const debug = config?.debug === true;
-        if (!stdout || stdout.trim() === '') {
-            if (debug) {
-                main_core/* info */.pq('  Empty stdout from finfocus budget status');
-            }
-            main_core/* warning */.$e('Empty response from finfocus budget status');
-            return this.calculateBudgetHealthFallback(config);
-        }
-        try {
-            const parsed = JSON.parse(stdout);
-            // Handle wrapped format (finfocus v0.2.4+) where output may be wrapped
-            const response = (parsed.finfocus ? parsed.finfocus : parsed);
-            if (debug) {
-                main_core/* info */.pq(`  Parsed budget status response: ${JSON.stringify(response)}`);
-            }
-            // Validate required fields
-            if (typeof response.health_score !== 'number' || !Number.isFinite(response.health_score)) {
-                main_core/* warning */.$e('Invalid health_score in finfocus budget status response');
-                return this.calculateBudgetHealthFallback(config);
-            }
-            const healthStatus = this.computeHealthStatus(response.health_score, response.spent, response.budget.amount);
-            // Format currency for display
-            const currencySymbol = getCurrencySymbol(response.budget.currency);
-            const forecastValue = typeof response.forecast === 'number' && Number.isFinite(response.forecast)
-                ? response.forecast
-                : 0;
-            const forecast = forecastValue > 0
-                ? `${currencySymbol}${forecastValue.toFixed(2)}`
-                : 'N/A';
-            return {
-                configured: true,
-                amount: response.budget.amount,
-                currency: response.budget.currency,
-                period: response.budget.period,
-                spent: response.spent,
-                remaining: response.remaining,
-                percentUsed: response.percent_used,
-                healthScore: response.health_score,
-                forecast,
-                forecastAmount: response.forecast,
-                runwayDays: response.runway_days,
-                healthStatus,
-            };
-        }
-        catch (err) {
-            if (debug) {
-                main_core/* info */.pq(`  Failed to parse budget status JSON: ${err instanceof Error ? err.message : String(err)}`);
-                main_core/* info */.pq(`  Raw stdout: ${stdout.substring(0, 500)}`);
-            }
-            main_core/* warning */.$e(`Failed to parse finfocus budget status response: ${err instanceof Error ? err.message : String(err)}`);
-            return this.calculateBudgetHealthFallback(config);
-        }
-    }
-    /**
-     * Calculate budget health locally when finfocus < 0.2.5.
-     * Returns undefined since we cannot determine actual health metrics without CLI support.
-     * This causes the PR comment to fall back to the basic budget status section instead.
-     */
-    calculateBudgetHealthFallback(config) {
-        if (!config.budgetAmount || config.budgetAmount <= 0) {
-            return undefined;
-        }
-        const debug = config?.debug === true;
-        if (debug) {
-            main_core/* info */.pq('=== Budget health fallback: returning undefined (requires finfocus v0.2.5+) ===');
-        }
-        // Return undefined to indicate budget health metrics are unavailable.
-        // This causes formatCommentBody to fall back to formatBudgetSection (basic status)
-        // rather than showing potentially misleading health data.
-        return undefined;
-    }
-    /**
-     * Compute health status based on health score and spend vs budget.
-     */
-    computeHealthStatus(healthScore, spent, budgetAmount) {
-        // Exceeded takes priority if spent > budget
-        if (spent > budgetAmount) {
-            return 'exceeded';
-        }
-        // Otherwise use health score thresholds
-        if (healthScore >= 80) {
-            return 'healthy';
-        }
-        else if (healthScore >= 50) {
-            return 'warning';
-        }
-        else if (healthScore > 0) {
-            return 'critical';
-        }
-        else {
-            return 'exceeded';
-        }
-    }
-    // ============================================================================
-    // Scoped Budgets (finfocus v0.2.6+)
-    // ============================================================================
-    /**
-     * Run scoped budget status analysis using finfocus CLI.
-     * Returns ScopedBudgetReport with status for each configured scope.
-     * Returns undefined if no scopes are configured or CLI version is too old.
-     */
-    async runScopedBudgetStatus(config) {
-        // Check if scopes are configured
-        if (!config.budgetScopes || config.budgetScopes.trim() === '') {
-            return undefined;
-        }
-        const scopes = parseBudgetScopes(config.budgetScopes);
-        if (scopes.length === 0) {
-            return undefined;
-        }
-        const debug = config?.debug === true;
-        if (debug) {
-            main_core/* info */.pq('=== Running scoped budget status analysis ===');
-            main_core/* info */.pq(`  Configured ${scopes.length} scopes`);
-        }
-        // Check finfocus version
-        const version = await (0,install/* getFinfocusVersion */.g5)();
-        if (!(0,install/* supportsScopedBudgets */.$R)(version)) {
-            const errorMsg = `Scoped budgets require finfocus v0.2.6+. Current version: ${version}`;
-            throw new Error(errorMsg);
-        }
-        // Run finfocus budget status --output json
-        const args = ['budget', 'status', '--output', 'json'];
-        if (debug) {
-            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
-        }
-        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
-            silent: !debug,
-            ignoreReturnCode: true,
-        });
-        if (output.exitCode !== 0) {
-            if (debug) {
-                main_core/* info */.pq(`  finfocus budget status failed with exit code ${output.exitCode}`);
-                main_core/* info */.pq(`  stderr: ${output.stderr}`);
-            }
-            main_core/* warning */.$e(`finfocus budget status failed: ${output.stderr}`);
-            return {
-                scopes: [],
-                failed: scopes.map((s) => ({ scope: s.scope, error: output.stderr || 'Unknown error' })),
-            };
-        }
-        return this.parseScopedBudgetResponse(output.stdout, config);
-    }
-    /**
-     * Parse the JSON response from finfocus budget status command for scoped budgets.
-     * Handles both wrapped (finfocus key) and unwrapped formats.
-     */
-    parseScopedBudgetResponse(stdout, config) {
-        const debug = config?.debug === true;
-        if (!stdout || stdout.trim() === '') {
-            if (debug) {
-                main_core/* info */.pq('  Empty stdout from finfocus budget status');
-            }
-            return { scopes: [], failed: [] };
-        }
-        try {
-            const parsed = JSON.parse(stdout);
-            // Handle wrapped format (finfocus v0.2.4+)
-            const scopeEntries = parsed.finfocus?.scopes ?? parsed.scopes ?? [];
-            const errorEntries = parsed.finfocus?.errors ?? parsed.errors ?? [];
-            if (debug) {
-                main_core/* info */.pq(`  Found ${scopeEntries.length} scope entries, ${errorEntries.length} errors`);
-            }
-            // Map scope entries to ScopedBudgetStatus
-            const scopes = scopeEntries.map((entry) => {
-                const scopeType = entry.type;
-                return {
-                    scope: entry.scope,
-                    scopeType,
-                    scopeKey: entry.key,
-                    spent: entry.spent,
-                    budget: entry.budget,
-                    currency: entry.currency,
-                    percentUsed: entry.percent_used,
-                    status: entry.status,
-                    alerts: (entry.alerts ?? []).map((a) => ({
-                        threshold: a.threshold,
-                        type: a.type,
-                        triggered: a.triggered,
-                    })),
-                };
-            });
-            // Map error entries to ScopedBudgetFailure
-            const failed = errorEntries.map((e) => ({
-                scope: e.scope,
-                error: e.error,
-            }));
-            return { scopes, failed };
-        }
-        catch (err) {
-            if (debug) {
-                main_core/* info */.pq(`  Failed to parse scoped budget JSON: ${err instanceof Error ? err.message : String(err)}`);
-                main_core/* info */.pq(`  Raw stdout: ${stdout.substring(0, 500)}`);
-            }
-            main_core/* warning */.$e(`Failed to parse finfocus scoped budget response: ${err instanceof Error ? err.message : String(err)}`);
-            return { scopes: [], failed: [] };
-        }
     }
 }
 
@@ -42574,13 +41483,466 @@ function getOctokit(token, options, ...additionalPlugins) {
     return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 //# sourceMappingURL=github.js.map
+;// CONCATENATED MODULE: ./src/formatter.ts
+/**
+ * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
+ *
+ * finfocus CLI returns multiple options per resource_id + action_type to give users choices
+ * (e.g., resize to medium vs resize to small). Since users can only pick ONE option per
+ * resource/action, summing all options inflates the total. This function groups by
+ * resource_id + action_type and takes the max savings per group for an accurate total.
+ *
+ * @param recommendations - Array of recommendations from finfocus, or undefined
+ * @returns Total achievable savings (max per resource+action_type group)
+ */
+function calculateAchievableSavings(recommendations) {
+    if (!recommendations || recommendations.length === 0) {
+        return 0;
+    }
+    const groups = new Map();
+    for (const rec of recommendations) {
+        const key = `${rec.resource_id}::${rec.action_type}`;
+        const current = groups.get(key) ?? 0;
+        groups.set(key, Math.max(current, rec.estimated_savings));
+    }
+    return Array.from(groups.values()).reduce((sum, val) => sum + val, 0);
+}
+/**
+ * Get currency symbol for display formatting.
+ * @param currency - Currency code (e.g., 'USD', 'EUR')
+ * @returns Currency symbol (e.g., '$', '€') or the code itself if unknown
+ */
+function getCurrencySymbol(currency = 'USD') {
+    const symbols = {
+        USD: '$',
+        EUR: '€',
+        GBP: '£',
+        JPY: '¥',
+        CNY: '¥',
+    };
+    return symbols[currency.toUpperCase()] || currency;
+}
+/**
+ * Converts a total CO2e amount into illustrative environmental equivalents.
+ *
+ * @param totalCO2e - Total greenhouse gas emissions in kilograms of CO2e
+ * @returns An object with:
+ *  - `trees`: estimated number of trees required to sequester the given CO2e (approximate, based on ~22 kg CO2/year per tree),
+ *  - `milesDriven`: estimated miles driven equivalent (approximate, based on ~0.4 kg CO2 per mile),
+ *  - `homeElectricityDays`: estimated number of average home electricity days equivalent (approximate, using ~30 kWh/day and ~0.42 kg CO2/kWh)
+ */
+function calculateEquivalents(totalCO2e) {
+    // Source: EPA Greenhouse Gas Equivalencies Calculator
+    // Note: These are approximations for illustrative purposes.
+    // Trees: 1 tree absorbs ~22 kg CO₂/year (Illustrative; varies by species/age/location)
+    const trees = (totalCO2e * 12) / 22;
+    // Miles driven: ~0.4 kg CO₂/mile (Approx. based on average passenger vehicle)
+    const milesDriven = totalCO2e / 0.4;
+    // Home electricity: ~0.42 kg CO₂/kWh (Approx; EPA US avg is 0.394 kg/kWh), avg home uses ~30 kWh/day
+    const homeElectricityDays = totalCO2e / (30 * 0.42);
+    return {
+        trees,
+        milesDriven,
+        homeElectricityDays,
+    };
+}
+/**
+ * Generate a simple text-based progress bar using Unicode blocks
+ * @param percent - Percentage value (0-100+, can exceed 100%)
+ * @param width - Width of the progress bar in characters (default: 10)
+ * @returns Progress bar string with filled (▓) and empty (░) blocks
+ */
+function generateProgressBar(percent, width = 10) {
+    const capped = Math.min(100, percent);
+    const filled = Math.floor((capped / 100) * width);
+    const empty = width - filled;
+    return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+/**
+ * Get status icon for the dashboard based on budget percentage
+ * @param percentUsed - Budget usage percentage
+ * @returns Status icon emoji
+ */
+function getDashboardStatusIcon(percentUsed) {
+    if (percentUsed === undefined)
+        return '—';
+    if (percentUsed >= 100)
+        return '⛔';
+    if (percentUsed >= 80)
+        return '🔴';
+    if (percentUsed >= 50)
+        return '🟡';
+    return '🟢';
+}
+/**
+ * Formats the dashboard summary row - a 3-column at-a-glance status table
+ * Shows: Monthly Cost | Budget Status | Potential Savings
+ *
+ * @param totalMonthly - Projected monthly cost
+ * @param currency - Currency code
+ * @param percentUsed - Budget usage percentage (optional)
+ * @param totalSavings - Total potential savings from recommendations (optional)
+ * @returns Markdown table string
+ */
+function formatDashboardSummary(totalMonthly, currency, percentUsed, totalSavings) {
+    const currencySymbol = getCurrencySymbol(currency);
+    // Monthly cost column
+    const costDisplay = `**${currencySymbol}${totalMonthly.toFixed(2)}** ${currency}`;
+    // Budget status column
+    let budgetDisplay = '—';
+    if (percentUsed !== undefined) {
+        const icon = getDashboardStatusIcon(percentUsed);
+        budgetDisplay = `${icon} **${percentUsed.toFixed(0)}%** used`;
+    }
+    // Savings column
+    let savingsDisplay = '—';
+    if (totalSavings !== undefined && totalSavings > 0) {
+        savingsDisplay = `**${currencySymbol}${totalSavings.toFixed(2)}**/mo`;
+    }
+    return `| 💰 Monthly Cost | 📊 Budget Status | 💡 Potential Savings |
+|:---------------:|:----------------:|:--------------------:|
+| ${costDisplay} | ${budgetDisplay} | ${savingsDisplay} |
+`;
+}
+/**
+ * Get GitHub alert type based on budget health status
+ * Uses GitHub's blockquote alert syntax: [!NOTE], [!WARNING], [!CAUTION]
+ * @param status - Health status or percentage
+ * @returns GitHub alert type string
+ */
+function getAlertType(status) {
+    if (typeof status === 'number') {
+        if (status >= 100)
+            return 'CAUTION';
+        if (status >= 80)
+            return 'WARNING';
+        return 'NOTE';
+    }
+    switch (status) {
+        case 'exceeded':
+        case 'critical':
+            return 'CAUTION';
+        case 'warning':
+            return 'WARNING';
+        default:
+            return 'NOTE';
+    }
+}
+/**
+ * Renders budget status using GitHub's native alert syntax for better visual impact.
+ *
+ * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning state, [!NOTE] otherwise.
+ * Displays budget amount, current spend, progress bar, and any triggered alerts.
+ *
+ * @param budgetStatus - Budget status data; returns empty string if not configured
+ * @returns Markdown string with GitHub alert syntax, or empty string when budget not configured
+ */
+function formatBudgetSection(budgetStatus) {
+    if (!budgetStatus || !budgetStatus.configured) {
+        return '';
+    }
+    const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
+    const currencySymbol = getCurrencySymbol(currency);
+    const alertType = getAlertType(percentUsed ?? 0);
+    // Build status title
+    let statusTitle = 'Budget Status';
+    if (percentUsed !== undefined) {
+        if (percentUsed >= 100) {
+            statusTitle = 'Budget Exceeded';
+        }
+        else if (percentUsed >= 80) {
+            statusTitle = 'Budget Warning';
+        }
+    }
+    // Build content lines
+    const lines = [];
+    lines.push(`> [!${alertType}]`);
+    lines.push(`> **${statusTitle}**`);
+    lines.push(`>`);
+    const budgetLine = `> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`;
+    lines.push(budgetLine);
+    if (spent !== undefined && percentUsed !== undefined) {
+        const progressBar = generateProgressBar(percentUsed);
+        lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
+    }
+    // Add triggered alerts
+    if (alerts && alerts.length > 0) {
+        const triggeredAlerts = alerts.filter((a) => a.triggered);
+        if (triggeredAlerts.length > 0) {
+            lines.push(`>`);
+            triggeredAlerts.forEach((a) => {
+                lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
+            });
+        }
+    }
+    return '\n' + lines.join('\n') + '\n';
+}
+/**
+ * Render the Sustainability section as a Markdown string for inclusion in the comment body.
+ *
+ * Builds a "Sustainability Impact" block showing total carbon, month-over-month change, and carbon intensity.
+ * When enabled via config, includes environmental equivalents (trees, miles driven, home electricity days).
+ * When a finfocusReport with resource data is provided, includes a top-10 resources-by-carbon table.
+ *
+ * @param report - Sustainability metrics (must include `totalCO2e`, `totalCO2eDiff`, and `carbonIntensity`)
+ * @param config - Optional action configuration; honors `includeSustainability` and `sustainabilityEquivalents` flags
+ * @param finfocusReport - Optional finfocus report used to generate a Resources by Carbon Impact table when present
+ * @returns A Markdown string containing the formatted Sustainability section, or an empty string if sustainability is not enabled
+ */
+function formatSustainabilitySection(report, config, finfocusReport) {
+    if (!config?.includeSustainability)
+        return '';
+    const { totalCO2e, totalCO2eDiff, carbonIntensity } = report;
+    const equivalents = config.sustainabilityEquivalents
+        ? calculateEquivalents(totalCO2e)
+        : undefined;
+    let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
+    if (totalCO2eDiff > 0)
+        diffText = `+${diffText}`;
+    let equivalentsSection = '';
+    if (equivalents) {
+        equivalentsSection = `
+<details>
+<summary>Environmental Equivalents</summary>
+
+- 🌲 Equivalent to planting **${equivalents.trees.toFixed(2)} trees** annually to offset
+- 🚗 Equivalent to driving **${equivalents.milesDriven.toFixed(2)} miles** per month
+- 💡 Equivalent to **${equivalents.homeElectricityDays.toFixed(2)} days** of home electricity use
+</details>
+`;
+    }
+    // Build Resource Breakdown by Carbon Impact
+    let resourceTable = '';
+    const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
+    if (resources.length > 0) {
+        const resourcesWithCarbon = resources
+            .filter((r) => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
+            .sort((a, b) => b.sustainability.carbon_footprint.value - a.sustainability.carbon_footprint.value);
+        if (resourcesWithCarbon.length > 0) {
+            const resourceRows = resourcesWithCarbon
+                .slice(0, 10) // Top 10 by carbon
+                .map((r) => {
+                const name = r.resourceId.split('::').pop() || r.resourceId;
+                const carbon = r.sustainability.carbon_footprint.value.toFixed(2);
+                const unit = r.sustainability.carbon_footprint.unit;
+                return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
+            })
+                .join('\n');
+            if (resourceRows) {
+                resourceTable = `
+### Resources by Carbon Impact
+
+| Resource | Type | CO₂/month |
+| :--- | :--- | ---: |
+${resourceRows}
+`;
+            }
+        }
+    }
+    return `
+
+<details>
+<summary><strong>🌱 Sustainability</strong> — ${totalCO2e.toFixed(2)} kgCO₂e/month</summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
+| **Carbon Change** | ${diffText} |
+| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
+${equivalentsSection}${resourceTable}
+</details>
+`;
+}
+/**
+ * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
+ *
+ * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
+ * @param config - Optional action configuration that controls formatting and which sections to show
+ * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
+ * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
+ * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
+ * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ */
+function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus) {
+    // Handle both new and legacy report formats
+    const currency = report.summary?.currency ?? report.currency ?? 'USD';
+    const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
+    const total = totalMonthly.toFixed(2);
+    const diff = report.diff ? report.diff.monthly_cost_change.toFixed(2) : '0.00';
+    const percent = report.diff ? report.diff.percent_change.toFixed(2) : '0.00';
+    let diffText = `${diff} ${currency}`;
+    if (report.diff) {
+        if (report.diff.monthly_cost_change > 0) {
+            diffText = `📈 +${diffText}`;
+        }
+        else if (report.diff.monthly_cost_change < 0) {
+            diffText = `📉 ${diffText}`;
+        }
+    }
+    // Build resource breakdown if available
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    let resourceTable = '';
+    const isDetailed = config?.detailedComment === true;
+    if (resources.length > 0) {
+        const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
+        if (isDetailed) {
+            // Detailed view: All resources with notes and breakdown
+            const resourceRows = sortedResources
+                .map((r) => {
+                const name = r.resourceId.split('::').pop() || r.resourceId;
+                const notes = r.notes ? `<br/>*${r.notes}*` : '';
+                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+            })
+                .join('\n');
+            resourceTable = `
+
+<details>
+<summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
+
+| Resource | Type | Monthly Cost | Notes |
+| :--- | :--- | ---: | :--- |
+${resourceRows}
+
+</details>
+`;
+        }
+        else if (resources.length <= 20) {
+            // Standard view: Top resources in collapsible section
+            const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
+            const resourceRows = topResources
+                .map((r) => {
+                const name = r.resourceId.split('::').pop() || r.resourceId;
+                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+            })
+                .join('\n');
+            if (resourceRows) {
+                resourceTable = `
+
+<details>
+<summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
+
+| Resource | Type | Monthly Cost |
+| :--- | :--- | ---: |
+${resourceRows}
+
+</details>
+`;
+            }
+        }
+    }
+    // Build provider breakdown only if multiple providers
+    let providerBreakdown = '';
+    if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
+        const providerRows = Object.entries(report.summary.byProvider)
+            .filter(([, cost]) => cost > 0)
+            .sort(([, a], [, b]) => b - a)
+            .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
+            .join('\n');
+        if (providerRows) {
+            providerBreakdown = `
+
+<details>
+<summary><strong>☁️ Cost by Provider</strong></summary>
+
+| Provider | Monthly Cost |
+| :--- | ---: |
+${providerRows}
+
+</details>
+`;
+        }
+    }
+    // Build Actual Cost Section
+    let actualCostSection = '';
+    let actualCostRow = '';
+    if (actualCostReport && actualCostReport.total > 0) {
+        const actualTotal = actualCostReport.total.toFixed(2);
+        actualCostRow = `| **Actual (${config?.actualCostsPeriod || '7d'})** | ${actualTotal} ${actualCostReport.currency} |`;
+        // Actual Costs Breakdown Table (collapsible)
+        if (actualCostReport.items.length > 0) {
+            const actualRows = actualCostReport.items
+                .sort((a, b) => b.cost - a.cost)
+                .map((item) => `| ${item.name} | ${item.cost.toFixed(2)} ${item.currency} |`)
+                .join('\n');
+            actualCostSection = `
+
+<details>
+<summary><strong>💵 Actual Costs</strong> (${actualCostReport.startDate} to ${actualCostReport.endDate})</summary>
+
+| ${config?.actualCostsGroupBy || 'Provider'} | Cost |
+| :--- | ---: |
+| **Total** | **${actualTotal} ${actualCostReport.currency}** |
+${actualRows}
+
+</details>
+`;
+        }
+    }
+    const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
+    // Recommendations section - prominent since it's actionable
+    let recommendationsSection = '';
+    if (recommendationsReport && recommendationsReport.recommendations.length > 0) {
+        const totalSavings = recommendationsReport.summary.total_savings;
+        const savingsCurrency = recommendationsReport.summary.currency;
+        const recRows = recommendationsReport.recommendations
+            .map((r) => {
+            const name = r.resource_id.split('::').pop() || r.resource_id;
+            return `| ${name} | ${r.description} | ${r.estimated_savings.toFixed(2)} ${r.currency} |`;
+        })
+            .join('\n');
+        recommendationsSection = `
+
+<details open>
+<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+
+| Resource | Recommendation | Savings |
+| :--- | :--- | ---: |
+${recRows}
+
+</details>
+`;
+    }
+    const sustainabilitySection = sustainabilityReport
+        ? formatSustainabilitySection(sustainabilityReport, config, report)
+        : '';
+    // Basic budget status section (local math; finfocus has no budget status command)
+    const budgetSection = formatBudgetSection(budgetStatus);
+    // Calculate percent used for dashboard from budget status
+    const percentUsed = budgetStatus?.percentUsed;
+    // Calculate achievable savings for dashboard (max per resource+action_type group)
+    // This avoids inflating the total by summing mutually exclusive options
+    const achievableSavings = calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
+    // Build dashboard summary row
+    const dashboardSummary = formatDashboardSummary(totalMonthly, currency, percentUsed, achievableSavings);
+    return `## Cloud Cost Estimate
+
+${dashboardSummary}
+${budgetSection}
+<details>
+<summary><strong>📈 Cost Details</strong></summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Projected Monthly** | ${total} ${currency} |
+${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
+| **% Change** | ${percent}% |
+
+</details>
+${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
+
+---
+<sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
+`;
+}
+
 ;// CONCATENATED MODULE: ./src/comment.ts
 
 
 
 class Commenter {
     marker = '<!-- finfocus-action-comment -->';
-    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, budgetHealth, scopedBudgetReport) {
+    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus) {
         const octokit = getOctokit(token);
         const context = github_context;
         if (!context.payload.pull_request) {
@@ -42589,7 +41951,7 @@ class Commenter {
         }
         const prNumber = context.payload.pull_request.number;
         const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, budgetHealth, scopedBudgetReport)}`;
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus)}`;
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
             issue_number: prNumber,
@@ -42611,6 +41973,140 @@ ${formatCommentBody(report, config, recommendationsReport, actualCostReport, sus
                 body,
             });
         }
+    }
+}
+
+;// CONCATENATED MODULE: ./src/config.ts
+
+
+
+
+class ConfigManager {
+    async writeConfig(config) {
+        const debug = config?.debug === true;
+        // Validate budget amount
+        if (!config.budgetAmount || config.budgetAmount <= 0) {
+            main_core/* warning */.$e('Budget amount is not configured or invalid. Skipping budget configuration.');
+            return;
+        }
+        if (debug) {
+            main_core/* info */.pq('=== ConfigManager: Writing budget configuration ===');
+            main_core/* info */.pq(`  Budget amount: ${config.budgetAmount}`);
+            main_core/* info */.pq(`  Currency: ${config.budgetCurrency || 'USD'}`);
+            main_core/* info */.pq(`  Period: ${config.budgetPeriod || 'monthly'}`);
+        }
+        // Parse and validate inputs
+        const budgetConfig = this.parseBudgetConfig(config);
+        // Define config directory
+        const configDir = external_path_.join(external_os_.homedir(), '.finfocus');
+        if (debug)
+            main_core/* info */.pq(`  Config directory: ${configDir}`);
+        // Create directory if it doesn't exist
+        if (!external_fs_.existsSync(configDir)) {
+            if (debug)
+                main_core/* info */.pq('  Creating config directory...');
+            external_fs_.mkdirSync(configDir, { recursive: true });
+        }
+        // Generate YAML content
+        const yamlContent = this.generateYaml(budgetConfig);
+        // Write config file
+        const configPath = external_path_.join(configDir, 'config.yaml');
+        if (debug) {
+            main_core/* info */.pq(`  Writing config to: ${configPath}`);
+            main_core/* info */.pq(`  Config content:\n${yamlContent}`);
+        }
+        external_fs_.writeFileSync(configPath, yamlContent, 'utf8');
+        if (debug)
+            main_core/* info */.pq('  Budget configuration written successfully');
+        else
+            main_core/* info */.pq('Budget configuration created successfully');
+    }
+    parseBudgetConfig(config) {
+        const amount = config.budgetAmount || 0;
+        const currency = config.budgetCurrency || 'USD';
+        const period = this.validatePeriod(config.budgetPeriod || 'monthly');
+        const alerts = this.parseAlerts(config.budgetAlerts);
+        return {
+            amount,
+            currency,
+            period,
+            alerts,
+        };
+    }
+    validatePeriod(period) {
+        const validPeriods = ['monthly', 'quarterly', 'yearly'];
+        if (!validPeriods.includes(period)) {
+            main_core/* warning */.$e(`Invalid budget period "${period}". Supported: ${validPeriods.join(', ')}. Defaulting to "monthly".`);
+            return 'monthly';
+        }
+        return period;
+    }
+    parseAlerts(alertsInput) {
+        // Default alerts if none provided
+        const defaultAlerts = [
+            { threshold: 80, type: 'actual' },
+            { threshold: 100, type: 'forecasted' },
+        ];
+        if (!alertsInput || alertsInput.trim() === '') {
+            return defaultAlerts;
+        }
+        try {
+            const parsed = JSON.parse(alertsInput);
+            // Validate parsed alerts
+            if (!Array.isArray(parsed)) {
+                main_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
+                return defaultAlerts;
+            }
+            const validAlerts = parsed.filter((alert) => {
+                if (typeof alert.threshold !== 'number' || alert.threshold <= 0) {
+                    main_core/* warning */.$e(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
+                    return false;
+                }
+                if (alert.type !== 'actual' && alert.type !== 'forecasted') {
+                    main_core/* warning */.$e(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
+                    return false;
+                }
+                return true;
+            });
+            if (validAlerts.length === 0) {
+                main_core/* warning */.$e('No valid alerts found. Using default alerts.');
+                return defaultAlerts;
+            }
+            return validAlerts;
+        }
+        catch (err) {
+            main_core/* warning */.$e(`Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`);
+            return defaultAlerts;
+        }
+    }
+    /**
+     * Generate the finfocus config.yaml content.
+     *
+     * finfocus v0.4.0 reads budgets from `cost.budgets` using the scoped schema;
+     * a top-level `budget:` key is ignored. The action writes a single `global`
+     * budget so `cost projected` prints the BUDGET STATUS block and honors
+     * `--exit-on-threshold`.
+     */
+    generateYaml(config) {
+        const lines = [];
+        lines.push('# finfocus budget configuration');
+        lines.push('# Generated by finfocus-action');
+        lines.push('');
+        lines.push('cost:');
+        lines.push('  budgets:');
+        lines.push('    global:');
+        lines.push(`      amount: ${config.amount.toFixed(2)}`);
+        lines.push(`      currency: ${config.currency}`);
+        lines.push(`      period: ${config.period}`);
+        if (config.alerts && config.alerts.length > 0) {
+            lines.push('      alerts:');
+            for (const alert of config.alerts) {
+                lines.push(`        - threshold: ${alert.threshold}`);
+                lines.push(`          type: ${alert.type}`);
+            }
+        }
+        lines.push('');
+        return lines.join('\n');
     }
 }
 
@@ -42694,11 +42190,11 @@ function logAnalyzerOutput() {
     }
 }
 /**
- * Orchestrates the GitHub Action: installs finfocus (and optional plugins), runs cost/sustainability/recommendation/actual-cost analyses, evaluates budget and budget-health, enforces guardrails, sets action outputs, and optionally posts or updates a PR comment.
+ * Orchestrates the GitHub Action: installs finfocus (and optional plugins), runs cost/sustainability/recommendation/actual-cost analyses, evaluates budget thresholds, enforces guardrails, sets action outputs, and optionally posts or updates a PR comment.
  *
  * This function reads action inputs to build its configuration, performs installation and analysis steps, emits outputs for costs, sustainability, recommendations, actuals and budget metrics, and applies configured guardrails that may cause the action to fail or warn depending on settings.
  *
- * @throws Error if configured guardrails fail (for example cost threshold, carbon increase, or budget health checks) or other unrecoverable conditions occur.
+ * @throws Error if configured guardrails fail (for example cost threshold or carbon increase checks) or other unrecoverable conditions occur.
  */
 async function run() {
     const startTime = Date.now();
@@ -42746,16 +42242,6 @@ async function run() {
         const budgetCurrency = main_core/* getInput */.V4('budget_currency') || 'USD';
         const budgetPeriod = main_core/* getInput */.V4('budget_period') || 'monthly';
         const budgetAlerts = main_core/* getInput */.V4('budget_alerts') || '';
-        const budgetAlertThresholdRaw = main_core/* getInput */.V4('budget_alert_threshold');
-        const budgetAlertThreshold = budgetAlertThresholdRaw ? parseInt(budgetAlertThresholdRaw) : 80;
-        const failOnBudgetHealthRaw = main_core/* getInput */.V4('fail_on_budget_health');
-        const failOnBudgetHealth = failOnBudgetHealthRaw ? parseInt(failOnBudgetHealthRaw) : undefined;
-        const showBudgetForecastRaw = main_core/* getInput */.V4('show_budget_forecast');
-        const showBudgetForecast = parseBoolean(showBudgetForecastRaw, true);
-        // Scoped budgets (finfocus v0.2.6+)
-        const budgetScopes = main_core/* getInput */.V4('budget_scopes') || '';
-        const failOnBudgetScopeBreachRaw = main_core/* getInput */.V4('fail_on_budget_scope_breach');
-        const failOnBudgetScopeBreach = parseBoolean(failOnBudgetScopeBreachRaw, false);
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -42781,11 +42267,6 @@ async function run() {
             budgetCurrency,
             budgetPeriod,
             budgetAlerts,
-            budgetAlertThreshold,
-            failOnBudgetHealth,
-            showBudgetForecast,
-            budgetScopes,
-            failOnBudgetScopeBreach,
         };
         if (config.debug) {
             main_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -42926,7 +42407,7 @@ async function run() {
             sustainabilityReport = {
                 totalCO2e,
                 totalCO2eDiff,
-                carbonIntensity
+                carbonIntensity,
             };
             main_core/* setOutput */.uH('total-carbon-footprint', totalCO2e.toString());
             main_core/* setOutput */.uH('carbon-intensity', carbonIntensity.toString());
@@ -42964,7 +42445,6 @@ async function run() {
         }
         // Calculate budget status if budget is configured
         let budgetStatus;
-        let budgetHealth;
         if (config.budgetAmount && config.budgetAmount > 0) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('📊 Calculating budget status');
@@ -42979,53 +42459,12 @@ async function run() {
                 main_core/* info */.pq(`📊 Budget: ${budgetStatus.spent?.toFixed(2)}/${budgetStatus.amount?.toFixed(2)} ${budgetStatus.currency} (${budgetStatus.percentUsed?.toFixed(1)}%)`);
             }
             main_core/* endGroup */.N4();
-            // Run budget health analysis (enhanced metrics)
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📊 Running budget health analysis');
-            const budgetHealthStart = Date.now();
-            budgetHealth = await analyzer.runBudgetStatus(config);
-            if (config.debug) {
-                main_core/* info */.pq(`Budget health analysis took: ${Date.now() - budgetHealthStart}ms`);
-            }
-            if (budgetHealth) {
-                main_core/* setOutput */.uH('budget-health-score', budgetHealth.healthScore?.toString() ?? '');
-                main_core/* setOutput */.uH('budget-forecast', budgetHealth.forecast ?? '');
-                main_core/* setOutput */.uH('budget-runway-days', budgetHealth.runwayDays?.toString() ?? '');
-                main_core/* setOutput */.uH('budget-status', budgetHealth.healthStatus);
-                main_core/* info */.pq(`📊 Budget Health: ${budgetHealth.healthScore ?? 'N/A'}/100 (${budgetHealth.healthStatus})`);
-                if (budgetHealth.forecast) {
-                    main_core/* info */.pq(`📊 Budget Forecast: ${budgetHealth.forecast}`);
-                }
-                if (budgetHealth.runwayDays !== undefined) {
-                    main_core/* info */.pq(`📊 Budget Runway: ${budgetHealth.runwayDays} days`);
-                }
-            }
-            main_core/* endGroup */.N4();
-        }
-        // Run scoped budget analysis if scopes are configured
-        let scopedBudgetReport;
-        if (config.budgetScopes && config.budgetScopes.trim() !== '') {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📊 Running scoped budget analysis');
-            const scopedBudgetStart = Date.now();
-            scopedBudgetReport = await analyzer.runScopedBudgetStatus(config);
-            if (config.debug) {
-                main_core/* info */.pq(`Scoped budget analysis took: ${Date.now() - scopedBudgetStart}ms`);
-            }
-            if (scopedBudgetReport) {
-                main_core/* setOutput */.uH('budget-scopes-status', JSON.stringify(scopedBudgetReport.scopes));
-                main_core/* info */.pq(`📊 Scoped Budgets: ${scopedBudgetReport.scopes.length} scope(s) analyzed`);
-                if (scopedBudgetReport.failed.length > 0) {
-                    main_core/* warning */.$e(`${scopedBudgetReport.failed.length} scope(s) failed to process`);
-                }
-            }
-            main_core/* endGroup */.N4();
         }
         if (config.postComment && config.githubToken) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💬 Posting PR comment');
             const commentStartTime = Date.now();
-            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, budgetHealth, scopedBudgetReport);
+            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus);
             if (config.debug) {
                 main_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             }
@@ -43056,33 +42495,6 @@ async function run() {
                 throw new Error(`Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`);
             }
             main_core/* info */.pq(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
-            main_core/* endGroup */.N4();
-        }
-        // Check budget health threshold if configured
-        if (config.failOnBudgetHealth && budgetHealth) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📊 Checking budget health guardrails');
-            const { checkBudgetHealthThreshold } = await __nccwpck_require__.e(/* import() */ 259).then(__nccwpck_require__.bind(__nccwpck_require__, 6259));
-            const healthResult = checkBudgetHealthThreshold(config, budgetHealth);
-            if (!healthResult.passed) {
-                const errorMessage = config.debug
-                    ? `${healthResult.message} (status: ${budgetHealth.healthStatus})`
-                    : healthResult.message;
-                throw new Error(errorMessage);
-            }
-            main_core/* info */.pq(`✅ Budget health score meets threshold: ${config.failOnBudgetHealth}`);
-            main_core/* endGroup */.N4();
-        }
-        // Check scoped budget breach if configured
-        if (config.failOnBudgetScopeBreach && scopedBudgetReport) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📊 Checking scoped budget guardrails');
-            const { checkScopedBudgetBreach } = await __nccwpck_require__.e(/* import() */ 259).then(__nccwpck_require__.bind(__nccwpck_require__, 6259));
-            const scopedResult = checkScopedBudgetBreach(scopedBudgetReport, config.failOnBudgetScopeBreach);
-            if (!scopedResult.passed) {
-                throw new Error(scopedResult.message);
-            }
-            main_core/* info */.pq(`✅ All scoped budgets within limits`);
             main_core/* endGroup */.N4();
         }
         main_core/* info */.pq('');

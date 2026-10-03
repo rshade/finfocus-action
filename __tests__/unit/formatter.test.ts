@@ -1,5 +1,10 @@
 import { formatCommentBody, calculateAchievableSavings } from '../../src/formatter.js';
-import { FinfocusReport, ActionConfiguration, ActualCostReport, BudgetHealthReport, Recommendation } from '../../src/types.js';
+import {
+  FinfocusReport,
+  ActionConfiguration,
+  ActualCostReport,
+  Recommendation,
+} from '../../src/types.js';
 
 describe('formatCommentBody', () => {
   const mockReport: FinfocusReport = {
@@ -32,7 +37,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('**50%** used');
       expect(result).toContain('🟡'); // 50% shows yellow
@@ -50,7 +62,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('🟢');
       expect(result).toContain('**20%** used');
@@ -68,7 +87,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('🔴');
       expect(result).toContain('**84%** used');
@@ -86,7 +112,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('⛔');
       expect(result).toContain('**126%** used');
@@ -232,7 +265,13 @@ describe('formatCommentBody', () => {
       sustainabilityEquivalents: true,
     } as ActionConfiguration;
 
-    const result = formatCommentBody(mockReport, config, undefined, undefined, sustainabilityReport);
+    const result = formatCommentBody(
+      mockReport,
+      config,
+      undefined,
+      undefined,
+      sustainabilityReport,
+    );
 
     expect(result).toContain('Sustainability');
     expect(result).toContain('Carbon Footprint');
@@ -259,7 +298,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       // Should use GitHub alert syntax
       expect(result).toContain('[!');
@@ -281,7 +327,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       // Check for block characters in progress bar
       expect(result).toContain('▓'); // Filled blocks
@@ -301,7 +354,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('[!WARNING]');
       expect(result).toContain('Budget Warning');
@@ -319,7 +379,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('[!CAUTION]');
       expect(result).toContain('Budget Exceeded');
@@ -337,7 +404,14 @@ describe('formatCommentBody', () => {
         alerts: [],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('[!NOTE]');
       expect(result).not.toContain('Budget Warning');
@@ -349,7 +423,14 @@ describe('formatCommentBody', () => {
         configured: false,
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       // Dashboard header "📊 Budget Status" will always be present, but no alert block
       expect(result).not.toContain('[!NOTE]');
@@ -381,7 +462,14 @@ describe('formatCommentBody', () => {
         ],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).toContain('80% actual threshold exceeded');
       expect(result).not.toContain('50% projected threshold exceeded');
@@ -402,149 +490,16 @@ describe('formatCommentBody', () => {
         ],
       };
 
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus);
+      const result = formatCommentBody(
+        mockReport,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        budgetStatus,
+      );
 
       expect(result).not.toContain('threshold exceeded');
-    });
-  });
-
-  describe('Budget Health Display (FR-010)', () => {
-    const baseBudgetHealth: BudgetHealthReport = {
-      configured: true,
-      amount: 2000,
-      currency: 'USD',
-      period: 'monthly',
-      spent: 1234.56,
-      remaining: 765.44,
-      percentUsed: 61.7,
-      healthScore: 85,
-      forecast: '$1,890.00',
-      forecastAmount: 1890,
-      runwayDays: 12,
-      healthStatus: 'healthy',
-    };
-
-    it('should display health score with healthy status icon (green)', () => {
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
-
-      expect(result).toContain('Budget Health');
-      expect(result).toContain('🟢');
-      expect(result).toContain('85/100');
-    });
-
-    it('should display health score with warning status icon (yellow)', () => {
-      const warningHealth: BudgetHealthReport = {
-        ...baseBudgetHealth,
-        healthScore: 65,
-        healthStatus: 'warning',
-      };
-
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, warningHealth);
-
-      expect(result).toContain('🟡');
-      expect(result).toContain('65/100');
-    });
-
-    it('should display health score with critical status icon (red)', () => {
-      const criticalHealth: BudgetHealthReport = {
-        ...baseBudgetHealth,
-        healthScore: 35,
-        healthStatus: 'critical',
-      };
-
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, criticalHealth);
-
-      expect(result).toContain('🔴');
-      expect(result).toContain('35/100');
-    });
-
-    it('should display health score with exceeded status icon', () => {
-      const exceededHealth: BudgetHealthReport = {
-        ...baseBudgetHealth,
-        healthScore: 0,
-        healthStatus: 'exceeded',
-        spent: 2200,
-        remaining: -200,
-        percentUsed: 110,
-      };
-
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, exceededHealth);
-
-      expect(result).toContain('⛔');
-      expect(result).toContain('Exceeded');
-    });
-
-    it('should display forecast when showBudgetForecast is true (default)', () => {
-      const config: ActionConfiguration = {
-        showBudgetForecast: true,
-      } as ActionConfiguration;
-
-      const result = formatCommentBody(mockReport, config, undefined, undefined, undefined, undefined, baseBudgetHealth);
-
-      expect(result).toContain('Forecast');
-      expect(result).toContain('$1,890.00');
-    });
-
-    it('should hide forecast when showBudgetForecast is false', () => {
-      const config: ActionConfiguration = {
-        showBudgetForecast: false,
-      } as ActionConfiguration;
-
-      const result = formatCommentBody(mockReport, config, undefined, undefined, undefined, undefined, baseBudgetHealth);
-
-      expect(result).not.toContain('Forecast');
-    });
-
-    it('should display runway days', () => {
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
-
-      expect(result).toContain('Runway');
-      expect(result).toContain('12 days');
-    });
-
-    it('should use GitHub alert syntax with progress bar', () => {
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
-
-      // Should use GitHub alert syntax
-      expect(result).toContain('[!NOTE]');
-      expect(result).toContain('▓'); // Filled blocks
-      expect(result).toContain('░'); // Empty blocks
-    });
-
-    it('should use WARNING alert type when health status is warning', () => {
-      const warningHealth: BudgetHealthReport = {
-        ...baseBudgetHealth,
-        healthStatus: 'warning',
-      };
-
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, warningHealth);
-
-      expect(result).toContain('[!WARNING]');
-    });
-
-    it('should not show warning when health status is healthy', () => {
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, undefined, baseBudgetHealth);
-
-      expect(result).not.toContain('[!WARNING]');
-      expect(result).not.toContain('[!CAUTION]');
-    });
-
-    it('should prefer BudgetHealthReport over BudgetStatus when both provided', () => {
-      const budgetStatus = {
-        configured: true,
-        amount: 1000,
-        currency: 'USD',
-        period: 'monthly',
-        spent: 500,
-        remaining: 500,
-        percentUsed: 50,
-      };
-
-      const result = formatCommentBody(mockReport, undefined, undefined, undefined, undefined, budgetStatus, baseBudgetHealth);
-
-      // Should show Budget Health (from BudgetHealthReport), not Budget Status (from BudgetStatus)
-      expect(result).toContain('Budget Health');
-      expect(result).toContain('85/100');
     });
   });
 });
@@ -560,8 +515,20 @@ describe('calculateAchievableSavings', () => {
 
   it('should sum savings when all recommendations are for different resources', () => {
     const recommendations: Recommendation[] = [
-      { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize', estimated_savings: 50, currency: 'USD' },
-      { resource_id: 'ebs-volume-1', action_type: 'DELETE', description: 'Delete unused', estimated_savings: 20, currency: 'USD' },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Resize',
+        estimated_savings: 50,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ebs-volume-1',
+        action_type: 'DELETE',
+        description: 'Delete unused',
+        estimated_savings: 20,
+        currency: 'USD',
+      },
     ];
 
     expect(calculateAchievableSavings(recommendations)).toBe(70);
@@ -570,8 +537,20 @@ describe('calculateAchievableSavings', () => {
   it('should take max savings when multiple options exist for same resource+action_type', () => {
     // Same resource, same action type = mutually exclusive options
     const recommendations: Recommendation[] = [
-      { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize to medium', estimated_savings: 50, currency: 'USD' },
-      { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize to small', estimated_savings: 80, currency: 'USD' },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Resize to medium',
+        estimated_savings: 50,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Resize to small',
+        estimated_savings: 80,
+        currency: 'USD',
+      },
     ];
 
     // Should be max(50, 80) = 80, not 50 + 80 = 130
@@ -585,9 +564,27 @@ describe('calculateAchievableSavings', () => {
     // Wrong calculation: $50 + $80 + $20 = $150
     // Correct calculation: max($50, $80) + $20 = $100
     const recommendations: Recommendation[] = [
-      { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize large → medium', estimated_savings: 50, currency: 'USD' },
-      { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize large → small', estimated_savings: 80, currency: 'USD' },
-      { resource_id: 'ebs-volume-unused', action_type: 'DELETE', description: 'Remove unused EBS volume', estimated_savings: 20, currency: 'USD' },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Resize large → medium',
+        estimated_savings: 50,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Resize large → small',
+        estimated_savings: 80,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ebs-volume-unused',
+        action_type: 'DELETE',
+        description: 'Remove unused EBS volume',
+        estimated_savings: 20,
+        currency: 'USD',
+      },
     ];
 
     expect(calculateAchievableSavings(recommendations)).toBe(100);
@@ -596,8 +593,20 @@ describe('calculateAchievableSavings', () => {
   it('should allow same resource with different action types to sum', () => {
     // Same resource, different action types = NOT mutually exclusive
     const recommendations: Recommendation[] = [
-      { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize to small', estimated_savings: 50, currency: 'USD' },
-      { resource_id: 'ec2-instance-1', action_type: 'SCHEDULING', description: 'Stop during off-hours', estimated_savings: 30, currency: 'USD' },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Resize to small',
+        estimated_savings: 50,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ec2-instance-1',
+        action_type: 'SCHEDULING',
+        description: 'Stop during off-hours',
+        estimated_savings: 30,
+        currency: 'USD',
+      },
     ];
 
     // Different action types should sum: 50 + 30 = 80
@@ -607,14 +616,50 @@ describe('calculateAchievableSavings', () => {
   it('should handle multiple groups with multiple options each', () => {
     const recommendations: Recommendation[] = [
       // Group 1: ec2-1 + RIGHTSIZING (3 options)
-      { resource_id: 'ec2-1', action_type: 'RIGHTSIZING', description: 'Option A', estimated_savings: 10, currency: 'USD' },
-      { resource_id: 'ec2-1', action_type: 'RIGHTSIZING', description: 'Option B', estimated_savings: 25, currency: 'USD' },
-      { resource_id: 'ec2-1', action_type: 'RIGHTSIZING', description: 'Option C', estimated_savings: 15, currency: 'USD' },
+      {
+        resource_id: 'ec2-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Option A',
+        estimated_savings: 10,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ec2-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Option B',
+        estimated_savings: 25,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'ec2-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Option C',
+        estimated_savings: 15,
+        currency: 'USD',
+      },
       // Group 2: rds-1 + RIGHTSIZING (2 options)
-      { resource_id: 'rds-1', action_type: 'RIGHTSIZING', description: 'Option A', estimated_savings: 100, currency: 'USD' },
-      { resource_id: 'rds-1', action_type: 'RIGHTSIZING', description: 'Option B', estimated_savings: 75, currency: 'USD' },
+      {
+        resource_id: 'rds-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Option A',
+        estimated_savings: 100,
+        currency: 'USD',
+      },
+      {
+        resource_id: 'rds-1',
+        action_type: 'RIGHTSIZING',
+        description: 'Option B',
+        estimated_savings: 75,
+        currency: 'USD',
+      },
       // Group 3: ebs-1 + DELETE (1 option)
-      { resource_id: 'ebs-1', action_type: 'DELETE', description: 'Delete', estimated_savings: 5, currency: 'USD' },
+      {
+        resource_id: 'ebs-1',
+        action_type: 'DELETE',
+        description: 'Delete',
+        estimated_savings: 5,
+        currency: 'USD',
+      },
     ];
 
     // max(10,25,15) + max(100,75) + 5 = 25 + 100 + 5 = 130
@@ -641,9 +686,27 @@ describe('Dashboard Achievable Savings', () => {
         count_by_action_type: { RIGHTSIZING: 2, DELETE: 1 },
       },
       recommendations: [
-        { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize to medium', estimated_savings: 50, currency: 'USD' },
-        { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize to small', estimated_savings: 80, currency: 'USD' },
-        { resource_id: 'ebs-volume-unused', action_type: 'DELETE', description: 'Remove unused', estimated_savings: 20, currency: 'USD' },
+        {
+          resource_id: 'ec2-instance-1',
+          action_type: 'RIGHTSIZING',
+          description: 'Resize to medium',
+          estimated_savings: 50,
+          currency: 'USD',
+        },
+        {
+          resource_id: 'ec2-instance-1',
+          action_type: 'RIGHTSIZING',
+          description: 'Resize to small',
+          estimated_savings: 80,
+          currency: 'USD',
+        },
+        {
+          resource_id: 'ebs-volume-unused',
+          action_type: 'DELETE',
+          description: 'Remove unused',
+          estimated_savings: 20,
+          currency: 'USD',
+        },
       ],
     };
 
@@ -664,8 +727,20 @@ describe('Dashboard Achievable Savings', () => {
         count_by_action_type: { RIGHTSIZING: 1, DELETE: 1 },
       },
       recommendations: [
-        { resource_id: 'ec2-instance-1', action_type: 'RIGHTSIZING', description: 'Resize', estimated_savings: 50, currency: 'USD' },
-        { resource_id: 'ebs-volume-unused', action_type: 'DELETE', description: 'Remove unused', estimated_savings: 20, currency: 'USD' },
+        {
+          resource_id: 'ec2-instance-1',
+          action_type: 'RIGHTSIZING',
+          description: 'Resize',
+          estimated_savings: 50,
+          currency: 'USD',
+        },
+        {
+          resource_id: 'ebs-volume-unused',
+          action_type: 'DELETE',
+          description: 'Remove unused',
+          estimated_savings: 20,
+          currency: 'USD',
+        },
       ],
     };
 

@@ -11,19 +11,7 @@ import {
   RecommendationsReport,
   ActualCostReport,
   BudgetStatus,
-  BudgetHealthReport,
-  BudgetHealthStatus,
-  FinfocusBudgetStatusResponse,
-  ScopedBudgetReport,
-  ScopedBudgetStatus,
-  ScopedBudgetFailure,
-  FinfocusScopedBudgetResponse,
-  FinfocusScopeEntry,
-  BudgetScopeType,
 } from './types.js';
-import { getFinfocusVersion, supportsExitCodes, supportsScopedBudgets } from './install.js';
-import { parseBudgetScopes } from './config.js';
-import { getCurrencySymbol } from './formatter.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 
 export class Analyzer implements IAnalyzer {
@@ -180,7 +168,7 @@ export class Analyzer implements IAnalyzer {
     carbonIntensity: number;
   } {
     let totalCO2e = 0;
-    
+
     // Sum up carbon footprint from all resources
     if (report.resources) {
       for (const resource of report.resources) {
@@ -196,7 +184,7 @@ export class Analyzer implements IAnalyzer {
       }
     }
 
-    // Since finfocus currently might not provide total diff for sustainability, 
+    // Since finfocus currently might not provide total diff for sustainability,
     // we default to 0 for now unless we can calculate it from base state.
     // For V1 MVP, we will assume 0 or absolute value if base isn't available.
     // However, if we want to support diff, we'd need the base report which we don't have here.
@@ -622,7 +610,9 @@ export class Analyzer implements IAnalyzer {
           return false;
         }
         if (alert.type !== 'actual' && alert.type !== 'forecasted') {
-          core.warning(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
+          core.warning(
+            `Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`,
+          );
           return false;
         }
         return true;
@@ -655,7 +645,9 @@ export class Analyzer implements IAnalyzer {
       // Remaining: $150.00 USD
 
       const budgetMatch = stdout.match(/Budget:\s*\$?([\d,]+\.?\d*)\s*(\w+)?\/?(\w+)?/i);
-      const spendMatch = stdout.match(/(?:Current\s+)?Spend(?:ing)?:\s*\$?([\d,]+\.?\d*)\s*(\w+)?\s*\(?([\d.]+)%?\)?/i);
+      const spendMatch = stdout.match(
+        /(?:Current\s+)?Spend(?:ing)?:\s*\$?([\d,]+\.?\d*)\s*(\w+)?\s*\(?([\d.]+)%?\)?/i,
+      );
       const remainingMatch = stdout.match(/Remaining:\s*\$?([\d,]+\.?\d*)\s*(\w+)?/i);
 
       if (!budgetMatch) {
@@ -700,13 +692,17 @@ export class Analyzer implements IAnalyzer {
 
       // Parse alerts if present
       const alerts: Array<{ threshold: number; type: string; triggered: boolean }> = [];
-      const alertMatches = stdout.matchAll(/Alert:\s*(\d+)%\s*\((\w+)\)\s*-\s*(triggered|not\s+triggered)/gi);
+      const alertMatches = stdout.matchAll(
+        /Alert:\s*(\d+)%\s*\((\w+)\)\s*-\s*(triggered|not\s+triggered)/gi,
+      );
 
       for (const alertMatch of alertMatches) {
         alerts.push({
           threshold: parseInt(alertMatch[1]),
           type: alertMatch[2].toLowerCase(),
-          triggered: alertMatch[3].toLowerCase().includes('triggered') && !alertMatch[3].toLowerCase().includes('not'),
+          triggered:
+            alertMatch[3].toLowerCase().includes('triggered') &&
+            !alertMatch[3].toLowerCase().includes('not'),
         });
       }
 
@@ -745,295 +741,4 @@ export class Analyzer implements IAnalyzer {
     }
     return output.stdout.trim();
   }
-
-  /**
-   * Run budget status analysis using finfocus CLI.
-   * Returns BudgetHealthReport with health score, forecast, and runway.
-   * Falls back to local calculation for finfocus < 0.2.5.
-   */
-  async runBudgetStatus(config: ActionConfiguration): Promise<BudgetHealthReport | undefined> {
-    // Check if budget is configured
-    if (!config.budgetAmount || config.budgetAmount <= 0) {
-      return undefined;
-    }
-
-    const debug = config?.debug === true;
-    if (debug) {
-      core.info('=== Running budget status analysis ===');
-    }
-
-    // Check finfocus version
-    const version = await getFinfocusVersion();
-    if (!supportsExitCodes(version)) {
-      if (debug) {
-        core.info(`  finfocus version ${version} < 0.2.5, using fallback calculation`);
-      }
-      core.warning('Budget health features require finfocus v0.2.5+, using fallback calculation');
-      return this.calculateBudgetHealthFallback(config);
-    }
-
-    // Run finfocus budget status
-    const args = ['budget', 'status', '--output', 'json'];
-    if (debug) {
-      core.info(`  Command: finfocus ${args.join(' ')}`);
-    }
-
-    const output = await exec.getExecOutput('finfocus', args, {
-      silent: !debug,
-      ignoreReturnCode: true,
-    });
-
-    if (output.exitCode !== 0) {
-      if (debug) {
-        core.info(`  finfocus budget status failed with exit code ${output.exitCode}`);
-        core.info(`  stderr: ${output.stderr}`);
-      }
-      core.warning(`finfocus budget status failed: ${output.stderr}`);
-      return this.calculateBudgetHealthFallback(config);
-    }
-
-    return this.parseBudgetStatusResponse(output.stdout, config);
-  }
-
-  /**
-   * Parse the JSON response from finfocus budget status command.
-   */
-  private parseBudgetStatusResponse(
-    stdout: string,
-    config: ActionConfiguration,
-  ): BudgetHealthReport | undefined {
-    const debug = config?.debug === true;
-
-    if (!stdout || stdout.trim() === '') {
-      if (debug) {
-        core.info('  Empty stdout from finfocus budget status');
-      }
-      core.warning('Empty response from finfocus budget status');
-      return this.calculateBudgetHealthFallback(config);
-    }
-
-    try {
-      const parsed = JSON.parse(stdout);
-      // Handle wrapped format (finfocus v0.2.4+) where output may be wrapped
-      const response = (parsed.finfocus ? parsed.finfocus : parsed) as FinfocusBudgetStatusResponse;
-
-      if (debug) {
-        core.info(`  Parsed budget status response: ${JSON.stringify(response)}`);
-      }
-
-      // Validate required fields
-      if (typeof response.health_score !== 'number' || !Number.isFinite(response.health_score)) {
-        core.warning('Invalid health_score in finfocus budget status response');
-        return this.calculateBudgetHealthFallback(config);
-      }
-
-      const healthStatus = this.computeHealthStatus(
-        response.health_score,
-        response.spent,
-        response.budget.amount,
-      );
-
-      // Format currency for display
-      const currencySymbol = getCurrencySymbol(response.budget.currency);
-      const forecastValue = typeof response.forecast === 'number' && Number.isFinite(response.forecast)
-        ? response.forecast
-        : 0;
-      const forecast = forecastValue > 0
-        ? `${currencySymbol}${forecastValue.toFixed(2)}`
-        : 'N/A';
-
-      return {
-        configured: true,
-        amount: response.budget.amount,
-        currency: response.budget.currency,
-        period: response.budget.period,
-        spent: response.spent,
-        remaining: response.remaining,
-        percentUsed: response.percent_used,
-        healthScore: response.health_score,
-        forecast,
-        forecastAmount: response.forecast,
-        runwayDays: response.runway_days,
-        healthStatus,
-      };
-    } catch (err) {
-      if (debug) {
-        core.info(`  Failed to parse budget status JSON: ${err instanceof Error ? err.message : String(err)}`);
-        core.info(`  Raw stdout: ${stdout.substring(0, 500)}`);
-      }
-      core.warning(`Failed to parse finfocus budget status response: ${err instanceof Error ? err.message : String(err)}`);
-      return this.calculateBudgetHealthFallback(config);
-    }
-  }
-
-  /**
-   * Calculate budget health locally when finfocus < 0.2.5.
-   * Returns undefined since we cannot determine actual health metrics without CLI support.
-   * This causes the PR comment to fall back to the basic budget status section instead.
-   */
-  private calculateBudgetHealthFallback(config: ActionConfiguration): BudgetHealthReport | undefined {
-    if (!config.budgetAmount || config.budgetAmount <= 0) {
-      return undefined;
-    }
-
-    const debug = config?.debug === true;
-    if (debug) {
-      core.info('=== Budget health fallback: returning undefined (requires finfocus v0.2.5+) ===');
-    }
-
-    // Return undefined to indicate budget health metrics are unavailable.
-    // This causes formatCommentBody to fall back to formatBudgetSection (basic status)
-    // rather than showing potentially misleading health data.
-    return undefined;
-  }
-
-  /**
-   * Compute health status based on health score and spend vs budget.
-   */
-  private computeHealthStatus(
-    healthScore: number,
-    spent: number,
-    budgetAmount: number,
-  ): BudgetHealthStatus {
-    // Exceeded takes priority if spent > budget
-    if (spent > budgetAmount) {
-      return 'exceeded';
-    }
-
-    // Otherwise use health score thresholds
-    if (healthScore >= 80) {
-      return 'healthy';
-    } else if (healthScore >= 50) {
-      return 'warning';
-    } else if (healthScore > 0) {
-      return 'critical';
-    } else {
-      return 'exceeded';
-    }
-  }
-
-  // ============================================================================
-  // Scoped Budgets (finfocus v0.2.6+)
-  // ============================================================================
-
-  /**
-   * Run scoped budget status analysis using finfocus CLI.
-   * Returns ScopedBudgetReport with status for each configured scope.
-   * Returns undefined if no scopes are configured or CLI version is too old.
-   */
-  async runScopedBudgetStatus(config: ActionConfiguration): Promise<ScopedBudgetReport | undefined> {
-    // Check if scopes are configured
-    if (!config.budgetScopes || config.budgetScopes.trim() === '') {
-      return undefined;
-    }
-
-    const scopes = parseBudgetScopes(config.budgetScopes);
-    if (scopes.length === 0) {
-      return undefined;
-    }
-
-    const debug = config?.debug === true;
-    if (debug) {
-      core.info('=== Running scoped budget status analysis ===');
-      core.info(`  Configured ${scopes.length} scopes`);
-    }
-
-    // Check finfocus version
-    const version = await getFinfocusVersion();
-    if (!supportsScopedBudgets(version)) {
-      const errorMsg = `Scoped budgets require finfocus v0.2.6+. Current version: ${version}`;
-      throw new Error(errorMsg);
-    }
-
-    // Run finfocus budget status --output json
-    const args = ['budget', 'status', '--output', 'json'];
-    if (debug) {
-      core.info(`  Command: finfocus ${args.join(' ')}`);
-    }
-
-    const output = await exec.getExecOutput('finfocus', args, {
-      silent: !debug,
-      ignoreReturnCode: true,
-    });
-
-    if (output.exitCode !== 0) {
-      if (debug) {
-        core.info(`  finfocus budget status failed with exit code ${output.exitCode}`);
-        core.info(`  stderr: ${output.stderr}`);
-      }
-      core.warning(`finfocus budget status failed: ${output.stderr}`);
-      return {
-        scopes: [],
-        failed: scopes.map((s) => ({ scope: s.scope, error: output.stderr || 'Unknown error' })),
-      };
-    }
-
-    return this.parseScopedBudgetResponse(output.stdout, config);
-  }
-
-  /**
-   * Parse the JSON response from finfocus budget status command for scoped budgets.
-   * Handles both wrapped (finfocus key) and unwrapped formats.
-   */
-  parseScopedBudgetResponse(
-    stdout: string,
-    config?: ActionConfiguration,
-  ): ScopedBudgetReport {
-    const debug = config?.debug === true;
-
-    if (!stdout || stdout.trim() === '') {
-      if (debug) {
-        core.info('  Empty stdout from finfocus budget status');
-      }
-      return { scopes: [], failed: [] };
-    }
-
-    try {
-      const parsed = JSON.parse(stdout) as FinfocusScopedBudgetResponse;
-
-      // Handle wrapped format (finfocus v0.2.4+)
-      const scopeEntries = parsed.finfocus?.scopes ?? parsed.scopes ?? [];
-      const errorEntries = parsed.finfocus?.errors ?? parsed.errors ?? [];
-
-      if (debug) {
-        core.info(`  Found ${scopeEntries.length} scope entries, ${errorEntries.length} errors`);
-      }
-
-      // Map scope entries to ScopedBudgetStatus
-      const scopes: ScopedBudgetStatus[] = scopeEntries.map((entry: FinfocusScopeEntry) => {
-        const scopeType = entry.type as BudgetScopeType;
-        return {
-          scope: entry.scope,
-          scopeType,
-          scopeKey: entry.key,
-          spent: entry.spent,
-          budget: entry.budget,
-          currency: entry.currency,
-          percentUsed: entry.percent_used,
-          status: entry.status as BudgetHealthStatus,
-          alerts: (entry.alerts ?? []).map((a) => ({
-            threshold: a.threshold,
-            type: a.type as 'actual' | 'forecasted',
-            triggered: a.triggered,
-          })),
-        };
-      });
-
-      // Map error entries to ScopedBudgetFailure
-      const failed: ScopedBudgetFailure[] = errorEntries.map((e) => ({
-        scope: e.scope,
-        error: e.error,
-      }));
-
-      return { scopes, failed };
-    } catch (err) {
-      if (debug) {
-        core.info(`  Failed to parse scoped budget JSON: ${err instanceof Error ? err.message : String(err)}`);
-        core.info(`  Raw stdout: ${stdout.substring(0, 500)}`);
-      }
-      core.warning(`Failed to parse finfocus scoped budget response: ${err instanceof Error ? err.message : String(err)}`);
-      return { scopes: [], failed: [] };
-    }
-  }
-
 }

@@ -6,11 +6,7 @@ import {
   SustainabilityReport,
   EquivalencyMetrics,
   BudgetStatus,
-  BudgetHealthReport,
   Recommendation,
-  ScopedBudgetReport,
-  ScopedBudgetStatus,
-  BudgetHealthStatus,
 } from './types.js';
 
 /**
@@ -213,7 +209,9 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
 
   if (spent !== undefined && percentUsed !== undefined) {
     const progressBar = generateProgressBar(percentUsed);
-    lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
+    lines.push(
+      `> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`,
+    );
   }
 
   // Add triggered alerts
@@ -228,177 +226,6 @@ function formatBudgetSection(budgetStatus?: BudgetStatus): string {
   }
 
   return '\n' + lines.join('\n') + '\n';
-}
-
-/**
- * Map a budget health status to its corresponding emoji icon.
- *
- * @param status - Health status value; expected: "healthy", "warning", "critical", or "exceeded"
- * @returns The emoji icon for the provided status, `❓` if the status is unrecognized
- */
-function getHealthStatusIcon(status: string): string {
-  const icons: Record<string, string> = {
-    healthy: '🟢',
-    warning: '🟡',
-    critical: '🔴',
-    exceeded: '⛔',
-  };
-  return icons[status] || '❓';
-}
-
-/**
- * Builds a Budget Health section using GitHub's native alert syntax.
- *
- * Shows health score/status, budget details, spend progress, forecast, and runway.
- * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning, [!NOTE] for healthy.
- *
- * @param budgetHealth - Budget health report; returns empty string if not configured
- * @param config - Optional config for showBudgetForecast and budgetAlertThreshold
- * @returns Markdown string with GitHub alert syntax, or empty string if not configured
- */
-function formatBudgetHealthSection(
-  budgetHealth: BudgetHealthReport,
-  config?: ActionConfiguration,
-): string {
-  if (!budgetHealth || !budgetHealth.configured) {
-    return '';
-  }
-
-  const { amount, period, spent, percentUsed, alerts, currency, healthScore, forecast, runwayDays, healthStatus } = budgetHealth;
-  const currencySymbol = getCurrencySymbol(currency);
-  const statusIcon = getHealthStatusIcon(healthStatus);
-  const alertType = getAlertType(healthStatus);
-
-  // Determine title based on status
-  let statusTitle = 'Budget Health';
-  if (healthStatus === 'exceeded') {
-    statusTitle = 'Budget Exceeded';
-  } else if (healthStatus === 'critical') {
-    statusTitle = 'Budget Critical';
-  } else if (healthStatus === 'warning') {
-    statusTitle = 'Budget Warning';
-  }
-
-  // Build content lines
-  const lines: string[] = [];
-  lines.push(`> [!${alertType}]`);
-  lines.push(`> **${statusTitle}** ${statusIcon}`);
-  lines.push(`>`);
-
-  // Health score
-  if (healthScore !== undefined) {
-    lines.push(`> **Health Score:** ${healthScore}/100`);
-  }
-
-  // Budget and spend with progress bar
-  lines.push(`> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`);
-
-  if (spent !== undefined && percentUsed !== undefined) {
-    const progressBar = generateProgressBar(percentUsed);
-    lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
-  }
-
-  // Forecast (if enabled)
-  const showForecast = config?.showBudgetForecast !== false;
-  if (showForecast && forecast) {
-    lines.push(`> **Forecast:** ${forecast}`);
-  }
-
-  // Runway
-  if (runwayDays !== undefined) {
-    const runwayText = runwayDays === Infinity || runwayDays < 0
-      ? 'Unlimited'
-      : `${runwayDays} days`;
-    lines.push(`> **Runway:** ${runwayText}`);
-  }
-
-  // Triggered alerts
-  if (alerts && alerts.length > 0) {
-    const triggeredAlerts = alerts.filter((a) => a.triggered);
-    if (triggeredAlerts.length > 0) {
-      lines.push(`>`);
-      triggeredAlerts.forEach((a) => {
-        lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
-      });
-    }
-  }
-
-  return '\n' + lines.join('\n') + '\n';
-}
-
-// ============================================================================
-// Scoped Budget Formatting (finfocus v0.2.6+)
-// ============================================================================
-
-/**
- * Get status icon for scoped budget based on health status.
- * @param status - Health status value
- * @returns Emoji icon for the status
- */
-export function getScopeStatusIcon(status: BudgetHealthStatus): string {
-  const icons: Record<BudgetHealthStatus, string> = {
-    healthy: '🟢',
-    warning: '🟡',
-    critical: '🔴',
-    exceeded: '⛔',
-  };
-  return icons[status] || '❓';
-}
-
-/**
- * Format a single scope row for the table.
- */
-function formatScopeRow(scope: ScopedBudgetStatus): string {
-  const currencySymbol = getCurrencySymbol(scope.currency);
-  const icon = getScopeStatusIcon(scope.status);
-  const percentDisplay = scope.percentUsed.toFixed(0);
-
-  return `| ${scope.scope} | ${currencySymbol}${scope.spent.toFixed(2)} | ${currencySymbol}${scope.budget.toFixed(2)} | ${icon} ${percentDisplay}% |`;
-}
-
-/**
- * Format the scoped budget section for PR comments.
- * Displays a "Budget Status by Scope" table sorted by percentUsed descending.
- *
- * @param report - Scoped budget report from finfocus CLI
- * @returns Markdown string with scope budget table, or empty string if no scopes/failures
- */
-export function formatScopedBudgetSection(
-  report: ScopedBudgetReport | undefined,
-): string {
-  if (!report || (report.scopes.length === 0 && report.failed.length === 0)) {
-    return '';
-  }
-
-  // Sort scopes by percentUsed descending (highest usage first)
-  const sortedScopes = [...report.scopes].sort((a, b) => b.percentUsed - a.percentUsed);
-
-  // Build table rows
-  const tableRows = sortedScopes.map((scope) => formatScopeRow(scope)).join('\n');
-
-  // Build section
-  let section = '\n### 📊 Budget Status by Scope\n';
-
-  // Only include table if there are successful scopes
-  if (sortedScopes.length > 0) {
-    section += `
-| Scope | Spent | Budget | Status |
-|:------|------:|-------:|:------:|
-${tableRows}
-`;
-  }
-
-  // Add failed scopes warning if any
-  if (report.failed.length > 0) {
-    section += `
-> **Note:** ${report.failed.length} scope(s) failed to process:
-`;
-    for (const failure of report.failed) {
-      section += `> - \`${failure.scope}\`: ${failure.error}\n`;
-    }
-  }
-
-  return section;
 }
 
 /**
@@ -421,7 +248,9 @@ function formatSustainabilitySection(
   if (!config?.includeSustainability) return '';
 
   const { totalCO2e, totalCO2eDiff, carbonIntensity } = report;
-  const equivalents = config.sustainabilityEquivalents ? calculateEquivalents(totalCO2e) : undefined;
+  const equivalents = config.sustainabilityEquivalents
+    ? calculateEquivalents(totalCO2e)
+    : undefined;
 
   let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
   if (totalCO2eDiff > 0) diffText = `+${diffText}`;
@@ -442,11 +271,17 @@ function formatSustainabilitySection(
   // Build Resource Breakdown by Carbon Impact
   let resourceTable = '';
   const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
-  
+
   if (resources.length > 0) {
     const resourcesWithCarbon = resources
-      .filter(r => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
-      .sort((a, b) => (b.sustainability!.carbon_footprint.value) - (a.sustainability!.carbon_footprint.value));
+      .filter(
+        (r) =>
+          r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0,
+      )
+      .sort(
+        (a, b) =>
+          b.sustainability!.carbon_footprint.value - a.sustainability!.carbon_footprint.value,
+      );
 
     if (resourcesWithCarbon.length > 0) {
       const resourceRows = resourcesWithCarbon
@@ -494,10 +329,8 @@ ${equivalentsSection}${resourceTable}
  * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
  * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
- * @param budgetStatus - Optional basic budget status used when detailed budget health is not provided
- * @param budgetHealth - Optional detailed budget health report used in preference to budgetStatus
- * @param scopedBudgetReport - Optional scoped budget report with per-scope status (finfocus v0.2.6+)
- * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget/budget health, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
  */
 export function formatCommentBody(
   report: FinfocusReport,
@@ -506,8 +339,6 @@ export function formatCommentBody(
   actualCostReport?: ActualCostReport,
   sustainabilityReport?: SustainabilityReport,
   budgetStatus?: BudgetStatus,
-  budgetHealth?: BudgetHealthReport,
-  scopedBudgetReport?: ScopedBudgetReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -667,28 +498,29 @@ ${recRows}
     ? formatSustainabilitySection(sustainabilityReport, config, report)
     : '';
 
-  // Use budget health section if available, otherwise fall back to basic budget status
-  const budgetSection = budgetHealth
-    ? formatBudgetHealthSection(budgetHealth, config)
-    : formatBudgetSection(budgetStatus);
+  // Basic budget status section (local math; finfocus has no budget status command)
+  const budgetSection = formatBudgetSection(budgetStatus);
 
-  // Format scoped budget section (finfocus v0.2.6+)
-  const scopedBudgetSection = formatScopedBudgetSection(scopedBudgetReport);
-
-  // Calculate percent used for dashboard (prefer health report, then budget status)
-  const percentUsed = budgetHealth?.percentUsed ?? budgetStatus?.percentUsed;
+  // Calculate percent used for dashboard from budget status
+  const percentUsed = budgetStatus?.percentUsed;
 
   // Calculate achievable savings for dashboard (max per resource+action_type group)
   // This avoids inflating the total by summing mutually exclusive options
-  const achievableSavings = calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
+  const achievableSavings =
+    calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
 
   // Build dashboard summary row
-  const dashboardSummary = formatDashboardSummary(totalMonthly, currency, percentUsed, achievableSavings);
+  const dashboardSummary = formatDashboardSummary(
+    totalMonthly,
+    currency,
+    percentUsed,
+    achievableSavings,
+  );
 
   return `## Cloud Cost Estimate
 
 ${dashboardSummary}
-${budgetSection}${scopedBudgetSection}
+${budgetSection}
 <details>
 <summary><strong>📈 Cost Details</strong></summary>
 

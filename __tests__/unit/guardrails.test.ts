@@ -4,10 +4,9 @@ import {
   checkBudgetThresholdWithExitCodes,
   checkBudgetThresholdWithJson,
   checkBudgetThreshold,
-  checkBudgetHealthThreshold,
   BudgetThresholdMessages,
 } from '../../src/guardrails.js';
-import { BudgetExitCode, FinfocusReport, BudgetHealthReport, ActionConfiguration } from '../../src/types.js';
+import { BudgetExitCode, FinfocusReport } from '../../src/types.js';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as install from '../../src/install.js';
@@ -71,7 +70,9 @@ describe('Guardrails', () => {
 
     it('should warn and return false for malformed carbon threshold', () => {
       expect(checkCarbonThreshold('invalid', 10, 100)).toBe(false);
-      expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('Malformed carbon threshold'));
+      expect(core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Malformed carbon threshold'),
+      );
     });
 
     it('should handle zero base total for percent threshold', () => {
@@ -180,7 +181,7 @@ describe('Guardrails', () => {
       (exec.getExecOutput as jest.Mock).mockRejectedValue(new Error('Command timeout'));
 
       await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
-        'Failed to run budget threshold check: Command timeout'
+        'Failed to run budget threshold check: Command timeout',
       );
     });
 
@@ -224,10 +225,7 @@ describe('Guardrails', () => {
     };
 
     it('exit 2 with a validation_error envelope is a configuration error, never a budget result', async () => {
-      const stderr = fs.readFileSync(
-        path.join(fixtureDir, 'exit2-validation-error.json'),
-        'utf8',
-      );
+      const stderr = fs.readFileSync(path.join(fixtureDir, 'exit2-validation-error.json'), 'utf8');
       (exec.getExecOutput as jest.Mock).mockResolvedValue({
         exitCode: 2,
         stdout: '',
@@ -245,10 +243,7 @@ describe('Guardrails', () => {
     });
 
     it('exit 1 with an internal_error envelope is a tool failure', async () => {
-      const stderr = fs.readFileSync(
-        path.join(fixtureDir, 'exit1-no-pulumi-project.json'),
-        'utf8',
-      );
+      const stderr = fs.readFileSync(path.join(fixtureDir, 'exit1-no-pulumi-project.json'), 'utf8');
       (exec.getExecOutput as jest.Mock).mockResolvedValue({
         exitCode: 1,
         stdout: '',
@@ -258,9 +253,7 @@ describe('Guardrails', () => {
       await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
         'no Pulumi project found',
       );
-      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
-        'tool failure',
-      );
+      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow('tool failure');
     });
   });
 
@@ -416,7 +409,7 @@ describe('Guardrails', () => {
       expect(result.passed).toBe(true);
       expect(result.severity).toBe('none');
       expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('falling back to JSON parsing')
+        expect.stringContaining('falling back to JSON parsing'),
       );
     });
 
@@ -428,7 +421,7 @@ describe('Guardrails', () => {
 
       expect(result.passed).toBe(true);
       expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('Could not detect finfocus version')
+        expect.stringContaining('Could not detect finfocus version'),
       );
     });
 
@@ -486,116 +479,6 @@ describe('Guardrails', () => {
 
       expect(result.message).toBe(BudgetThresholdMessages.EXCEEDED);
       expect(result.message).toContain('exceeded');
-    });
-  });
-
-  describe('checkBudgetHealthThreshold', () => {
-    const baseConfig: ActionConfiguration = {
-      pulumiPlanJsonPath: 'plan.json',
-      githubToken: 'token',
-      finfocusVersion: 'latest',
-      installPlugins: [],
-      behaviorOnError: 'fail',
-      postComment: true,
-      threshold: null,
-      analyzerMode: false,
-      detailedComment: false,
-      includeRecommendations: true,
-      logLevel: 'error',
-      debug: false,
-      includeActualCosts: false,
-      actualCostsPeriod: '7d',
-      pulumiStateJsonPath: '',
-      actualCostsGroupBy: 'provider',
-      includeSustainability: true,
-      utilizationRate: '1.0',
-      sustainabilityEquivalents: true,
-      failOnCarbonIncrease: null,
-    };
-
-    const baseBudgetHealth: BudgetHealthReport = {
-      configured: true,
-      amount: 1000,
-      currency: 'USD',
-      period: 'monthly',
-      spent: 500,
-      remaining: 500,
-      percentUsed: 50,
-      healthScore: 75,
-      healthStatus: 'warning',
-    };
-
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    it('should return passed=true when no threshold is set', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: undefined };
-      const result = checkBudgetHealthThreshold(config, baseBudgetHealth);
-
-      expect(result.passed).toBe(true);
-      expect(result.severity).toBe('none');
-      expect(result.message).toBe('No health threshold configured');
-    });
-
-    it('should return passed=false when score is below threshold', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: 80 };
-      const budgetHealth = { ...baseBudgetHealth, healthScore: 75, healthStatus: 'warning' as const };
-      const result = checkBudgetHealthThreshold(config, budgetHealth);
-
-      expect(result.passed).toBe(false);
-      expect(result.severity).toBe('warning');
-      expect(result.message).toContain('75');
-      expect(result.message).toContain('below threshold');
-      expect(result.message).toContain('80');
-    });
-
-    it('should return passed=true when score meets threshold', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: 70 };
-      const budgetHealth = { ...baseBudgetHealth, healthScore: 75, healthStatus: 'warning' as const };
-      const result = checkBudgetHealthThreshold(config, budgetHealth);
-
-      expect(result.passed).toBe(true);
-      expect(result.severity).toBe('none');
-      expect(result.message).toContain('meets threshold');
-    });
-
-    it('should return passed=true when score equals threshold', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: 75 };
-      const budgetHealth = { ...baseBudgetHealth, healthScore: 75, healthStatus: 'warning' as const };
-      const result = checkBudgetHealthThreshold(config, budgetHealth);
-
-      expect(result.passed).toBe(true);
-      expect(result.severity).toBe('none');
-    });
-
-    it('should return severity=exceeded when healthStatus is exceeded', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: 50 };
-      const budgetHealth = { ...baseBudgetHealth, healthScore: 25, healthStatus: 'exceeded' as const };
-      const result = checkBudgetHealthThreshold(config, budgetHealth);
-
-      expect(result.passed).toBe(false);
-      expect(result.severity).toBe('exceeded');
-    });
-
-    it('should return severity=critical when healthStatus is critical', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: 50 };
-      const budgetHealth = { ...baseBudgetHealth, healthScore: 25, healthStatus: 'critical' as const };
-      const result = checkBudgetHealthThreshold(config, budgetHealth);
-
-      expect(result.passed).toBe(false);
-      expect(result.severity).toBe('critical');
-    });
-
-    it('should return passed=true when health score is undefined', () => {
-      const config = { ...baseConfig, failOnBudgetHealth: 50 };
-      const budgetHealth = { ...baseBudgetHealth, healthScore: undefined };
-      const result = checkBudgetHealthThreshold(config, budgetHealth);
-
-      expect(result.passed).toBe(true);
-      expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('Budget health score not available'),
-      );
     });
   });
 });
