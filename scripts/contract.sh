@@ -179,6 +179,37 @@ main() {
     fail "guardrail call shape: exit=$EXIT err=$(tail -n1 "$tmp/err")"
   fi
 
+  # 8. budget breach exit path (AC-2.3): with cost.budgets.global below the
+  # projected total, --exit-on-threshold --exit-code 10 must exit 10 and the
+  # table output must show the BUDGET STATUS block. Uses an isolated
+  # FINFOCUS_HOME with the installed plugins copied in.
+  local home="$tmp/finfocus-home"
+  mkdir -p "$home"
+  if [ -d "$HOME/.finfocus/plugins" ]; then
+    cp -r "$HOME/.finfocus/plugins" "$home/plugins"
+  fi
+  cat > "$home/config.yaml" <<'EOF'
+cost:
+  budgets:
+    global:
+      amount: 5.00
+      currency: USD
+      period: monthly
+      alerts:
+        - threshold: 80
+          type: actual
+        - threshold: 100
+          type: forecasted
+EOF
+  run_cmd "$tmp/breach.txt" "$tmp/err" \
+    env FINFOCUS_HOME="$home" "$BIN" cost projected --pulumi-json "$PLAN" \
+    --exit-on-threshold --exit-code 10
+  if [ "$EXIT" -eq 10 ] && grep -q 'BUDGET STATUS' "$tmp/breach.txt"; then
+    pass "budget breach: exit 10 with BUDGET STATUS block (\$7.59 vs \$5.00 budget)"
+  else
+    fail "budget breach: exit=$EXIT (want 10) out=$(grep -c 'BUDGET STATUS' "$tmp/breach.txt") BUDGET STATUS block(s)"
+  fi
+
   echo
   if [ "$failures" -gt 0 ]; then
     echo "contract: $failures check(s) FAILED"
