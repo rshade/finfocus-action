@@ -5,6 +5,10 @@ on:
     branches:
       - main
       - '001-*'
+  schedule:
+    # Daily so a breaking finfocus release shows up within a day
+    - cron: '23 4 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,15 +27,32 @@ jobs:
       - run: |
           npm run build
 
-  test: # Integration test
+  contract: # Real-binary contract test (AC-1.1/AC-1.2, issue #88)
+    name: 'finfocus contract (${{ matrix.finfocus-version }})'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        finfocus-version: ['v0.4.0', 'latest']
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: '.nvmrc'
-      - name: Create dummy plan
-        run: echo '{"projected_monthly_cost":100,"currency":"USD"}' > plan.json
-      # This would fail because the binary doesn't exist yet in the repo or isn't published
-      # So we just verify it starts and fails at download for now, or mock it.
-      # Actually, integration test usually runs the built action.
+      - name: 'Install finfocus ${{ matrix.finfocus-version }} from GitHub release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/finfocus"
+          if [ "${{ matrix.finfocus-version }}" = "latest" ]; then
+            gh release download --repo rshade/finfocus \
+              --pattern '*linux-amd64.tar.gz' --dir "$RUNNER_TEMP/finfocus"
+          else
+            gh release download --repo rshade/finfocus "${{ matrix.finfocus-version }}" \
+              --pattern '*linux-amd64.tar.gz' --dir "$RUNNER_TEMP/finfocus"
+          fi
+          tar -xzf "$RUNNER_TEMP/finfocus"/*linux-amd64.tar.gz -C "$RUNNER_TEMP/finfocus"
+          chmod +x "$RUNNER_TEMP/finfocus/finfocus"
+          "$RUNNER_TEMP/finfocus/finfocus" --version
+      - name: 'Run contract suite'
+        env:
+          FINFOCUS_BIN: ${{ runner.temp }}/finfocus/finfocus
+        run: scripts/contract.sh
