@@ -343,6 +343,78 @@ describe('Guardrails', () => {
       expect(result.passed).toBe(true);
       expect(result.severity).toBe('none');
     });
+
+    it('should handle v0.4.1 diff format (totalDelta) when within threshold', () => {
+      const v041Report: FinfocusReport = {
+        summary: {
+          totalMonthly: 150,
+          totalHourly: 0.21,
+          currency: 'USD',
+        },
+        diff: {
+          totalBefore: 0,
+          totalAfter: 7.592,
+          totalDelta: 7.592,
+          currency: 'USD',
+          creates: 3,
+          updates: 0,
+          deletes: 0,
+          unchanged: 0,
+        },
+      };
+
+      const result = checkBudgetThresholdWithJson(mockConfig, v041Report);
+
+      expect(result.passed).toBe(true);
+      expect(result.severity).toBe('none');
+      expect(result.message).toContain('within budget');
+    });
+
+    it('should handle v0.4.1 diff format (totalDelta) when exceeding threshold', () => {
+      const v041Report: FinfocusReport = {
+        summary: {
+          totalMonthly: 150,
+          totalHourly: 0.21,
+          currency: 'USD',
+        },
+        diff: {
+          totalBefore: 0,
+          totalAfter: 150,
+          totalDelta: 150,
+          currency: 'USD',
+          creates: 3,
+          updates: 0,
+          deletes: 0,
+          unchanged: 0,
+        },
+      };
+
+      const config = { ...mockConfig, threshold: '100USD' };
+      const result = checkBudgetThresholdWithJson(config, v041Report);
+
+      expect(result.passed).toBe(false);
+      expect(result.severity).toBe('exceeded');
+      expect(result.message).toContain('exceeds');
+    });
+
+    it('should still handle v0.4.0 legacy diff format (monthly_cost_change)', () => {
+      const v040Report: FinfocusReport = {
+        summary: {
+          totalMonthly: 150,
+          totalHourly: 0.21,
+          currency: 'USD',
+        },
+        diff: {
+          monthly_cost_change: 50,
+          percent_change: 10,
+        },
+      };
+
+      const result = checkBudgetThresholdWithJson(mockConfig, v040Report);
+
+      expect(result.passed).toBe(true);
+      expect(result.severity).toBe('none');
+    });
   });
 
   describe('checkBudgetThreshold', () => {

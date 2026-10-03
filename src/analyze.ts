@@ -13,6 +13,7 @@ import {
   BudgetStatus,
   EstimateReport,
   EstimateSpec,
+  isV041Diff,
 } from './types.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 
@@ -169,9 +170,12 @@ export class Analyzer implements IAnalyzer {
         core.info(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
         core.info(`  currency: ${report.currency}`);
         if (report.diff) {
-          const diffChange = 'monthly_cost_change' in report.diff
-            ? (report.diff as any).monthly_cost_change
-            : (report.diff as any).totalDelta;
+          let diffChange: number;
+          if (isV041Diff(report.diff)) {
+            diffChange = report.diff.totalDelta;
+          } else {
+            diffChange = (report.diff as any).monthly_cost_change;
+          }
           core.info(`  diff change: ${diffChange}`);
         }
       }
