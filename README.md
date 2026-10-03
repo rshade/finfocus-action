@@ -3,19 +3,24 @@
 [![Test](https://github.com/rshade/finfocus-action/actions/workflows/test.yml/badge.svg)](https://github.com/rshade/finfocus-action/actions/workflows/test.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-GitHub Action for integrating **[finfocus](https://github.com/rshade/finfocus)** into CI/CD workflows. It empowers developers to visualize, track, and enforce cloud cost estimates directly within their Pull Requests.
+GitHub Action for integrating **[finfocus](https://github.com/rshade/finfocus)** into CI/CD
+workflows. It empowers developers to visualize, track, and enforce cloud cost estimates directly
+within their Pull Requests.
 
 - 💰 **PR Cost Visibility**: Posts a sticky comment with cost estimates directly on your Pull Requests.
 - 🌱 **Sustainability Impact**: Visualize the carbon footprint (CO2e) of your infrastructure changes.
-- 🛡️ **Cost & Carbon Guardrails**: Automatically fail CI pipelines if cloud cost or carbon footprint increases exceed your defined thresholds.
-- 🔍 **Pulumi Analyzer Mode**: Integrate deeply with the Pulumi engine for policy enforcement during `preview`.
+- 🛡️ **Cost & Carbon Guardrails**: Automatically fail CI pipelines if cloud cost or carbon footprint
+  increases exceed your defined thresholds.
+- 🔍 **Pulumi Analyzer Mode**: Integrate deeply with the Pulumi engine for policy enforcement during
+  `preview`.
 - 🔌 **Plugin Support**: Support for various cloud providers and cost estimation plugins.
 
 ## Usage
 
 ### Standard Configuration (PR Commenter)
 
-This mode runs after you've generated a Pulumi plan JSON. It parses the plan, calculates costs, and posts a comment to the PR.
+This mode runs after you've generated a Pulumi plan JSON. It parses the plan, calculates costs, and
+posts a comment to the PR.
 
 ```yaml
 - name: Generate Plan JSON
@@ -35,7 +40,8 @@ This mode runs after you've generated a Pulumi plan JSON. It parses the plan, ca
 
 ### Configuration with Actual Costs
 
-To display actual (historical) cloud costs alongside your estimates, or to enable sustainability metrics, configure the following inputs.
+To display actual (historical) cloud costs alongside your estimates, or to enable sustainability
+metrics, configure the following inputs.
 
 | Input | Description | Required | Default |
 | :--- | :--- | :--- | :--- |
@@ -49,7 +55,8 @@ To display actual (historical) cloud costs alongside your estimates, or to enabl
 
 ### Budget Tracking
 
-Track your cloud spending against monthly, quarterly, or yearly budgets with automated alerts when thresholds are exceeded.
+Track your cloud spending against monthly, quarterly, or yearly budgets with automated alerts when
+thresholds are exceeded.
 
 ```yaml
 - uses: rshade/finfocus-action@v1
@@ -85,7 +92,8 @@ When configured, the PR comment will include a budget status section showing:
 
 ### Budget Health Suite (finfocus v0.2.5+)
 
-The Budget Health Suite provides comprehensive budget monitoring with health scores, forecasting, and runway analysis. When enabled, the PR comment includes a TUI-style budget health display:
+The Budget Health Suite provides comprehensive budget monitoring with health scores, forecasting,
+and runway analysis. When enabled, the PR comment includes a TUI-style budget health display:
 
 ```text
 ╭────────────────────────────────────────────╮
@@ -169,7 +177,9 @@ jobs:
 
 ### Scoped Budgets (finfocus v0.2.6+)
 
-Scoped budgets allow you to set granular budget limits per cloud provider, resource type, or cost allocation tag. This enables multi-cloud cost governance, resource category tracking, and organizational chargeback scenarios.
+Scoped budgets allow you to set granular budget limits per cloud provider, resource type, or cost
+allocation tag. This enables multi-cloud cost governance, resource category tracking, and
+organizational chargeback scenarios.
 
 #### Provider Budgets
 
@@ -237,7 +247,8 @@ Mix all scope types and enable enforcement:
 
 **Scoped Budget Display:**
 
-When scoped budgets are configured, the PR comment includes a "Budget Status by Scope" table sorted by usage (highest first):
+When scoped budgets are configured, the PR comment includes a "Budget Status by Scope" table sorted
+by usage (highest first):
 
 | Scope | Spent | Budget | Status |
 |:------|------:|-------:|:------:|
@@ -286,7 +297,8 @@ does not interpret finfocus exit codes as budget severities. Instead it runs
 | 10 | Budget threshold breached (code owned by the action) | Fail with "Budget exceeded" |
 | 1, 2, other | The finfocus call itself failed | Fail with the `message` from the finfocus error envelope on stderr |
 
-For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks, maintaining backward compatibility.
+For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks,
+maintaining backward compatibility.
 
 **Budget Status Display (when budget configured):**
 
@@ -294,6 +306,21 @@ For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for
 - Remaining budget
 - Usage percentage with visual progress bar
 - Triggered alert notifications
+
+## Compatibility
+
+The action is tested against **finfocus v0.4.0** (pinned) and **latest** on
+every pull request and daily via the contract job in
+`.github/workflows/test.yml`, which runs `scripts/contract.sh` against the real
+released binaries.
+
+- `finfocus-version: latest` follows the newest finfocus release, **including
+  breaking changes** (for example, the v0.4.0 exit-code change where
+  validation errors exit 2). Pin `finfocus-version` (e.g. `v0.4.0`) if you
+  need a stable target.
+- Budget threshold enforcement requires finfocus with `--exit-on-threshold`
+  support (v0.2.5+; verified on v0.4.0). Older versions fall back to JSON
+  parsing of the cost diff.
 
 ## Outputs
 
@@ -318,22 +345,29 @@ For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for
 
 ## Release Workflow
 
-Releases are automated via [release-please](https://github.com/googleapis/release-please-action). The workflow has three jobs:
+Releases are automated via [release-please](https://github.com/googleapis/release-please-action).
+The workflow has three jobs:
 
 1. **release-please**: Creates or updates a release PR with version bumps and changelog
-2. **update-dist**: When a release PR exists, checks out the PR branch, builds `dist/`, and commits it back. This ensures the compiled action is included in the release without creating orphaned commits
-3. **update-tags**: After a release is published, updates the floating `v1` and `v1.x` tags so consumers using `@v1` get the latest release
+2. **update-dist**: When a release PR exists, checks out the PR branch, builds `dist/`, and commits
+   it back. This ensures the compiled action is included in the release without creating orphaned
+   commits
+3. **update-tags**: After a release is published, updates the floating `v1` and `v1.x` tags so
+   consumers using `@v1` get the latest release
 
 ### Prerequisites
 
-A Personal Access Token (PAT) named `RELEASE_PLEASE_TOKEN` must be configured as a repository secret with:
+A Personal Access Token (PAT) named `RELEASE_PLEASE_TOKEN` must be configured as a repository secret
+with:
 
 - `contents: write` permission
 - `workflows` scope (required to push commits that modify workflow files)
 
 ### Important
 
-Do not manually merge release PRs before the `update-dist` job completes. The job adds the compiled `dist/` directory to the PR branch, and merging early would result in a release without the built action.
+Do not manually merge release PRs before the `update-dist` job completes. The job adds the compiled
+`dist/` directory to the PR branch, and merging early would result in a release without the built
+action.
 
 ## Development
 

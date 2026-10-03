@@ -16,16 +16,20 @@ npm test -- --coverage                      # With coverage report
 
 ## Project Overview
 
-finfocus-action is a GitHub Action that integrates [finfocus](https://github.com/rshade/finfocus) into CI/CD workflows. It posts cloud cost estimates and carbon footprint metrics to Pull Requests.
+finfocus-action is a GitHub Action that integrates [finfocus](https://github.com/rshade/finfocus)
+into CI/CD workflows. It posts cloud cost estimates and carbon footprint metrics to Pull Requests.
 
 ### Two Operational Modes
 
-1. **Standard Mode** (default): Parses a Pulumi plan JSON, runs cost analysis via finfocus CLI, and posts a PR comment
-2. **Analyzer Mode** (`analyzer-mode: true`): Sets up finfocus as a Pulumi policy analyzer for `pulumi preview` integration
+1. **Standard Mode** (default): Parses a Pulumi plan JSON, runs cost analysis via finfocus CLI, and
+   posts a PR comment
+2. **Analyzer Mode** (`analyzer-mode: true`): Sets up finfocus as a Pulumi policy analyzer for
+   `pulumi preview` integration
 
 ## Architecture
 
-The action is a TypeScript ES module project using the GitHub Actions toolkit. It's compiled with `@vercel/ncc` into `dist/index.js` and runs as a composite action.
+The action is a TypeScript ES module project using the GitHub Actions toolkit. It's compiled with
+`@vercel/ncc` into `dist/index.js` and runs as a composite action.
 
 ### Core Components (`src/`)
 
@@ -74,7 +78,8 @@ main.ts
 - `BudgetConfiguration`: Budget settings with amount, currency, period, and alerts
 - `BudgetStatus`: Current budget status with spent, remaining, percent used, and triggered alerts
 - `BudgetAlert`: Individual budget alert with threshold and type
-- `BudgetExitCode`: Enum for threshold check exit codes (0=pass, 10=threshold breached; 10 is action-owned via `--exit-code`, finfocus v0.4.0 reserves 1=internal_error and 2=validation_error)
+- `BudgetExitCode`: Enum for threshold check exit codes (0=pass, 10=threshold breached; 10 is
+  action-owned via `--exit-code`, finfocus v0.4.0 reserves 1=internal_error and 2=validation_error)
 - `BudgetThresholdResult`: Result of budget threshold check with severity and message
 - `BudgetHealthStatus`: Type for health status levels ('healthy' | 'warning' | 'critical' | 'exceeded')
 - `BudgetHealthReport`: Extended budget status with healthScore, forecast, forecastAmount, runwayDays
@@ -116,19 +121,30 @@ main.ts
 
 - The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
-- Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data in the finfocus report
+- Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data
+  in the finfocus report
 - The analyzer mode creates a Pulumi policy pack at `~/.finfocus/analyzer/` with a binary named `pulumi-analyzer-policy-finfocus`
 - Budget tracking is opt-in: ConfigManager only runs when `budget-amount` is provided
 - Budget configuration is written to `~/.finfocus/config.yaml` for finfocus CLI to read
-- Budget status extraction returns undefined when using `--output json` (forward compatible for future finfocus CLI support)
-- **JSON format compatibility**: finfocus v0.2.4+ wraps JSON output in a `"finfocus"` key. The action handles both wrapped and unwrapped formats for backward compatibility (see `src/analyze.ts:131`)
-- **Exit code support**: for budget thresholds the action runs `finfocus cost projected --pulumi-json <plan> --exit-on-threshold --exit-code 10`. Exit 10 is action-owned; finfocus v0.4.0 exits 1 (`internal_error`) or 2 (`validation_error`) on failures, and the action surfaces the error envelope `message` for those. The action auto-detects version and falls back to JSON parsing for versions < 0.2.5.
+- Budget status extraction returns undefined when using `--output json` (forward compatible for
+  future finfocus CLI support)
+- **JSON format compatibility**: finfocus v0.2.4+ wraps JSON output in a `"finfocus"` key. The
+  action handles both wrapped and unwrapped formats for backward compatibility (see
+  `src/analyze.ts:131`)
+- **Exit code support**: for budget thresholds the action runs `finfocus cost projected
+  --pulumi-json <plan> --exit-on-threshold --exit-code 10`. Exit 10 is action-owned; finfocus v0.4.0
+  exits 1 (`internal_error`) or 2 (`validation_error`) on failures, and the action surfaces the
+  error envelope `message` for those. The action auto-detects version and falls back to JSON parsing
+  for versions < 0.2.5.
 
 ## Active Technologies
-- TypeScript 5.9+ (ES2022 target, NodeNext module resolution) + @actions/core ^2.0.2, @actions/exec ^2.0.0, @actions/github ^7.0.0, @actions/tool-cache ^3.0.0 (001-budget-health-suite)
+
+- TypeScript 5.9+ (ES2022 target, NodeNext module resolution) + @actions/core ^2.0.2, @actions/exec
+  ^2.0.0, @actions/github ^7.0.0, @actions/tool-cache ^3.0.0 (001-budget-health-suite)
 - N/A (stateless action) (001-budget-health-suite)
 - N/A (stateless action - config written to ~/.finfocus/config.yaml) (001-scoped-budgets)
-- GitHub Actions YAML + Bash + googleapis/release-please-action@v4, actions/checkout@v6, actions/setup-node@v6 (001-fix-release-dist)
+- GitHub Actions YAML + Bash + googleapis/release-please-action@v4, actions/checkout@v6,
+  actions/setup-node@v6 (001-fix-release-dist)
 
 - TypeScript 5.9+ (ES modules) + @actions/core, @actions/exec (for running finfocus CLI)
 
@@ -143,10 +159,14 @@ main.ts
   - New action outputs: budget-health-score, budget-forecast, budget-runway-days, budget-status
   - TUI box display with progress bar and runway information
 
-- 001-guardrails-exit-codes: Implemented budget threshold checking with finfocus exit codes (v0.2.5+). Added `BudgetExitCode` enum, `BudgetThresholdResult` interface, `checkBudgetThreshold()` orchestrator, and backward-compatible JSON fallback for older versions.
+- 001-guardrails-exit-codes: Implemented budget threshold checking with finfocus exit codes
+  (v0.2.5+). Added `BudgetExitCode` enum, `BudgetThresholdResult` interface,
+  `checkBudgetThreshold()` orchestrator, and backward-compatible JSON fallback for older versions.
 
 - 001-scoped-budgets: Implemented scoped budget support for finfocus v0.2.6+:
-  - Added `BudgetScopeType`, `BudgetScope`, `ScopedBudgetStatus`, `ScopedBudgetAlert`, `ScopedBudgetReport`, `ScopedBudgetFailure`, `FinfocusScopedBudgetResponse`, `FinfocusScopeEntry` types
+  - Added `BudgetScopeType`, `BudgetScope`, `ScopedBudgetStatus`, `ScopedBudgetAlert`,
+    `ScopedBudgetReport`, `ScopedBudgetFailure`, `FinfocusScopedBudgetResponse`,
+    `FinfocusScopeEntry` types
   - Added `parseBudgetScopes()` function in config.ts for YAML multiline input parsing
   - Extended `generateYaml()` to include `budget.scopes` section
   - Added `runScopedBudgetStatus()` and `parseScopedBudgetResponse()` to Analyzer
