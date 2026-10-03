@@ -24,7 +24,13 @@ key in a fixture copy and watch the suite fail.
 
 ### AC-1.2 CI job
 
-**Status:** TODO. Depends on AC-1.1.
+**Status:** DONE — verify: `actionlint .github/workflows/*.yml` exits 0; the
+`contract` job in `.github/workflows/test.yml` (matrix `v0.4.0` + `latest`, PR
+and daily schedule) installs finfocus from the GitHub release and runs AC-1.1.
+Break check: `cost projected --definitely-not-a-flag` exits 1 with an
+`internal_error` envelope, so a wrong call fails the job step. Both release
+download paths (pinned and `latest`) were exercised locally; the job itself was
+not run on GitHub (no push in this run).
 
 Add a job to `.github/workflows/test.yml` (or a new workflow) that installs
 finfocus from the GitHub release and runs AC-1.1 on a matrix of `v0.4.0` and
