@@ -98,7 +98,11 @@ list the commands tried. Do not invent an exit code.
 
 ### AC-2.4 Supported versions
 
-**Status:** TODO
+**Status:** DONE — verify: `npx markdownlint-cli2 README.md CLAUDE.md TASKS.md`
+reports 0 issues. README gained a Compatibility section (tested: v0.4.0 pinned
++ latest via the CI contract matrix); `action.yml` `finfocus-version` now says
+`latest` follows breaking changes. Required a `.markdownlint-cli2.jsonc` config
++ reflow of 28 pre-existing over-long lines (decision logged in the report).
 
 State the tested finfocus range in the README and `action.yml` input docs, and
 make the `finfocus-version` description say that `latest` follows breaking
