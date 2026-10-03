@@ -32850,6 +32850,13 @@ function compareVersions(a, b) {
         return -1;
     return 0;
 }
+/**
+ * Check if a tag name matches the stable CLI release pattern (v<major>.<minor>.<patch>).
+ * Excludes prefixed tags like kubernetes-v*, jev-v*, and other non-CLI tags.
+ */
+function isStableCliRelease(tagName) {
+    return /^v\d+\.\d+\.\d+$/.test(tagName);
+}
 class Installer {
     async install(version, config) {
         const debug = config?.debug === true;
@@ -32994,7 +33001,7 @@ class Installer {
         }
         if (debug)
             lib_core/* info */.pq(`=== Resolving 'latest' version ===`);
-        const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+        const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=100`;
         const response = await fetch(apiUrl, {
             headers: {
                 Accept: 'application/vnd.github.v3+json',
@@ -33002,13 +33009,29 @@ class Installer {
             },
         });
         if (!response.ok) {
-            throw new Error(`Failed to fetch latest release: ${response.status} ${response.statusText}`);
+            throw new Error(`Failed to fetch releases: ${response.status} ${response.statusText}`);
         }
-        const data = (await response.json());
+        const releases = (await response.json());
         if (debug) {
-            lib_core/* info */.pq(`  Release tag_name: ${data.tag_name}`);
+            lib_core/* info */.pq(`  Total releases fetched: ${releases.length}`);
         }
-        return data.tag_name.replace(/^v/, '');
+        // Filter to stable CLI releases (not prefixed, not prerelease/draft)
+        const stableReleases = releases.filter((r) => isStableCliRelease(r.tag_name) && !r.prerelease && !r.draft);
+        if (stableReleases.length === 0) {
+            throw new Error(`No stable release found matching v<major>.<minor>.<patch> pattern in the first 100 releases`);
+        }
+        // Sort by semantic version (descending) to get the highest version
+        stableReleases.sort((a, b) => {
+            const aVersion = a.tag_name.replace(/^v/, '');
+            const bVersion = b.tag_name.replace(/^v/, '');
+            return compareVersions(bVersion, aVersion); // b - a for descending order
+        });
+        const latestRelease = stableReleases[0];
+        if (debug) {
+            lib_core/* info */.pq(`  Stable releases found: ${stableReleases.length}`);
+            lib_core/* info */.pq(`  Selected tag_name: ${latestRelease.tag_name}`);
+        }
+        return latestRelease.tag_name.replace(/^v/, '');
     }
     getPlatform() {
         const p = external_os_.platform();

@@ -81,17 +81,32 @@ describe('Installer', () => {
     );
   });
 
-  it('should resolve latest version from GitHub API', async () => {
+  it('should resolve latest version by finding newest stable v* release', async () => {
     (os.platform as jest.Mock).mockReturnValue('linux');
     (os.arch as jest.Mock).mockReturnValue('x64');
     (tc.downloadTool as jest.Mock).mockResolvedValue('download-path');
     (tc.extractTar as jest.Mock).mockResolvedValue('extract-path');
     (tc.cacheDir as jest.Mock).mockResolvedValue('cached-path');
 
+    const releasesList = [
+      { tag_name: 'v0.4.1', prerelease: false, draft: false },
+      { tag_name: 'v0.4.0', prerelease: false, draft: false },
+      { tag_name: 'kubernetes-v0.1.3', prerelease: false, draft: false },
+      { tag_name: 'jev-v0.1.1', prerelease: false, draft: false },
+      { tag_name: 'v0.3.9', prerelease: false, draft: false },
+      { tag_name: 'v0.5.0-rc.1', prerelease: true, draft: false },
+      { tag_name: 'v0.3.0', prerelease: false, draft: true },
+    ];
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => releasesList,
+    });
+
     await installer.install('latest');
 
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.github.com/repos/rshade/finfocus/releases/latest',
+      'https://api.github.com/repos/rshade/finfocus/releases?per_page=100',
       expect.objectContaining({
         headers: expect.objectContaining({
           Accept: 'application/vnd.github.v3+json',
@@ -99,8 +114,38 @@ describe('Installer', () => {
       })
     );
     expect(tc.downloadTool).toHaveBeenCalledWith(
-      'https://github.com/rshade/finfocus/releases/download/v0.1.3/finfocus-v0.1.3-linux-amd64.tar.gz'
+      'https://github.com/rshade/finfocus/releases/download/v0.4.1/finfocus-v0.4.1-linux-amd64.tar.gz'
     );
+  });
+
+  it('should throw error when no stable v* release is found', async () => {
+    (os.platform as jest.Mock).mockReturnValue('linux');
+    (os.arch as jest.Mock).mockReturnValue('x64');
+
+    const releasesList = [
+      { tag_name: 'kubernetes-v0.1.3', prerelease: false, draft: false },
+      { tag_name: 'jev-v0.1.1', prerelease: false, draft: false },
+      { tag_name: 'v0.5.0-rc.1', prerelease: true, draft: false },
+    ];
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => releasesList,
+    });
+
+    await expect(installer.install('latest')).rejects.toThrow(/No stable release found/);
+  });
+
+  it('should throw error when releases list is empty', async () => {
+    (os.platform as jest.Mock).mockReturnValue('linux');
+    (os.arch as jest.Mock).mockReturnValue('x64');
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    });
+
+    await expect(installer.install('latest')).rejects.toThrow(/No stable release found/);
   });
 
   it('should use cached version if available', async () => {

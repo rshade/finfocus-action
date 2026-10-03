@@ -186,8 +186,10 @@ every pull request and daily via the contract job in
 `.github/workflows/test.yml`, which runs `scripts/contract.sh` against the real
 released binaries.
 
-- `finfocus-version: latest` follows the newest finfocus release, **including
-  breaking changes** (for example, the v0.4.0 exit-code change where
+- `finfocus-version: latest` resolves to the newest stable CLI release matching
+  `v<major>.<minor>.<patch>` (e.g., `v0.4.1`), excluding plugin releases
+  (`kubernetes-*`, `jev-*`), prerelease, and draft tags. This may include
+  breaking changes (for example, the v0.4.0 exit-code change where
   validation errors exit 2). Pin `finfocus-version` (e.g. `v0.4.0`) if you
   need a stable target.
 - Budget threshold enforcement requires finfocus with `--exit-on-threshold`
