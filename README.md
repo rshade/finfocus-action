@@ -96,6 +96,31 @@ remaining budget, usage percentage with a visual progress bar, and triggered ale
 > action-owned exit code 10, and the action writes the budget as `cost.budgets.global` to
 > `~/.finfocus/config.yaml`.
 
+**Removed inputs and outputs (breaking):**
+
+The following inputs and outputs were removed because the `finfocus budget status`
+command does not exist in finfocus v0.4.0:
+
+**Removed Inputs:**
+
+- `budget-alert-threshold` (was: percentage to trigger alert)
+- `fail-on-budget-health` (was: fail if health score below threshold)
+- `show-budget-forecast` (was: enable/disable forecast display)
+- `budget-scopes` (was: scoped budget configuration)
+- `fail-on-budget-scope-breach` (was: fail on scope breach)
+
+**Removed Outputs:**
+
+- `budget-health-score` (was: numeric health score 0-100)
+- `budget-forecast` (was: projected end-of-period spend)
+- `budget-runway-days` (was: days until exhaustion)
+- `budget-status` (was: health status string)
+- `budget-scopes-status` (was: scoped status array)
+
+The action still supports budget tracking via `budget-amount`, `budget-currency`,
+`budget-period`, and `budget-alerts` inputs, which are written to finfocus config
+and enforced through `--exit-on-threshold`.
+
 ### Budget Threshold Exit Codes
 
 finfocus v0.4.0 reserves exit codes 0 (success), 1 (`internal_error`) and 2

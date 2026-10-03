@@ -43,8 +43,7 @@ watch it fail. Action and tool names must be checked to exist.
 
 ### AC-2.1 Parse the error envelope
 
-**Status:** DONE — verify: `npm test` (270 pass, incl. new envelope tests reading
-`exit2-validation-error.json` and `exit1-no-pulumi-project.json`) and
+**Status:** DONE — verify: `npm test` passes and
 `FINFOCUS_BIN=... scripts/contract.sh` exit 0. Non-zero exits with a finfocus
 error envelope now throw with the envelope message (`validation_error` =
 configuration error, `internal_error` = tool failure) in both
@@ -60,7 +59,7 @@ the test fail.
 
 ### AC-2.2 Call shape and explicit threshold code
 
-**Status:** DONE — verify: `npm test` (267 pass) and
+**Status:** DONE — verify: `npm test` passes and
 `FINFOCUS_BIN=... scripts/contract.sh` exit 0 (contract check 7 encodes the
 guardrail call shape). `guardrails.ts` now runs `cost projected --pulumi-json
 <plan> --exit-on-threshold --exit-code 10` (10 is action-owned; v0.4.0 reserves
@@ -140,7 +139,7 @@ the budget-health + scoped-budget features (inputs `budget-alert-threshold`,
 `budget-scopes-status`; formatter/comment/guardrails pieces; 5 test files).
 `config.ts` now writes the schema finfocus actually reads
 (`cost.budgets.global`) instead of the ignored top-level `budget:` key.
-Verify: `npm test` (148 pass), `npm run lint`, markdownlint 0 issues, contract
+Verify: `npm test` passes, `npm run lint` and markdownlint check pass, contract
 suite 18 checks including the new check 9 (every subcommand the action runs
 must exist in `finfocus --help`). Break check: added `budget status` to the
 check-9 list; suite failed naming it (`unknown command "budget"`); reverted.
@@ -157,9 +156,9 @@ reintroduce `budget status` and watch that check fail.
 
 ### AC-4.1 `cost estimate`
 
-**Status:** DONE — verify: `npm test` (163 pass, incl. runEstimate happy path against a verbatim
-v0.4.0 capture, spec-validation warnings, and error-envelope throws), `npm run lint`,
-markdownlint 0 issues, and `FINFOCUS_BIN=/tmp/finfocus-v0.4.0/finfocus scripts/contract.sh` exit
+**Status:** DONE — verify: `npm test` passes with runEstimate happy path against a verbatim
+v0.4.0 capture, spec-validation warnings, and error-envelope throws; `npm run lint` and
+markdownlint check pass; `FINFOCUS_BIN=/tmp/finfocus-v0.4.0/finfocus scripts/contract.sh` exit
 0 (20 checks, incl. the new check 10 asserting the exact `cost estimate` call shape and report
 keys, plus `cost estimate` in the check-9 subcommand list). Break check: changed check 10 to use
 `--resourceType`; suite failed with exit 1 and the `internal_error` envelope
