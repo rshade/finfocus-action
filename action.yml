@@ -62,6 +62,10 @@ inputs:
     description: 'Path to Pulumi state JSON for state-based cost estimation'
     required: false
     default: ''
+  terraform-state:
+    description: 'Path to a Terraform state file (terraform.tfstate) for cost projection instead of a Pulumi plan; mutually exclusive with pulumi-plan-json (finfocus v0.4.0)'
+    required: false
+    default: ''
   actual-costs-group-by:
     description: 'Group actual costs by: resource, type, provider, daily, monthly'
     required: false
@@ -169,6 +173,7 @@ runs:
         INPUT_INCLUDE_ACTUAL_COSTS: ${{ inputs.include-actual-costs }}
         INPUT_ACTUAL_COSTS_PERIOD: ${{ inputs.actual-costs-period }}
         INPUT_PULUMI_STATE_JSON: ${{ inputs.pulumi-state-json }}
+        INPUT_TERRAFORM_STATE: ${{ inputs.terraform-state }}
         INPUT_ACTUAL_COSTS_GROUP_BY: ${{ inputs.actual-costs-group-by }}
         INPUT_INCLUDE_SUSTAINABILITY: ${{ inputs.include-sustainability }}
         INPUT_UTILIZATION_RATE: ${{ inputs.utilization-rate }}

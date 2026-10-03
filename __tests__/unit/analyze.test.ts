@@ -121,6 +121,40 @@ describe('Analyzer', () => {
     );
   });
 
+  it('should use --terraform-state instead of --pulumi-json when configured', async () => {
+    const mockReport = { summary: { totalMonthly: 7.592, totalHourly: 0.0104, currency: 'USD' } };
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ finfocus: mockReport }),
+      stderr: '',
+    });
+
+    const config = { terraformStatePath: 'terraform.tfstate', debug: false } as any;
+    const report = await analyzer.runAnalysis('plan.json', config);
+
+    expect(exec.getExecOutput).toHaveBeenCalledWith(
+      'finfocus',
+      ['cost', 'projected', '--terraform-state', 'terraform.tfstate', '--output', 'json'],
+      expect.objectContaining({ silent: true, ignoreReturnCode: true }),
+    );
+    expect(report.summary.totalMonthly).toBe(7.592);
+  });
+
+  it('should warn when both pulumi plan and terraform state are configured', async () => {
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({ finfocus: { summary: { totalMonthly: 1, totalHourly: 0, currency: 'USD' } } }),
+      stderr: '',
+    });
+
+    const config = { terraformStatePath: 'terraform.tfstate', debug: false } as any;
+    await analyzer.runAnalysis('plan.json', config);
+
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('mutually exclusive'),
+    );
+  });
+
   it('should parse sustainability data when present in report', async () => {
     const mockReportWithSustainability = {
       summary: {

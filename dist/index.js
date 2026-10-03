@@ -36784,13 +36784,24 @@ var errors = __nccwpck_require__(3916);
 class Analyzer {
     async runAnalysis(planPath, config) {
         const debug = config?.debug === true;
+        // finfocus accepts either --pulumi-json or --terraform-state (mutually
+        // exclusive). terraform-state takes precedence when configured; the plan
+        // path input always has a default, so only warn when a plan file actually
+        // exists on disk alongside the state file.
+        const terraformStatePath = config?.terraformStatePath || '';
+        const inputPath = terraformStatePath || planPath;
+        const inputFlag = terraformStatePath ? '--terraform-state' : '--pulumi-json';
+        if (terraformStatePath && external_fs_.existsSync(planPath)) {
+            main_core/* warning */.$e(`Both pulumi-plan-json ("${planPath}") and terraform-state ("${terraformStatePath}") ` +
+                `are present; finfocus treats them as mutually exclusive. Using --terraform-state.`);
+        }
         if (debug) {
             main_core/* info */.pq(`=== Analyzer: Running cost analysis ===`);
-            main_core/* info */.pq(`  Plan file path: ${planPath}`);
-            main_core/* info */.pq(`  Absolute path: ${external_path_.resolve(planPath)}`);
+            main_core/* info */.pq(`  Input file path: ${inputPath} (${inputFlag})`);
+            main_core/* info */.pq(`  Absolute path: ${external_path_.resolve(inputPath)}`);
         }
-        if (!external_fs_.existsSync(planPath)) {
-            main_core/* error */.z3(`  Plan file NOT FOUND: ${planPath}`);
+        if (!external_fs_.existsSync(inputPath)) {
+            main_core/* error */.z3(`  Input file NOT FOUND: ${inputPath}`);
             if (debug) {
                 main_core/* info */.pq(`  Current working directory: ${process.cwd()}`);
                 main_core/* info */.pq(`  Directory contents:`);
@@ -36805,40 +36816,44 @@ class Analyzer {
                     }
                 }
             }
-            throw new Error(`Pulumi plan file not found: ${planPath}. ` +
-                `Make sure to run 'pulumi preview --json > ${planPath}' first.`);
+            throw new Error(terraformStatePath
+                ? `Terraform state file not found: ${inputPath}.`
+                : `Pulumi plan file not found: ${inputPath}. ` +
+                    `Make sure to run 'pulumi preview --json > ${inputPath}' first.`);
         }
-        const planStats = external_fs_.statSync(planPath);
+        const planStats = external_fs_.statSync(inputPath);
         if (debug) {
-            main_core/* info */.pq(`  Plan file size: ${planStats.size} bytes`);
-            main_core/* info */.pq(`  Plan file modified: ${planStats.mtime.toISOString()}`);
+            main_core/* info */.pq(`  Input file size: ${planStats.size} bytes`);
+            main_core/* info */.pq(`  Input file modified: ${planStats.mtime.toISOString()}`);
         }
         if (planStats.size === 0) {
-            main_core/* error */.z3(`  Plan file is EMPTY`);
-            throw new Error(`Pulumi plan file is empty: ${planPath}`);
+            main_core/* error */.z3(`  Input file is EMPTY`);
+            throw new Error(terraformStatePath
+                ? `Terraform state file is empty: ${inputPath}`
+                : `Pulumi plan file is empty: ${inputPath}`);
         }
-        const planContent = external_fs_.readFileSync(planPath, 'utf8');
+        const planContent = external_fs_.readFileSync(inputPath, 'utf8');
         if (debug) {
-            main_core/* info */.pq(`  Plan file content length: ${planContent.length} chars`);
+            main_core/* info */.pq(`  Input file content length: ${planContent.length} chars`);
             if (planContent.length < 5000) {
-                main_core/* info */.pq(`  Plan file content:\n${planContent}`);
+                main_core/* info */.pq(`  Input file content:\n${planContent}`);
             }
             else {
-                main_core/* info */.pq(`  Plan file first 2000 chars:\n${planContent.substring(0, 2000)}`);
+                main_core/* info */.pq(`  Input file first 2000 chars:\n${planContent.substring(0, 2000)}`);
                 main_core/* info */.pq(`  ... (truncated, total ${planContent.length} chars)`);
             }
         }
         try {
             JSON.parse(planContent);
             if (debug)
-                main_core/* info */.pq(`  Plan file is valid JSON`);
+                main_core/* info */.pq(`  Input file is valid JSON`);
         }
         catch (parseErr) {
-            main_core/* error */.z3(`  Plan file is NOT valid JSON`);
+            main_core/* error */.z3(`  Input file is NOT valid JSON`);
             main_core/* error */.z3(`  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-            throw new Error(`Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            throw new Error(`Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         }
-        const args = ['cost', 'projected', '--pulumi-json', planPath, '--output', 'json'];
+        const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
         // Add utilization flag if provided and different from default
         if (config?.utilizationRate && config.utilizationRate !== '1.0') {
             args.push('--utilization', config.utilizationRate);
@@ -42403,6 +42418,7 @@ async function run() {
         const includeActualCosts = parseBoolean(includeActualCostsRaw, false);
         const actualCostsPeriod = main_core/* getInput */.V4('actual_costs_period') || '7d';
         const pulumiStateJsonPath = main_core/* getInput */.V4('pulumi_state_json') || '';
+        const terraformStatePath = main_core/* getInput */.V4('terraform_state') || '';
         const actualCostsGroupBy = main_core/* getInput */.V4('actual_costs_group_by') || 'provider';
         const includeSustainabilityRaw = main_core/* getInput */.V4('include_sustainability');
         const includeSustainability = parseBoolean(includeSustainabilityRaw, true);
@@ -42433,6 +42449,7 @@ async function run() {
             includeActualCosts,
             actualCostsPeriod,
             pulumiStateJsonPath,
+            terraformStatePath,
             actualCostsGroupBy,
             includeSustainability,
             utilizationRate,

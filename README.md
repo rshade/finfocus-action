@@ -112,6 +112,22 @@ does not interpret finfocus exit codes as budget severities. Instead it runs
 For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks,
 maintaining backward compatibility.
 
+### Terraform State Input (finfocus v0.4.0)
+
+Non-Pulumi users can point the action at a Terraform state file instead of a
+Pulumi plan. The action passes it to `finfocus cost projected
+--terraform-state`, which is mutually exclusive with `--pulumi-json`:
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    terraform-state: terraform.tfstate
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+When both `terraform-state` and an existing Pulumi plan file are present, the
+action warns and uses the Terraform state.
+
 ### What-If Cost Estimates
 
 Estimate the cost of a single resource with specific properties — without changing any Pulumi

@@ -173,7 +173,17 @@ contract suite on a real binary. Break check: a wrong flag fails.
 
 ### AC-4.2 `--terraform-state` and `--state-only`
 
-**Status:** TODO. Depends on Phase 1.
+**Status:** DONE (partial by design) — `--terraform-state`: delivered. New
+`terraform-state` input; `runAnalysis` runs `cost projected --terraform-state
+<path> --output json` (mutually exclusive with `--pulumi-json`, warns when
+both exist). Verified against the real binary: core's
+`test/fixtures/terraform/aws-realistic/terraform.tfstate` → exit 0, $310.48;
+the minimal hand-written tfstate embedded as INPUT in `scripts/contract.sh`
+check 11 → exit 0, t3.micro = $7.592. Break check: `--tf-state` typo → exit 1
+`unknown flag`, suite fails; reverted. `--state-only`: **NOT-DELIVERED** — not
+listed by `finfocus cost projected --help` in v0.4.0 (it exists only on
+`finfocus overview`; verified by grepping every command's help and core's
+`internal/cli`).
 
 Only add what `finfocus cost projected --help` lists. Verify against the real
 binary. If a flag is not in the help output, record it as `NOT-DELIVERED`.

@@ -256,6 +256,52 @@ EOF
     fi
   fi
 
+  # 11. terraform state input (AC-4.2): cost projected --terraform-state must
+  # exit 0 with the same envelope shape. The tfstate below is test INPUT
+  # (hand-written minimal v4 state, one t3.micro aws_instance), not captured
+  # finfocus output.
+  cat > "$tmp/min.tfstate" <<'EOF'
+{
+  "version": 4,
+  "terraform_version": "1.5.0",
+  "serial": 1,
+  "lineage": "00000000-0000-0000-0000-000000000000",
+  "outputs": {},
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "web",
+      "provider": "provider[\"registry.terraform.io/hashicorp/aws\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "id": "i-0123456789abcdef0",
+            "arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-0123456789abcdef0",
+            "instance_type": "t3.micro",
+            "ami": "ami-04681a1dbd79675a5",
+            "region": "us-east-1"
+          }
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}
+EOF
+  run_cmd "$tmp/tf.json" "$tmp/err" \
+    "$BIN" cost projected --terraform-state "$tmp/min.tfstate" --output json
+  if [ "$EXIT" -eq 0 ] && jq -e '
+      (.finfocus | type == "object")
+      and (.finfocus.summary.totalMonthly | type == "number")
+      and (.finfocus.resources | type == "array")
+    ' "$tmp/tf.json" >/dev/null; then
+    pass "terraform-state: exit 0, finfocus envelope shape OK"
+  else
+    fail "terraform-state: exit=$EXIT err=$(tail -n1 "$tmp/err")"
+  fi
+
   echo
   if [ "$failures" -gt 0 ]; then
     echo "contract: $failures check(s) FAILED"

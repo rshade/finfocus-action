@@ -15,6 +15,8 @@ export interface ActionConfiguration {
   actualCostsPeriod: string;
   pulumiStateJsonPath: string;
   actualCostsGroupBy: string;
+  /** Path to a Terraform state file for cost projected (mutually exclusive with the Pulumi plan) */
+  terraformStatePath?: string;
   includeSustainability: boolean;
   utilizationRate: string;
   sustainabilityEquivalents: boolean;
