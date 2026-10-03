@@ -1,9 +1,10 @@
-import { formatCommentBody, calculateAchievableSavings } from '../../src/formatter.js';
+import { formatCommentBody, calculateAchievableSavings, formatEstimateSection } from '../../src/formatter.js';
 import {
   FinfocusReport,
   ActionConfiguration,
   ActualCostReport,
   Recommendation,
+  EstimateReport,
 } from '../../src/types.js';
 
 describe('formatCommentBody', () => {
@@ -749,5 +750,139 @@ describe('Dashboard Achievable Savings', () => {
     // Both dashboard and recommendations section should show $70
     expect(result).toContain('**$70.00**/mo');
     expect(result).toContain('Save up to <strong>70.00 USD/mo</strong>');
+  });
+});
+
+describe('formatEstimateSection', () => {
+  const estimateReport: EstimateReport = {
+    resource: {
+      type: 'aws:ec2/instance:Instance',
+      id: 'estimate-resource',
+      provider: 'aws',
+      properties: { region: 'us-east-1' },
+    },
+    baseline: {
+      resourceType: 'aws:ec2/instance:Instance',
+      resourceId: 'estimate-resource',
+      adapter: '',
+      currency: 'USD',
+      monthly: 0,
+      hourly: 0,
+      notes: '',
+    },
+    modified: {
+      resourceType: 'aws:ec2/instance:Instance',
+      resourceId: 'estimate-resource',
+      adapter: '',
+      currency: 'USD',
+      monthly: 70.08,
+      hourly: 0.096,
+      notes: '',
+    },
+    totalChange: 70.08,
+    deltas: [
+      { property: 'instanceType', originalValue: '', newValue: 'm5.large', costChange: 70.08 },
+    ],
+  };
+
+  it('should render the What-If Cost Estimate section with table and total change', () => {
+    const result = formatEstimateSection(estimateReport);
+
+    expect(result).toContain('What-If Cost Estimate');
+    expect(result).toContain('aws:ec2/instance:Instance');
+    expect(result).toContain('**Provider:** `aws`');
+    expect(result).toContain('**Region:** `us-east-1`');
+    expect(result).toContain('| Metric | Baseline | Modified |');
+    expect(result).toContain('$0.00');
+    expect(result).toContain('$70.08');
+    expect(result).toContain('**Total Change:** +$70.08 USD/month');
+  });
+
+  it('should render the deltas table with property changes', () => {
+    const result = formatEstimateSection(estimateReport);
+
+    expect(result).toContain('| Property | Original | New | Cost Change |');
+    expect(result).toContain('| instanceType | — | m5.large | +$70.08 |');
+  });
+
+  it('should omit the deltas table when there are no deltas', () => {
+    const noDeltas: EstimateReport = { ...estimateReport, deltas: [], totalChange: 0 };
+
+    const result = formatEstimateSection(noDeltas);
+
+    expect(result).not.toContain('| Property | Original | New | Cost Change |');
+    expect(result).toContain('**Total Change:** $0.00 USD/month');
+  });
+});
+
+describe('formatCommentBody with estimate report', () => {
+  const mockReport: FinfocusReport = {
+    summary: { totalMonthly: 100.5, currency: 'USD' },
+  };
+
+  const estimateReport: EstimateReport = {
+    resource: {
+      type: 'aws:ec2/instance:Instance',
+      id: 'estimate-resource',
+      provider: 'aws',
+      properties: { region: 'us-east-1' },
+    },
+    baseline: {
+      resourceType: 'aws:ec2/instance:Instance',
+      resourceId: 'estimate-resource',
+      adapter: '',
+      currency: 'USD',
+      monthly: 0,
+      hourly: 0,
+    },
+    modified: {
+      resourceType: 'aws:ec2/instance:Instance',
+      resourceId: 'estimate-resource',
+      adapter: '',
+      currency: 'USD',
+      monthly: 70.08,
+      hourly: 0.096,
+    },
+    totalChange: 70.08,
+    deltas: [
+      { property: 'instanceType', originalValue: '', newValue: 'm5.large', costChange: 70.08 },
+    ],
+  };
+
+  it('should include the estimate section after the recommendations section', () => {
+    const recommendations = {
+      summary: { total_count: 1, total_savings: 50, currency: 'USD', count_by_action_type: {} },
+      recommendations: [
+        {
+          resource_id: 'ec2-instance-1',
+          action_type: 'RIGHTSIZING',
+          description: 'Resize',
+          estimated_savings: 50,
+          currency: 'USD',
+        },
+      ],
+    };
+
+    const result = formatCommentBody(
+      mockReport,
+      undefined,
+      recommendations,
+      undefined,
+      undefined,
+      undefined,
+      estimateReport,
+    );
+
+    expect(result).toContain('What-If Cost Estimate');
+    const recommendationsIndex = result.indexOf('Optimization Opportunities');
+    const estimateIndex = result.indexOf('What-If Cost Estimate');
+    expect(recommendationsIndex).toBeGreaterThanOrEqual(0);
+    expect(estimateIndex).toBeGreaterThan(recommendationsIndex);
+  });
+
+  it('should not include the estimate section when no report is provided', () => {
+    const result = formatCommentBody(mockReport);
+
+    expect(result).not.toContain('What-If Cost Estimate');
   });
 });

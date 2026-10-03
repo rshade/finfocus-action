@@ -7,6 +7,7 @@ import {
   EquivalencyMetrics,
   BudgetStatus,
   Recommendation,
+  EstimateReport,
 } from './types.js';
 
 /**
@@ -322,6 +323,67 @@ ${equivalentsSection}${resourceTable}
 }
 
 /**
+ * Render the What-If Cost Estimate section as Markdown for the PR comment.
+ *
+ * Shows the estimated resource (type, provider, region), a Baseline vs Modified
+ * monthly cost table, the total change, and the per-property deltas from
+ * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
+ *
+ * @param report - Estimate report from `Analyzer.runEstimate`
+ * @returns Markdown string for the estimate section
+ */
+export function formatEstimateSection(report: EstimateReport): string {
+  const currency = report.modified.currency || 'USD';
+  const currencySymbol = getCurrencySymbol(currency);
+  const region = report.resource.properties?.region;
+
+  const detailParts = [`**Provider:** \`${report.resource.provider}\``];
+  if (typeof region === 'string' && region !== '') {
+    detailParts.push(`**Region:** \`${region}\``);
+  }
+
+  const changeText =
+    report.totalChange > 0
+      ? `+${currencySymbol}${report.totalChange.toFixed(2)}`
+      : `${currencySymbol}${report.totalChange.toFixed(2)}`;
+
+  let deltasTable = '';
+  if (report.deltas.length > 0) {
+    const deltaRows = report.deltas
+      .map((d) => {
+        const original = d.originalValue === '' ? '—' : d.originalValue;
+        const delta =
+          d.costChange > 0
+            ? `+${currencySymbol}${d.costChange.toFixed(2)}`
+            : `${currencySymbol}${d.costChange.toFixed(2)}`;
+        return `| ${d.property} | ${original} | ${d.newValue} | ${delta} |`;
+      })
+      .join('\n');
+
+    deltasTable = `
+| Property | Original | New | Cost Change |
+| :--- | :--- | :--- | ---: |
+${deltaRows}
+`;
+  }
+
+  return `
+
+## 🔮 What-If Cost Estimate
+
+**Resource:** \`${report.resource.type}\`
+${detailParts.join(' · ')}
+
+| Metric | Baseline | Modified |
+| :--- | ---: | ---: |
+| **Monthly Cost** | ${currencySymbol}${report.baseline.monthly.toFixed(2)} | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
+| **Hourly Cost** | ${currencySymbol}${report.baseline.hourly.toFixed(4)} | ${currencySymbol}${report.modified.hourly.toFixed(4)} |
+
+**Total Change:** ${changeText} ${currency}/month
+${deltasTable}`;
+}
+
+/**
  * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
  *
  * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
@@ -330,7 +392,8 @@ ${equivalentsSection}${resourceTable}
  * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
- * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ * @param estimateReport - Optional what-if estimate report to include
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
  */
 export function formatCommentBody(
   report: FinfocusReport,
@@ -339,6 +402,7 @@ export function formatCommentBody(
   actualCostReport?: ActualCostReport,
   sustainabilityReport?: SustainabilityReport,
   budgetStatus?: BudgetStatus,
+  estimateReport?: EstimateReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -498,6 +562,8 @@ ${recRows}
     ? formatSustainabilitySection(sustainabilityReport, config, report)
     : '';
 
+  const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
+
   // Basic budget status section (local math; finfocus has no budget status command)
   const budgetSection = formatBudgetSection(budgetStatus);
 
@@ -531,7 +597,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>

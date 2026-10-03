@@ -157,7 +157,15 @@ reintroduce `budget status` and watch that check fail.
 
 ### AC-4.1 `cost estimate`
 
-**Status:** TODO. Depends on Phase 1.
+**Status:** DONE — verify: `npm test` (163 pass, incl. runEstimate happy path against a verbatim
+v0.4.0 capture, spec-validation warnings, and error-envelope throws), `npm run lint`,
+markdownlint 0 issues, and `FINFOCUS_BIN=/tmp/finfocus-v0.4.0/finfocus scripts/contract.sh` exit
+0 (20 checks, incl. the new check 10 asserting the exact `cost estimate` call shape and report
+keys, plus `cost estimate` in the check-9 subcommand list). Break check: changed check 10 to use
+`--resourceType`; suite failed with exit 1 and the `internal_error` envelope
+(`unknown flag: --resourceType`); reverted. New input `estimate-spec` exposes only the
+single-resource mode; plan-based `--modify` is not exposed (v0.4.0 cannot match Pulumi URNs —
+IDs contain colons the modify parser splits on).
 
 Read `finfocus cost estimate --help` and the core docs, add an input and a PR
 comment section, with the minimum finfocus version in the README. Verify with the

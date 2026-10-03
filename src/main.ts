@@ -5,6 +5,7 @@ import {
   RecommendationsReport,
   ActualCostReport,
   SustainabilityReport,
+  EstimateReport,
 } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
@@ -145,6 +146,8 @@ async function run(): Promise<void> {
     const budgetPeriod = core.getInput('budget_period') || 'monthly';
     const budgetAlerts = core.getInput('budget_alerts') || '';
 
+    const estimateSpec = core.getInput('estimate_spec') || '';
+
     config = {
       pulumiPlanJsonPath,
       githubToken,
@@ -170,6 +173,7 @@ async function run(): Promise<void> {
       budgetCurrency,
       budgetPeriod,
       budgetAlerts,
+      estimateSpec,
     };
 
     if (config.debug) {
@@ -357,6 +361,23 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
+    let estimateReport: EstimateReport | undefined;
+    if (config.estimateSpec) {
+      core.info('');
+      core.startGroup('🔮 Running what-if cost estimate');
+      const estimateStartTime = Date.now();
+      estimateReport = await analyzer.runEstimate(config);
+      if (config.debug) {
+        core.info(`Estimate took: ${Date.now() - estimateStartTime}ms`);
+      }
+      if (estimateReport) {
+        core.info(
+          `🔮 What-if estimate change: ${estimateReport.totalChange} ${estimateReport.modified.currency}`,
+        );
+      }
+      core.endGroup();
+    }
+
     let actualCostReport: ActualCostReport | undefined;
     if (config.includeActualCosts) {
       core.info('');
@@ -409,6 +430,7 @@ async function run(): Promise<void> {
         actualCostReport,
         sustainabilityReport,
         budgetStatus,
+        estimateReport,
       );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
