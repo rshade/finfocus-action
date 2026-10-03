@@ -4,19 +4,20 @@ import { BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealt
  */
 export declare const BudgetThresholdMessages: {
     readonly PASS: "Budget thresholds passed";
-    readonly WARNING: "Warning: Approaching budget threshold";
-    readonly CRITICAL: "Critical: Budget threshold breached";
     readonly EXCEEDED: "Budget exceeded";
 };
 /**
- * Check budget threshold using finfocus exit codes (v0.2.5+).
- * Runs `finfocus cost projected` and interprets the exit code.
+ * Check budget thresholds using a finfocus exit code the action owns.
  *
- * Exit codes:
- * - 0: All thresholds passed
- * - 1: Warning threshold breached
- * - 2: Critical threshold breached
- * - 3: Budget exceeded
+ * Runs `finfocus cost projected --pulumi-json <plan> --exit-on-threshold
+ * --exit-code 10`. Exit code 10 is owned by this action (it cannot collide
+ * with finfocus v0.4.0 codes: 0 = success, 1 = internal_error, 2 =
+ * validation_error), so exit 10 unambiguously means "budget threshold
+ * breached".
+ *
+ * Any other non-zero exit is a command failure, not a budget result: the
+ * error envelope on stderr is surfaced as the failure message, and unknown
+ * codes fail with the raw stderr.
  *
  * @param config - Action configuration
  * @returns BudgetThresholdResult with pass/fail status and severity

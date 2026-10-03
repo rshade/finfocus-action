@@ -167,6 +167,18 @@ main() {
     fi
   fi
 
+  # 7. guardrail call shape (AC-2.2): the exact arguments guardrails.ts uses
+  # for threshold checks. With no budget configured this must exit 0.
+  run_cmd "$tmp/guard.json" "$tmp/err" \
+    "$BIN" cost projected --pulumi-json "$PLAN" \
+    --exit-on-threshold --exit-code 10 --output json
+  if [ "$EXIT" -eq 0 ] && jq -e '.finfocus.summary.totalMonthly | type == "number"' \
+    "$tmp/guard.json" >/dev/null; then
+    pass "guardrail call shape: --pulumi-json --exit-on-threshold --exit-code 10 exits 0"
+  else
+    fail "guardrail call shape: exit=$EXIT err=$(tail -n1 "$tmp/err")"
+  fi
+
   echo
   if [ "$failures" -gt 0 ]; then
     echo "contract: $failures check(s) FAILED"

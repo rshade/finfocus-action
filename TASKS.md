@@ -60,7 +60,14 @@ the test fail.
 
 ### AC-2.2 Call shape and explicit threshold code
 
-**Status:** TODO. Depends on AC-2.1.
+**Status:** DONE — verify: `npm test` (267 pass) and
+`FINFOCUS_BIN=... scripts/contract.sh` exit 0 (contract check 7 encodes the
+guardrail call shape). `guardrails.ts` now runs `cost projected --pulumi-json
+<plan> --exit-on-threshold --exit-code 10` (10 is action-owned; v0.4.0 reserves
+0/1/2 — confirmed in `cost projected --help` and live runs). Unknown codes fail
+with stderr, not `Unexpected finfocus exit code`. Break check: dropped
+`--pulumi-json` from the contract's guardrail call shape; suite failed with
+exit 1 and the `internal_error` envelope; reverted.
 
 `guardrails.ts` passes the plan with `--pulumi-json` and, for threshold checks,
 `--exit-on-threshold --exit-code <N>` with an `N` the action owns (suggest 10,
