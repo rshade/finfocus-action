@@ -197,4 +197,15 @@ for this run. Record in the register.
 
 ## Spec-gap log
 
-None yet.
+- AC-2.3 premise: the breach did not reproduce for the owner because core's
+  budgets guide documents a flat `cost.budgets.amount` schema that v0.4.0
+  silently ignores; the working schema is `cost.budgets.global` (reproduced:
+  exit 10). Core draft: `.superpowers/issue-drafts/core-budget-flat-schema-ignored.md`.
+- Prompt section 7's `markdownlint-cli2 README.md CLAUDE.md TASKS.md` fails on
+  the pristine tree (~120 pre-existing errors under default rules); resolved
+  with `.markdownlint-cli2.jsonc` + reflow (decision 1 in the run report).
+- AC-4.1: plan-based `cost estimate --modify` is unusable in v0.4.0 (modify
+  parser splits on the first colon; plan resource IDs are URNs). Only the
+  single-resource mode was exposed.
+- AC-4.2: `--state-only` does not exist on any `cost` subcommand in v0.4.0
+  (only on `finfocus overview`); recorded NOT-DELIVERED.
