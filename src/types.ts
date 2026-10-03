@@ -23,6 +23,7 @@ export interface ActionConfiguration {
   budgetCurrency?: string;
   budgetPeriod?: string;
   budgetAlerts?: string;
+  estimateSpec?: string;
 }
 
 export interface BudgetAlert {
@@ -151,6 +152,7 @@ export interface IAnalyzer {
     config?: ActionConfiguration,
   ): Promise<RecommendationsReport>;
   runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
+  runEstimate(config: ActionConfiguration): Promise<EstimateReport | undefined>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
   calculateSustainabilityMetrics(report: FinfocusReport): {
     totalCO2e: number;
@@ -184,6 +186,50 @@ export interface RecommendationsReport {
   recommendations: Recommendation[];
 }
 
+/**
+ * Parsed `estimate-spec` action input: a single-resource what-if estimate
+ * for `finfocus cost estimate` (single-resource mode).
+ */
+export interface EstimateSpec {
+  provider: string;
+  resource_type: string;
+  properties?: Record<string, string>;
+  region?: string;
+}
+
+export interface EstimateDelta {
+  property: string;
+  originalValue: string;
+  newValue: string;
+  costChange: number;
+}
+
+export interface EstimateCostData {
+  resourceType: string;
+  resourceId: string;
+  adapter: string;
+  currency: string;
+  monthly: number;
+  hourly: number;
+  notes?: string;
+}
+
+/**
+ * JSON output of `finfocus cost estimate ... --output json` (finfocus v0.4.0).
+ */
+export interface EstimateReport {
+  resource: {
+    type: string;
+    id: string;
+    provider: string;
+    properties?: Record<string, unknown>;
+  };
+  baseline: EstimateCostData;
+  modified: EstimateCostData;
+  totalChange: number;
+  deltas: EstimateDelta[];
+}
+
 export interface ICommenter {
   upsertComment(
     report: FinfocusReport,
@@ -193,6 +239,7 @@ export interface ICommenter {
     actualCostReport?: ActualCostReport,
     sustainabilityReport?: SustainabilityReport,
     budgetStatus?: BudgetStatus,
+    estimateReport?: EstimateReport,
   ): Promise<void>;
 }
 

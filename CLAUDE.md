@@ -39,7 +39,7 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `install.ts` | `Installer` | Downloads finfocus binary from GitHub releases, caches with `@actions/tool-cache` |
 | `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI |
 | `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
-| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual` commands; calculates sustainability metrics and budget status |
+| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual`, `estimate` commands; calculates sustainability metrics and budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
 | `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
 | `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code) |
@@ -58,6 +58,7 @@ main.ts
         └─> Analyzer.runAnalysis()        # finfocus cost projected
         └─> Analyzer.calculateSustainabilityMetrics()
         └─> Analyzer.runRecommendations() # finfocus cost recommendations
+        └─> Analyzer.runEstimate()        # finfocus cost estimate (opt-in via estimate-spec)
         └─> Analyzer.runActualCosts()     # finfocus cost actual
         └─> Analyzer.calculateBudgetStatus() # Local budget math (no CLI call)
         └─> Analyzer.extractBudgetStatus() # Optional: extract budget info from output
@@ -78,6 +79,8 @@ main.ts
 - `BudgetExitCode`: Enum for threshold check exit codes (0=pass, 10=threshold breached; 10 is
   action-owned via `--exit-code`, finfocus v0.4.0 reserves 1=internal_error and 2=validation_error)
 - `BudgetThresholdResult`: Result of budget threshold check with severity and message
+- `EstimateSpec`/`EstimateReport`: What-if single-resource estimate input and output
+  (`finfocus cost estimate`, v0.4.0; plan-based `--modify` not exposed)
 
 ## Code Conventions
 

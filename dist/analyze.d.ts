@@ -1,4 +1,4 @@
-import { IAnalyzer, FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, BudgetStatus } from './types.js';
+import { IAnalyzer, FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, BudgetStatus, EstimateReport } from './types.js';
 export declare class Analyzer implements IAnalyzer {
     runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport>;
     calculateSustainabilityMetrics(report: FinfocusReport): {
@@ -8,6 +8,8 @@ export declare class Analyzer implements IAnalyzer {
     };
     runRecommendations(planPath: string, config?: ActionConfiguration): Promise<RecommendationsReport>;
     runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
+    runEstimate(config: ActionConfiguration): Promise<EstimateReport | undefined>;
+    private parseEstimateSpec;
     private getDateRange;
     private isValidPeriodFormat;
     private parseAndValidateCustomDate;

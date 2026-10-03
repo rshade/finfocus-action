@@ -98,6 +98,10 @@ inputs:
     description: 'Budget alerts in JSON format: [{"threshold": 80, "type": "actual"}, {"threshold": 100, "type": "forecasted"}]'
     required: false
     default: ''
+  estimate-spec:
+    description: 'JSON spec for a single-resource what-if cost estimate via `finfocus cost estimate`, e.g. {"provider":"aws","resource_type":"aws:ec2/instance:Instance","properties":{"instanceType":"m5.large"},"region":"us-east-1"}. Empty disables the feature. Tested against finfocus v0.4.0.'
+    required: false
+    default: ''
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -174,6 +178,7 @@ runs:
         INPUT_BUDGET_CURRENCY: ${{ inputs.budget-currency }}
         INPUT_BUDGET_PERIOD: ${{ inputs.budget-period }}
         INPUT_BUDGET_ALERTS: ${{ inputs.budget-alerts }}
+        INPUT_ESTIMATE_SPEC: ${{ inputs.estimate-spec }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

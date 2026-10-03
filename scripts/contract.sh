@@ -217,6 +217,7 @@ EOF
     "cost projected"
     "cost recommendations"
     "cost actual"
+    "cost estimate"
     "plugin install"
     "plugin list"
   )
@@ -229,6 +230,31 @@ EOF
       fail "subcommand missing: '$sub' --help exited $EXIT: $(tail -n1 "$tmp/err")"
     fi
   done
+
+  # 10. cost estimate single-resource shape (AC-4.1): the exact arguments
+  # analyze.ts runEstimate builds from the estimate-spec input. Only the
+  # single-resource mode is exposed; plan-based --modify cannot match Pulumi
+  # URNs in v0.4.0.
+  run_cmd "$tmp/est.json" "$tmp/err" \
+    "$BIN" cost estimate --provider aws \
+    --resource-type aws:ec2/instance:Instance \
+    --property instanceType=m5.large --region us-east-1 --output json
+  if [ "$EXIT" -ne 0 ]; then
+    fail "cost estimate: exit=$EXIT err=$(tail -n1 "$tmp/err")"
+  else
+    if jq -e '
+      (.resource | type == "object")
+      and (.baseline | type == "object")
+      and (.modified | type == "object")
+      and (.totalChange | type == "number")
+      and (.deltas | type == "array")
+      and (.modified.monthly | type == "number")
+    ' "$tmp/est.json" >/dev/null; then
+      pass "cost estimate: exit 0, estimate report shape OK"
+    else
+      fail "cost estimate: unexpected JSON shape: $(head -c 200 "$tmp/est.json")"
+    fi
+  fi
 
   echo
   if [ "$failures" -gt 0 ]; then

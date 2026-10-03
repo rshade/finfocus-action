@@ -112,6 +112,32 @@ does not interpret finfocus exit codes as budget severities. Instead it runs
 For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks,
 maintaining backward compatibility.
 
+### What-If Cost Estimates
+
+Estimate the cost of a single resource with specific properties — without changing any Pulumi
+code — by setting the `estimate-spec` input. The action runs `finfocus cost estimate` in its
+single-resource mode and adds a "What-If Cost Estimate" section to the PR comment showing the
+baseline vs modified monthly cost and the per-property deltas.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    estimate-spec: >
+      {"provider":"aws","resource_type":"aws:ec2/instance:Instance",
+       "properties":{"instanceType":"m5.large"},"region":"us-east-1"}
+```
+
+| Input | Description | Required | Default |
+| :--- | :--- | :--- | :--- |
+| `estimate-spec` | JSON object with `provider` and `resource_type` (Pulumi type token), plus optional `properties` (string:string map) and `region`. Empty disables the feature. | No | `""` |
+
+Invalid JSON or a spec missing `provider`/`resource_type` logs a warning and skips the estimate
+without failing the action. The feature is tested against **finfocus v0.4.0**. The plan-based
+`--modify` mode is not exposed: in v0.4.0 it cannot match Pulumi URNs (resource IDs contain
+colons, which the modify parser splits on).
+
 ## Compatibility
 
 The action is tested against **finfocus v0.4.0** (pinned) and **latest** on

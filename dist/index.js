@@ -37089,6 +37089,125 @@ class Analyzer {
             };
         }
     }
+    async runEstimate(config) {
+        const debug = config.debug === true;
+        const rawSpec = config.estimateSpec;
+        if (!rawSpec || rawSpec.trim() === '') {
+            return undefined;
+        }
+        const spec = this.parseEstimateSpec(rawSpec);
+        if (!spec) {
+            return undefined;
+        }
+        if (debug) {
+            main_core/* info */.pq(`=== Analyzer: Running what-if cost estimate ===`);
+            main_core/* info */.pq(`  Provider: ${spec.provider}`);
+            main_core/* info */.pq(`  Resource type: ${spec.resource_type}`);
+        }
+        const args = [
+            'cost',
+            'estimate',
+            '--provider',
+            spec.provider,
+            '--resource-type',
+            spec.resource_type,
+        ];
+        for (const [key, value] of Object.entries(spec.properties ?? {})) {
+            args.push('--property', `${key}=${value}`);
+        }
+        if (spec.region) {
+            args.push('--region', spec.region);
+        }
+        args.push('--output', 'json');
+        if (debug) {
+            main_core/* info */.pq(`=== Running finfocus estimate command ===`);
+            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+        }
+        const estimateStart = Date.now();
+        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+            silent: !debug,
+            ignoreReturnCode: true,
+        });
+        if (debug) {
+            main_core/* info */.pq(`  Execution took: ${Date.now() - estimateStart}ms`);
+            main_core/* info */.pq(`  Exit code: ${output.exitCode}`);
+            main_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
+            main_core/* info */.pq(`  Stderr length: ${output.stderr.length} chars`);
+            if (output.stderr) {
+                main_core/* info */.pq(`  Stderr:\n${output.stderr}`);
+            }
+        }
+        if (output.exitCode !== 0) {
+            main_core/* error */.z3(`  finfocus estimate command FAILED with exit code ${output.exitCode}`);
+            const envelope = (0,errors/* parseErrorEnvelope */.a)(output.stderr);
+            if (envelope) {
+                throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, output.exitCode));
+            }
+            throw new Error(`finfocus estimate failed with exit code ${output.exitCode}.\n` +
+                `Stderr: ${output.stderr}\n` +
+                `Stdout: ${output.stdout}`);
+        }
+        try {
+            const report = JSON.parse(output.stdout);
+            if (debug) {
+                main_core/* info */.pq(`  Parsed estimate successfully`);
+                main_core/* info */.pq(`  Total change: ${report.totalChange} ${report.modified.currency}`);
+                main_core/* info */.pq(`  Deltas: ${report.deltas.length}`);
+            }
+            return report;
+        }
+        catch (err) {
+            main_core/* error */.z3(`  Failed to parse finfocus estimate output as JSON`);
+            main_core/* error */.z3(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
+            throw new Error(`Failed to parse finfocus estimate JSON output.\n` +
+                `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+                `Raw output: ${output.stdout.substring(0, 500)}...`);
+        }
+    }
+    parseEstimateSpec(raw) {
+        let parsed;
+        try {
+            parsed = JSON.parse(raw);
+        }
+        catch (err) {
+            main_core/* warning */.$e(`Invalid estimate-spec JSON: ${err instanceof Error ? err.message : String(err)}. ` +
+                `Skipping what-if estimate.`);
+            return undefined;
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            main_core/* warning */.$e('Invalid estimate-spec: must be a JSON object. Skipping what-if estimate.');
+            return undefined;
+        }
+        const spec = parsed;
+        if (typeof spec.provider !== 'string' || spec.provider.trim() === '') {
+            main_core/* warning */.$e('Invalid estimate-spec: "provider" must be a non-empty string. Skipping what-if estimate.');
+            return undefined;
+        }
+        if (typeof spec.resource_type !== 'string' || spec.resource_type.trim() === '') {
+            main_core/* warning */.$e('Invalid estimate-spec: "resource_type" must be a non-empty string. Skipping what-if estimate.');
+            return undefined;
+        }
+        if (spec.properties !== undefined) {
+            if (!spec.properties ||
+                typeof spec.properties !== 'object' ||
+                Array.isArray(spec.properties)) {
+                main_core/* warning */.$e('Invalid estimate-spec: "properties" must be an object of string values. ' +
+                    'Skipping what-if estimate.');
+                return undefined;
+            }
+            for (const value of Object.values(spec.properties)) {
+                if (typeof value !== 'string') {
+                    main_core/* warning */.$e('Invalid estimate-spec: "properties" values must be strings. Skipping what-if estimate.');
+                    return undefined;
+                }
+            }
+        }
+        if (spec.region !== undefined && typeof spec.region !== 'string') {
+            main_core/* warning */.$e('Invalid estimate-spec: "region" must be a string. Skipping what-if estimate.');
+            return undefined;
+        }
+        return spec;
+    }
     getDateRange(period) {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -41754,6 +41873,59 @@ ${equivalentsSection}${resourceTable}
 `;
 }
 /**
+ * Render the What-If Cost Estimate section as Markdown for the PR comment.
+ *
+ * Shows the estimated resource (type, provider, region), a Baseline vs Modified
+ * monthly cost table, the total change, and the per-property deltas from
+ * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
+ *
+ * @param report - Estimate report from `Analyzer.runEstimate`
+ * @returns Markdown string for the estimate section
+ */
+function formatEstimateSection(report) {
+    const currency = report.modified.currency || 'USD';
+    const currencySymbol = getCurrencySymbol(currency);
+    const region = report.resource.properties?.region;
+    const detailParts = [`**Provider:** \`${report.resource.provider}\``];
+    if (typeof region === 'string' && region !== '') {
+        detailParts.push(`**Region:** \`${region}\``);
+    }
+    const changeText = report.totalChange > 0
+        ? `+${currencySymbol}${report.totalChange.toFixed(2)}`
+        : `${currencySymbol}${report.totalChange.toFixed(2)}`;
+    let deltasTable = '';
+    if (report.deltas.length > 0) {
+        const deltaRows = report.deltas
+            .map((d) => {
+            const original = d.originalValue === '' ? '—' : d.originalValue;
+            const delta = d.costChange > 0
+                ? `+${currencySymbol}${d.costChange.toFixed(2)}`
+                : `${currencySymbol}${d.costChange.toFixed(2)}`;
+            return `| ${d.property} | ${original} | ${d.newValue} | ${delta} |`;
+        })
+            .join('\n');
+        deltasTable = `
+| Property | Original | New | Cost Change |
+| :--- | :--- | :--- | ---: |
+${deltaRows}
+`;
+    }
+    return `
+
+## 🔮 What-If Cost Estimate
+
+**Resource:** \`${report.resource.type}\`
+${detailParts.join(' · ')}
+
+| Metric | Baseline | Modified |
+| :--- | ---: | ---: |
+| **Monthly Cost** | ${currencySymbol}${report.baseline.monthly.toFixed(2)} | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
+| **Hourly Cost** | ${currencySymbol}${report.baseline.hourly.toFixed(4)} | ${currencySymbol}${report.modified.hourly.toFixed(4)} |
+
+**Total Change:** ${changeText} ${currency}/month
+${deltasTable}`;
+}
+/**
  * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
  *
  * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
@@ -41762,9 +41934,10 @@ ${equivalentsSection}${resourceTable}
  * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
- * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ * @param estimateReport - Optional what-if estimate report to include
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
  */
-function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus) {
+function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport) {
     // Handle both new and legacy report formats
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
     const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
@@ -41906,6 +42079,7 @@ ${recRows}
     const sustainabilitySection = sustainabilityReport
         ? formatSustainabilitySection(sustainabilityReport, config, report)
         : '';
+    const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
     // Basic budget status section (local math; finfocus has no budget status command)
     const budgetSection = formatBudgetSection(budgetStatus);
     // Calculate percent used for dashboard from budget status
@@ -41929,7 +42103,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
@@ -41942,7 +42116,7 @@ ${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection
 
 class Commenter {
     marker = '<!-- finfocus-action-comment -->';
-    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus) {
+    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport) {
         const octokit = getOctokit(token);
         const context = github_context;
         if (!context.payload.pull_request) {
@@ -41951,7 +42125,7 @@ class Commenter {
         }
         const prNumber = context.payload.pull_request.number;
         const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus)}`;
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport)}`;
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
             issue_number: prNumber,
@@ -42242,6 +42416,7 @@ async function run() {
         const budgetCurrency = main_core/* getInput */.V4('budget_currency') || 'USD';
         const budgetPeriod = main_core/* getInput */.V4('budget_period') || 'monthly';
         const budgetAlerts = main_core/* getInput */.V4('budget_alerts') || '';
+        const estimateSpec = main_core/* getInput */.V4('estimate_spec') || '';
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -42267,6 +42442,7 @@ async function run() {
             budgetCurrency,
             budgetPeriod,
             budgetAlerts,
+            estimateSpec,
         };
         if (config.debug) {
             main_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -42429,6 +42605,20 @@ async function run() {
             main_core/* info */.pq(`💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`);
             main_core/* endGroup */.N4();
         }
+        let estimateReport;
+        if (config.estimateSpec) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('🔮 Running what-if cost estimate');
+            const estimateStartTime = Date.now();
+            estimateReport = await analyzer.runEstimate(config);
+            if (config.debug) {
+                main_core/* info */.pq(`Estimate took: ${Date.now() - estimateStartTime}ms`);
+            }
+            if (estimateReport) {
+                main_core/* info */.pq(`🔮 What-if estimate change: ${estimateReport.totalChange} ${estimateReport.modified.currency}`);
+            }
+            main_core/* endGroup */.N4();
+        }
         let actualCostReport;
         if (config.includeActualCosts) {
             main_core/* info */.pq('');
@@ -42464,7 +42654,7 @@ async function run() {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💬 Posting PR comment');
             const commentStartTime = Date.now();
-            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus);
+            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport);
             if (config.debug) {
                 main_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             }

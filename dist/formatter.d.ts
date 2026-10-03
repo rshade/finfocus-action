@@ -1,4 +1,4 @@
-import { FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport, EquivalencyMetrics, BudgetStatus, Recommendation } from './types.js';
+import { FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, SustainabilityReport, EquivalencyMetrics, BudgetStatus, Recommendation, EstimateReport } from './types.js';
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
  *
@@ -28,6 +28,17 @@ export declare function getCurrencySymbol(currency?: string): string;
  */
 export declare function calculateEquivalents(totalCO2e: number): EquivalencyMetrics;
 /**
+ * Render the What-If Cost Estimate section as Markdown for the PR comment.
+ *
+ * Shows the estimated resource (type, provider, region), a Baseline vs Modified
+ * monthly cost table, the total change, and the per-property deltas from
+ * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
+ *
+ * @param report - Estimate report from `Analyzer.runEstimate`
+ * @returns Markdown string for the estimate section
+ */
+export declare function formatEstimateSection(report: EstimateReport): string;
+/**
  * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
  *
  * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
@@ -36,6 +47,7 @@ export declare function calculateEquivalents(totalCO2e: number): EquivalencyMetr
  * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
- * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, sustainability, and an optional detailed note.
+ * @param estimateReport - Optional what-if estimate report to include
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
  */
-export declare function formatCommentBody(report: FinfocusReport, config?: ActionConfiguration, recommendationsReport?: RecommendationsReport, actualCostReport?: ActualCostReport, sustainabilityReport?: SustainabilityReport, budgetStatus?: BudgetStatus): string;
+export declare function formatCommentBody(report: FinfocusReport, config?: ActionConfiguration, recommendationsReport?: RecommendationsReport, actualCostReport?: ActualCostReport, sustainabilityReport?: SustainabilityReport, budgetStatus?: BudgetStatus, estimateReport?: EstimateReport): string;

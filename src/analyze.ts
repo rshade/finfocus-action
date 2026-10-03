@@ -11,6 +11,8 @@ import {
   RecommendationsReport,
   ActualCostReport,
   BudgetStatus,
+  EstimateReport,
+  EstimateSpec,
 } from './types.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 
@@ -377,6 +379,152 @@ export class Analyzer implements IAnalyzer {
         items: [],
       };
     }
+  }
+
+  async runEstimate(config: ActionConfiguration): Promise<EstimateReport | undefined> {
+    const debug = config.debug === true;
+    const rawSpec = config.estimateSpec;
+    if (!rawSpec || rawSpec.trim() === '') {
+      return undefined;
+    }
+
+    const spec = this.parseEstimateSpec(rawSpec);
+    if (!spec) {
+      return undefined;
+    }
+
+    if (debug) {
+      core.info(`=== Analyzer: Running what-if cost estimate ===`);
+      core.info(`  Provider: ${spec.provider}`);
+      core.info(`  Resource type: ${spec.resource_type}`);
+    }
+
+    const args = [
+      'cost',
+      'estimate',
+      '--provider',
+      spec.provider,
+      '--resource-type',
+      spec.resource_type,
+    ];
+    for (const [key, value] of Object.entries(spec.properties ?? {})) {
+      args.push('--property', `${key}=${value}`);
+    }
+    if (spec.region) {
+      args.push('--region', spec.region);
+    }
+    args.push('--output', 'json');
+
+    if (debug) {
+      core.info(`=== Running finfocus estimate command ===`);
+      core.info(`  Command: finfocus ${args.join(' ')}`);
+    }
+
+    const estimateStart = Date.now();
+    const output = await exec.getExecOutput('finfocus', args, {
+      silent: !debug,
+      ignoreReturnCode: true,
+    });
+
+    if (debug) {
+      core.info(`  Execution took: ${Date.now() - estimateStart}ms`);
+      core.info(`  Exit code: ${output.exitCode}`);
+      core.info(`  Stdout length: ${output.stdout.length} chars`);
+      core.info(`  Stderr length: ${output.stderr.length} chars`);
+      if (output.stderr) {
+        core.info(`  Stderr:\n${output.stderr}`);
+      }
+    }
+
+    if (output.exitCode !== 0) {
+      core.error(`  finfocus estimate command FAILED with exit code ${output.exitCode}`);
+      const envelope = parseErrorEnvelope(output.stderr);
+      if (envelope) {
+        throw new Error(formatEnvelopeError(envelope, output.exitCode));
+      }
+      throw new Error(
+        `finfocus estimate failed with exit code ${output.exitCode}.\n` +
+          `Stderr: ${output.stderr}\n` +
+          `Stdout: ${output.stdout}`,
+      );
+    }
+
+    try {
+      const report = JSON.parse(output.stdout) as EstimateReport;
+      if (debug) {
+        core.info(`  Parsed estimate successfully`);
+        core.info(`  Total change: ${report.totalChange} ${report.modified.currency}`);
+        core.info(`  Deltas: ${report.deltas.length}`);
+      }
+      return report;
+    } catch (err) {
+      core.error(`  Failed to parse finfocus estimate output as JSON`);
+      core.error(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(
+        `Failed to parse finfocus estimate JSON output.\n` +
+          `Error: ${err instanceof Error ? err.message : String(err)}\n` +
+          `Raw output: ${output.stdout.substring(0, 500)}...`,
+      );
+    }
+  }
+
+  private parseEstimateSpec(raw: string): EstimateSpec | undefined {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (err) {
+      core.warning(
+        `Invalid estimate-spec JSON: ${err instanceof Error ? err.message : String(err)}. ` +
+          `Skipping what-if estimate.`,
+      );
+      return undefined;
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      core.warning('Invalid estimate-spec: must be a JSON object. Skipping what-if estimate.');
+      return undefined;
+    }
+
+    const spec = parsed as Record<string, unknown>;
+    if (typeof spec.provider !== 'string' || spec.provider.trim() === '') {
+      core.warning(
+        'Invalid estimate-spec: "provider" must be a non-empty string. Skipping what-if estimate.',
+      );
+      return undefined;
+    }
+    if (typeof spec.resource_type !== 'string' || spec.resource_type.trim() === '') {
+      core.warning(
+        'Invalid estimate-spec: "resource_type" must be a non-empty string. Skipping what-if estimate.',
+      );
+      return undefined;
+    }
+    if (spec.properties !== undefined) {
+      if (
+        !spec.properties ||
+        typeof spec.properties !== 'object' ||
+        Array.isArray(spec.properties)
+      ) {
+        core.warning(
+          'Invalid estimate-spec: "properties" must be an object of string values. ' +
+            'Skipping what-if estimate.',
+        );
+        return undefined;
+      }
+      for (const value of Object.values(spec.properties)) {
+        if (typeof value !== 'string') {
+          core.warning(
+            'Invalid estimate-spec: "properties" values must be strings. Skipping what-if estimate.',
+          );
+          return undefined;
+        }
+      }
+    }
+    if (spec.region !== undefined && typeof spec.region !== 'string') {
+      core.warning('Invalid estimate-spec: "region" must be a string. Skipping what-if estimate.');
+      return undefined;
+    }
+
+    return spec as unknown as EstimateSpec;
   }
 
   private getDateRange(period: string): { from: string; to: string } {

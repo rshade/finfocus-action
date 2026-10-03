@@ -345,4 +345,184 @@ describe('Analyzer', () => {
       expect(result?.period).toBe('monthly');
     });
   });
+
+  describe('runEstimate', () => {
+    // Verbatim capture from the real finfocus v0.4.0 binary (2026-10-03,
+    // aws-public v0.1.9):
+    //   finfocus cost estimate --provider aws \
+    //     --resource-type aws:ec2/instance:Instance \
+    //     --property instanceType=m5.large --region us-east-1 --output json
+    const capturedEstimateJson = JSON.stringify({
+      resource: {
+        type: 'aws:ec2/instance:Instance',
+        id: 'estimate-resource',
+        provider: 'aws',
+        properties: { region: 'us-east-1' },
+      },
+      baseline: {
+        resourceType: 'aws:ec2/instance:Instance',
+        resourceId: 'estimate-resource',
+        adapter: '',
+        currency: 'USD',
+        monthly: 0,
+        hourly: 0,
+        notes: '',
+        breakdown: null,
+        startDate: '0001-01-01T00:00:00Z',
+        endDate: '0001-01-01T00:00:00Z',
+      },
+      modified: {
+        resourceType: 'aws:ec2/instance:Instance',
+        resourceId: 'estimate-resource',
+        adapter: '',
+        currency: 'USD',
+        monthly: 70.08,
+        hourly: 0.096,
+        notes: '',
+        breakdown: null,
+        startDate: '0001-01-01T00:00:00Z',
+        endDate: '0001-01-01T00:00:00Z',
+      },
+      totalChange: 70.08,
+      deltas: [
+        { property: 'instanceType', originalValue: '', newValue: 'm5.large', costChange: 70.08 },
+      ],
+    });
+
+    const estimateSpec = JSON.stringify({
+      provider: 'aws',
+      resource_type: 'aws:ec2/instance:Instance',
+      properties: { instanceType: 'm5.large' },
+      region: 'us-east-1',
+    });
+
+    it('should return undefined and not run finfocus when estimateSpec is empty', async () => {
+      const result = await analyzer.runEstimate({ estimateSpec: '' } as any);
+
+      expect(result).toBeUndefined();
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
+    });
+
+    it('should run finfocus cost estimate and return the report', async () => {
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: 0,
+        stdout: capturedEstimateJson,
+        stderr: '',
+      });
+
+      const report = await analyzer.runEstimate({ estimateSpec, debug: false } as any);
+
+      expect(exec.getExecOutput).toHaveBeenCalledWith(
+        'finfocus',
+        [
+          'cost',
+          'estimate',
+          '--provider',
+          'aws',
+          '--resource-type',
+          'aws:ec2/instance:Instance',
+          '--property',
+          'instanceType=m5.large',
+          '--region',
+          'us-east-1',
+          '--output',
+          'json',
+        ],
+        expect.objectContaining({ silent: true, ignoreReturnCode: true })
+      );
+      expect(report).toBeDefined();
+      expect(report?.totalChange).toBe(70.08);
+      expect(report?.modified.monthly).toBe(70.08);
+      expect(report?.modified.currency).toBe('USD');
+      expect(report?.deltas).toHaveLength(1);
+      expect(report?.deltas[0].property).toBe('instanceType');
+    });
+
+    it('should omit --property and --region when not specified', async () => {
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: 0,
+        stdout: capturedEstimateJson,
+        stderr: '',
+      });
+
+      await analyzer.runEstimate({
+        estimateSpec: JSON.stringify({
+          provider: 'aws',
+          resource_type: 'aws:ec2/instance:Instance',
+        }),
+      } as any);
+
+      expect(exec.getExecOutput).toHaveBeenCalledWith(
+        'finfocus',
+        ['cost', 'estimate', '--provider', 'aws', '--resource-type', 'aws:ec2/instance:Instance', '--output', 'json'],
+        expect.anything()
+      );
+    });
+
+    it('should warn and return undefined on invalid spec JSON', async () => {
+      const result = await analyzer.runEstimate({ estimateSpec: '{not json' } as any);
+
+      expect(result).toBeUndefined();
+      expect(core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid estimate-spec JSON')
+      );
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
+    });
+
+    it('should warn and return undefined when provider is missing', async () => {
+      const result = await analyzer.runEstimate({
+        estimateSpec: JSON.stringify({ resource_type: 'aws:ec2/instance:Instance' }),
+      } as any);
+
+      expect(result).toBeUndefined();
+      expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('"provider"'));
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
+    });
+
+    it('should warn and return undefined when resource_type is missing', async () => {
+      const result = await analyzer.runEstimate({
+        estimateSpec: JSON.stringify({ provider: 'aws' }),
+      } as any);
+
+      expect(result).toBeUndefined();
+      expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('"resource_type"'));
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
+    });
+
+    it('should warn and return undefined when spec is not a JSON object', async () => {
+      const result = await analyzer.runEstimate({ estimateSpec: '"aws"' } as any);
+
+      expect(result).toBeUndefined();
+      expect(core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('must be a JSON object')
+      );
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
+    });
+
+    it('should throw with the envelope message on non-zero exit with an error envelope', async () => {
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: 1,
+        stdout: '',
+        stderr:
+          '{"error_code":"internal_error","message":"parsing properties: invalid property format \\"badprop\\""}',
+      });
+
+      await expect(analyzer.runEstimate({ estimateSpec } as any)).rejects.toThrow(
+        'parsing properties: invalid property format'
+      );
+      await expect(analyzer.runEstimate({ estimateSpec } as any)).rejects.toThrow('tool failure');
+    });
+
+    it('should fall back to stderr text on non-zero exit without an envelope', async () => {
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'boom',
+      });
+
+      await expect(analyzer.runEstimate({ estimateSpec } as any)).rejects.toThrow(
+        'finfocus estimate failed with exit code 1'
+      );
+    });
+  });
 });
