@@ -5,6 +5,7 @@ import {
   BudgetThresholdResult,
   ActionConfiguration,
   FinfocusReport,
+  isV041Diff,
 } from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
@@ -131,12 +132,12 @@ export function checkBudgetThresholdWithJson(
 
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
 
-  // Extract cost change, handling both v0.4.0 (legacy) and v0.4.1 formats
+  // Extract cost change, handling both v0.4.0 (legacy) and v0.4.1 formats using type guard
   let costChange = 0;
-  if ('monthly_cost_change' in report.diff) {
-    costChange = (report.diff as any).monthly_cost_change;
-  } else if ('totalDelta' in report.diff) {
-    costChange = (report.diff as any).totalDelta;
+  if (isV041Diff(report.diff)) {
+    costChange = report.diff.totalDelta;
+  } else {
+    costChange = (report.diff as any).monthly_cost_change ?? 0;
   }
 
   const failed = checkThreshold(config.threshold, costChange, currency);

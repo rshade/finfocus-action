@@ -134,6 +134,15 @@ export interface FinfocusReportDiff {
   unchanged: number;
 }
 
+/**
+ * Type guard to detect finfocus v0.4.1 diff format vs legacy v0.4.0 format.
+ * v0.4.1: { totalBefore, totalAfter, totalDelta, currency, creates, updates, deletes, unchanged }
+ * v0.4.0: { monthly_cost_change, percent_change }
+ */
+export function isV041Diff(diff: any): diff is FinfocusReportDiff {
+  return diff && typeof diff === 'object' && 'totalDelta' in diff;
+}
+
 export interface FinfocusReport {
   summary: FinfocusSummary;
   resources?: FinfocusResource[];

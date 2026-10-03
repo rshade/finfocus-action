@@ -52,6 +52,48 @@ describe('Analyzer', () => {
     expect(report).toEqual(mockReport);
   });
 
+  it('should parse v0.4.1 diff format with totalDelta', async () => {
+    const v041Report = {
+      finfocus: {
+        summary: {
+          totalMonthly: 7.592,
+          totalHourly: 0.0104,
+          currency: 'USD',
+        },
+        diff: {
+          totalBefore: 0,
+          totalAfter: 7.592,
+          totalDelta: 7.592,
+          currency: 'USD',
+          creates: 3,
+          updates: 0,
+          deletes: 0,
+          unchanged: 0,
+        },
+      },
+    };
+
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(v041Report),
+      stderr: '',
+    });
+
+    const report = await analyzer.runAnalysis('plan.json');
+
+    expect(report).toBeDefined();
+    expect(report.diff).toEqual({
+      totalBefore: 0,
+      totalAfter: 7.592,
+      totalDelta: 7.592,
+      currency: 'USD',
+      creates: 3,
+      updates: 0,
+      deletes: 0,
+      unchanged: 0,
+    });
+  });
+
   it('should throw error if plan file not found', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
 

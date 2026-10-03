@@ -194,6 +194,25 @@ binary. If a flag is not in the help output, record it as `NOT-DELIVERED`.
 Need a Kubernetes fixture or kind cluster and a Jev API key policy. Out of scope
 for this run. Record in the register.
 
+### AC-4.4 Display unpriced resources in PR comment
+
+**Status:** DONE — verify: `npm test` passes; `npm run lint` and `npm run build` pass; `FINFOCUS_BIN=...
+scripts/contract.sh` shows new keys `["diff","errors"]` at `.finfocus` (additive;
+fixture auto-detected). New output `unpriced-resource-count` set in main.ts and
+defined in action.yml. Break check: changed formatUnpricedResourcesSection to never
+render; formatter test using fixture failed; restored exactly, test passed.
+
+Extend `FinfocusReport` type with optional `errors` array and v0.4.1 `diff` format.
+Add `formatUnpricedResourcesSection()` to render a collapsible table of unpriced
+resources (type, resource ID short form, plugin, message) with note that they're
+excluded from the total. Support both v0.4.0 (legacy `monthly_cost_change`) and
+v0.4.1 diff formats with type guards in `extractMonthlyCostChange()` and
+`extractPercentChange()`. Set action output `unpriced-resource-count` (number of
+error entries, 0 if none). Unit tests: fixture with real v0.4.1 errors; empty
+errors; null errors; undefined errors; truncation at 20 entries; singular/plural
+labels; byte-identical output when no errors. README updated with output and
+section description.
+
 ## Spec-gap log
 
 - AC-2.3 premise: the breach did not reproduce for the owner because core's

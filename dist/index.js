@@ -1974,7 +1974,7 @@ module.exports = cmp
 
 /***/ }),
 
-/***/ 6141:
+/***/ 3284:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -2430,7 +2430,7 @@ const neq = __nccwpck_require__(2991)
 const gte = __nccwpck_require__(6297)
 const lte = __nccwpck_require__(9824)
 const cmp = __nccwpck_require__(9647)
-const coerce = __nccwpck_require__(6141)
+const coerce = __nccwpck_require__(3284)
 const Comparator = __nccwpck_require__(7712)
 const Range = __nccwpck_require__(4535)
 const satisfies = __nccwpck_require__(6326)
@@ -33057,6 +33057,40 @@ class Installer {
 
 /***/ }),
 
+/***/ 6141:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   T: () => (/* binding */ BudgetExitCode),
+/* harmony export */   k: () => (/* binding */ isV041Diff)
+/* harmony export */ });
+/**
+ * Type guard to detect finfocus v0.4.1 diff format vs legacy v0.4.0 format.
+ * v0.4.1: { totalBefore, totalAfter, totalDelta, currency, creates, updates, deletes, unchanged }
+ * v0.4.0: { monthly_cost_change, percent_change }
+ */
+function isV041Diff(diff) {
+    return diff && typeof diff === 'object' && 'totalDelta' in diff;
+}
+/**
+ * Exit codes the action uses when checking budget thresholds.
+ *
+ * finfocus v0.4.0 reserves 0 (success), 1 (internal_error) and 2
+ * (validation_error). The action passes `--exit-code 10` with
+ * `--exit-on-threshold`, so THRESHOLD_BREACH is owned by the action and cannot
+ * be confused with a finfocus error exit.
+ */
+var BudgetExitCode;
+(function (BudgetExitCode) {
+    /** All thresholds passed */
+    BudgetExitCode[BudgetExitCode["PASS"] = 0] = "PASS";
+    /** Budget threshold breached (action-owned code passed via --exit-code) */
+    BudgetExitCode[BudgetExitCode["THRESHOLD_BREACH"] = 10] = "THRESHOLD_BREACH";
+})(BudgetExitCode || (BudgetExitCode = {}));
+
+
+/***/ }),
+
 /***/ 2613:
 /***/ ((module) => {
 
@@ -36685,6 +36719,8 @@ var __webpack_exports__ = {};
 var main_core = __nccwpck_require__(2398);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
+// EXTERNAL MODULE: ./src/types.ts
+var types = __nccwpck_require__(6141);
 // EXTERNAL MODULE: ./src/install.ts + 6 modules
 var install = __nccwpck_require__(8638);
 // EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js + 2 modules
@@ -36798,6 +36834,7 @@ class PluginManager {
 // EXTERNAL MODULE: ./src/errors.ts
 var errors = __nccwpck_require__(3916);
 ;// CONCATENATED MODULE: ./src/analyze.ts
+
 
 
 
@@ -36932,9 +36969,13 @@ class Analyzer {
                 main_core/* info */.pq(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
                 main_core/* info */.pq(`  currency: ${report.currency}`);
                 if (report.diff) {
-                    const diffChange = 'monthly_cost_change' in report.diff
-                        ? report.diff.monthly_cost_change
-                        : report.diff.totalDelta;
+                    let diffChange;
+                    if ((0,types/* isV041Diff */.k)(report.diff)) {
+                        diffChange = report.diff.totalDelta;
+                    }
+                    else {
+                        diffChange = report.diff.monthly_cost_change;
+                    }
                     main_core/* info */.pq(`  diff change: ${diffChange}`);
                 }
             }
@@ -41644,6 +41685,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 }
 //# sourceMappingURL=github.js.map
 ;// CONCATENATED MODULE: ./src/formatter.ts
+
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
  *
@@ -41968,37 +42010,41 @@ ${deltasTable}`;
 }
 /**
  * Extract monthly cost change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * Uses type guard to safely access the correct format.
  * @param diff - The diff object from the report
  * @returns The monthly cost change, or 0 if not available
  */
 function extractMonthlyCostChange(diff) {
     if (!diff)
         return 0;
-    // v0.4.1 format: totalDelta
-    if ('totalDelta' in diff)
+    if ((0,types/* isV041Diff */.k)(diff)) {
         return diff.totalDelta;
+    }
     // v0.4.0 format: monthly_cost_change
-    if ('monthly_cost_change' in diff)
+    if ('monthly_cost_change' in diff) {
         return diff.monthly_cost_change;
+    }
     return 0;
 }
 /**
  * Extract percent change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * Uses type guard to safely access the correct format.
  * @param diff - The diff object from the report
  * @returns The percent change, or 0 if not available
  */
 function extractPercentChange(diff) {
     if (!diff)
         return 0;
-    // v0.4.1 format: no percent field, need to calculate from totalBefore/totalAfter
-    if ('totalBefore' in diff && 'totalAfter' in diff) {
+    if ((0,types/* isV041Diff */.k)(diff)) {
+        // v0.4.1: calculate from totalBefore/totalAfter
         if (diff.totalBefore === 0)
             return diff.totalAfter > 0 ? 100 : 0;
         return ((diff.totalAfter - diff.totalBefore) / diff.totalBefore) * 100;
     }
     // v0.4.0 format: percent_change
-    if ('percent_change' in diff)
+    if ('percent_change' in diff) {
         return diff.percent_change;
+    }
     return 0;
 }
 /**
@@ -42404,6 +42450,7 @@ class ConfigManager {
 
 
 
+
 function parseBoolean(value, defaultValue) {
     if (!value || value.trim() === '')
         return defaultValue;
@@ -42692,10 +42739,14 @@ async function run() {
             main_core/* info */.pq(`⚠️  ${unpricedCount} resource(s) could not be priced`);
         }
         if (report.diff) {
-            // Handle both new v0.4.1 format and legacy format
-            const monthlyChange = 'monthly_cost_change' in report.diff
-                ? report.diff.monthly_cost_change
-                : report.diff.totalDelta ?? 0;
+            // Handle both new v0.4.1 format and legacy format using type guard
+            let monthlyChange;
+            if ((0,types/* isV041Diff */.k)(report.diff)) {
+                monthlyChange = report.diff.totalDelta;
+            }
+            else {
+                monthlyChange = report.diff.monthly_cost_change ?? 0;
+            }
             main_core/* setOutput */.uH('cost-diff', monthlyChange.toString());
             main_core/* info */.pq(`📈 Cost change: ${monthlyChange} ${currency}`);
         }
@@ -42787,7 +42838,7 @@ async function run() {
         if (config.threshold && report.diff) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('🛡️ Checking cost guardrails');
-            const { checkBudgetThreshold } = await __nccwpck_require__.e(/* import() */ 259).then(__nccwpck_require__.bind(__nccwpck_require__, 6259));
+            const { checkBudgetThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
             const thresholdResult = await checkBudgetThreshold(config, report);
             if (!thresholdResult.passed) {
                 const errorMessage = config.debug
@@ -42801,7 +42852,7 @@ async function run() {
         if (config.failOnCarbonIncrease && sustainabilityReport) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('🌱 Checking sustainability guardrails');
-            const { checkCarbonThreshold } = await __nccwpck_require__.e(/* import() */ 259).then(__nccwpck_require__.bind(__nccwpck_require__, 6259));
+            const { checkCarbonThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
             // Calculate base total for percent check
             const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
             const failed = checkCarbonThreshold(config.failOnCarbonIncrease, sustainabilityReport.totalCO2eDiff, baseTotal);

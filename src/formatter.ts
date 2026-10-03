@@ -9,6 +9,7 @@ import {
   Recommendation,
   EstimateReport,
   FinfocusReportError,
+  isV041Diff,
 } from './types.js';
 
 /**
@@ -386,32 +387,39 @@ ${deltasTable}`;
 
 /**
  * Extract monthly cost change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * Uses type guard to safely access the correct format.
  * @param diff - The diff object from the report
  * @returns The monthly cost change, or 0 if not available
  */
 function extractMonthlyCostChange(diff?: any): number {
   if (!diff) return 0;
-  // v0.4.1 format: totalDelta
-  if ('totalDelta' in diff) return diff.totalDelta;
+  if (isV041Diff(diff)) {
+    return diff.totalDelta;
+  }
   // v0.4.0 format: monthly_cost_change
-  if ('monthly_cost_change' in diff) return diff.monthly_cost_change;
+  if ('monthly_cost_change' in diff) {
+    return diff.monthly_cost_change;
+  }
   return 0;
 }
 
 /**
  * Extract percent change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * Uses type guard to safely access the correct format.
  * @param diff - The diff object from the report
  * @returns The percent change, or 0 if not available
  */
 function extractPercentChange(diff?: any): number {
   if (!diff) return 0;
-  // v0.4.1 format: no percent field, need to calculate from totalBefore/totalAfter
-  if ('totalBefore' in diff && 'totalAfter' in diff) {
+  if (isV041Diff(diff)) {
+    // v0.4.1: calculate from totalBefore/totalAfter
     if (diff.totalBefore === 0) return diff.totalAfter > 0 ? 100 : 0;
     return ((diff.totalAfter - diff.totalBefore) / diff.totalBefore) * 100;
   }
   // v0.4.0 format: percent_change
-  if ('percent_change' in diff) return diff.percent_change;
+  if ('percent_change' in diff) {
+    return diff.percent_change;
+  }
   return 0;
 }
 

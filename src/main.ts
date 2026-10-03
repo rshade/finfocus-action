@@ -6,6 +6,7 @@ import {
   ActualCostReport,
   SustainabilityReport,
   EstimateReport,
+  isV041Diff,
 } from './types.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
@@ -327,10 +328,13 @@ async function run(): Promise<void> {
     }
 
     if (report.diff) {
-      // Handle both new v0.4.1 format and legacy format
-      const monthlyChange = 'monthly_cost_change' in report.diff
-        ? (report.diff as any).monthly_cost_change
-        : (report.diff as any).totalDelta ?? 0;
+      // Handle both new v0.4.1 format and legacy format using type guard
+      let monthlyChange: number;
+      if (isV041Diff(report.diff)) {
+        monthlyChange = report.diff.totalDelta;
+      } else {
+        monthlyChange = (report.diff as any).monthly_cost_change ?? 0;
+      }
       core.setOutput('cost-diff', monthlyChange.toString());
       core.info(`📈 Cost change: ${monthlyChange} ${currency}`);
     }
