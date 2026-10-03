@@ -211,6 +211,22 @@ released binaries.
 | `budget-spent`           | Current budget spend amount.                                      |
 | `budget-remaining`       | Remaining budget amount.                                          |
 | `budget-percent-used`    | Percentage of budget used.                                        |
+| `unpriced-resource-count` | Number of resources that could not be priced.                     |
+
+### Unpriced Resources in PR Comments
+
+When the finfocus report includes resources that could not be priced (e.g., due to
+missing configuration or unsupported resource types), the action displays a
+"Resources Not Priced" section in the PR comment. This collapsible section lists:
+
+- Resource type
+- Resource ID (short form)
+- Plugin name that attempted to price it
+- Error message
+
+The section includes a note: *"These resources could not be priced and are not
+included in the cost total above."* This helps users understand that the total
+cost estimate may not include all resources in the plan.
 
 ## Release Workflow
 

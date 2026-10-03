@@ -8,6 +8,7 @@ import {
   BudgetStatus,
   Recommendation,
   EstimateReport,
+  FinfocusReportError,
 } from './types.js';
 
 /**
@@ -384,6 +385,75 @@ ${deltasTable}`;
 }
 
 /**
+ * Extract monthly cost change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * @param diff - The diff object from the report
+ * @returns The monthly cost change, or 0 if not available
+ */
+function extractMonthlyCostChange(diff?: any): number {
+  if (!diff) return 0;
+  // v0.4.1 format: totalDelta
+  if ('totalDelta' in diff) return diff.totalDelta;
+  // v0.4.0 format: monthly_cost_change
+  if ('monthly_cost_change' in diff) return diff.monthly_cost_change;
+  return 0;
+}
+
+/**
+ * Extract percent change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * @param diff - The diff object from the report
+ * @returns The percent change, or 0 if not available
+ */
+function extractPercentChange(diff?: any): number {
+  if (!diff) return 0;
+  // v0.4.1 format: no percent field, need to calculate from totalBefore/totalAfter
+  if ('totalBefore' in diff && 'totalAfter' in diff) {
+    if (diff.totalBefore === 0) return diff.totalAfter > 0 ? 100 : 0;
+    return ((diff.totalAfter - diff.totalBefore) / diff.totalBefore) * 100;
+  }
+  // v0.4.0 format: percent_change
+  if ('percent_change' in diff) return diff.percent_change;
+  return 0;
+}
+
+/**
+ * Format the unpriced resources section when resources could not be priced.
+ * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
+ * Includes a note that these resources are NOT included in the total cost.
+ *
+ * @param errors - Array of FinfocusReportError entries, or null/empty
+ * @returns Markdown string with the unpriced resources section, or empty string if no errors
+ */
+function formatUnpricedResourcesSection(errors?: FinfocusReportError[] | null): string {
+  if (!errors || errors.length === 0) {
+    return '';
+  }
+
+  const displayErrors = errors.slice(0, 20);
+  const truncated = errors.length > 20 ? errors.length - 20 : 0;
+
+  const errorRows = displayErrors
+    .map((err) => {
+      const resourceIdShort = err.resourceId.split('::').pop() || err.resourceId;
+      return `| ${err.resourceType} | ${resourceIdShort} | ${err.pluginName} | ${err.message} |`;
+    })
+    .join('\n');
+
+  const truncatedNote = truncated > 0 ? `\nand ${truncated} more` : '';
+
+  return `
+<details>
+<summary><strong>⚠️ Resources Not Priced</strong> (${errors.length} ${errors.length === 1 ? 'resource' : 'resources'})</summary>
+
+| Type | Resource | Plugin | Reason |
+| :--- | :--- | :--- | :--- |
+${errorRows}${truncatedNote}
+
+*These resources could not be priced and are not included in the cost total above.*
+
+</details>`;
+}
+
+/**
  * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
  *
  * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
@@ -409,14 +479,16 @@ export function formatCommentBody(
   const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
   const total = totalMonthly.toFixed(2);
 
-  const diff = report.diff ? report.diff.monthly_cost_change.toFixed(2) : '0.00';
-  const percent = report.diff ? report.diff.percent_change.toFixed(2) : '0.00';
+  const monthlyCostChange = extractMonthlyCostChange(report.diff);
+  const percentChange = extractPercentChange(report.diff);
+  const diff = monthlyCostChange.toFixed(2);
+  const percent = percentChange.toFixed(2);
 
   let diffText = `${diff} ${currency}`;
   if (report.diff) {
-    if (report.diff.monthly_cost_change > 0) {
+    if (monthlyCostChange > 0) {
       diffText = `📈 +${diffText}`;
-    } else if (report.diff.monthly_cost_change < 0) {
+    } else if (monthlyCostChange < 0) {
       diffText = `📉 ${diffText}`;
     }
   }
@@ -564,6 +636,8 @@ ${recRows}
 
   const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
 
+  const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
+
   // Basic budget status section (local math; finfocus has no budget status command)
   const budgetSection = formatBudgetSection(budgetStatus);
 
@@ -597,7 +671,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>

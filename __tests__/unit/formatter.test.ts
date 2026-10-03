@@ -886,3 +886,147 @@ describe('formatCommentBody with estimate report', () => {
     expect(result).not.toContain('What-If Cost Estimate');
   });
 });
+
+describe('Unpriced Resources', () => {
+  const mockReport: FinfocusReport = {
+    summary: {
+      totalMonthly: 7.592,
+      currency: 'USD',
+    },
+  };
+
+  it('should render unpriced resources section when errors present', () => {
+    const reportWithErrors: FinfocusReport = {
+      ...mockReport,
+      errors: [
+        {
+          resourceType: 'aws:s3/bucket:Bucket',
+          resourceId: 'urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::static-assets',
+          pluginName: 'finfocus-plugin-aws-public',
+          message: 'plugin call failed: no cost data available',
+        },
+        {
+          resourceType: 'aws:rds/instance:Instance',
+          resourceId: 'urn:pulumi:dev::my-app::aws:rds/instance:Instance::database',
+          pluginName: 'finfocus-plugin-aws-public',
+          message: 'plugin call failed: no cost data available',
+        },
+      ],
+    };
+
+    const result = formatCommentBody(reportWithErrors);
+
+    expect(result).toContain('Resources Not Priced');
+    expect(result).toContain('aws:s3/bucket:Bucket');
+    expect(result).toContain('aws:rds/instance:Instance');
+    expect(result).toContain('static-assets');
+    expect(result).toContain('database');
+    expect(result).toContain('finfocus-plugin-aws-public');
+    expect(result).toContain('not included in the cost total above');
+  });
+
+  it('should not render unpriced resources section when errors is empty', () => {
+    const reportWithNoErrors: FinfocusReport = {
+      ...mockReport,
+      errors: [],
+    };
+
+    const result = formatCommentBody(reportWithNoErrors);
+
+    expect(result).not.toContain('Resources Not Priced');
+  });
+
+  it('should not render unpriced resources section when errors is null', () => {
+    const reportWithNullErrors: FinfocusReport = {
+      ...mockReport,
+      errors: null,
+    };
+
+    const result = formatCommentBody(reportWithNullErrors);
+
+    expect(result).not.toContain('Resources Not Priced');
+  });
+
+  it('should not render unpriced resources section when errors is undefined', () => {
+    const reportWithoutErrors: FinfocusReport = {
+      ...mockReport,
+    };
+
+    const result = formatCommentBody(reportWithoutErrors);
+
+    expect(result).not.toContain('Resources Not Priced');
+  });
+
+  it('should truncate and show count when more than 20 errors', () => {
+    const manyErrors = Array.from({ length: 25 }, (_, i) => ({
+      resourceType: `aws:s3/bucket:Bucket`,
+      resourceId: `urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::bucket-${i}`,
+      pluginName: 'finfocus-plugin-aws-public',
+      message: 'plugin call failed: no cost data available',
+    }));
+
+    const reportWithManyErrors: FinfocusReport = {
+      ...mockReport,
+      errors: manyErrors,
+    };
+
+    const result = formatCommentBody(reportWithManyErrors);
+
+    expect(result).toContain('Resources Not Priced');
+    expect(result).toContain('(25 resources)');
+    expect(result).toContain('and 5 more');
+  });
+
+  it('should show singular resource label when 1 error', () => {
+    const reportWithOneError: FinfocusReport = {
+      ...mockReport,
+      errors: [
+        {
+          resourceType: 'aws:s3/bucket:Bucket',
+          resourceId: 'urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::single',
+          pluginName: 'finfocus-plugin-aws-public',
+          message: 'no cost data available',
+        },
+      ],
+    };
+
+    const result = formatCommentBody(reportWithOneError);
+
+    expect(result).toContain('(1 resource)');
+  });
+
+  it('should show plural resource label when multiple errors', () => {
+    const reportWithMultipleErrors: FinfocusReport = {
+      ...mockReport,
+      errors: [
+        {
+          resourceType: 'aws:s3/bucket:Bucket',
+          resourceId: 'urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::bucket1',
+          pluginName: 'finfocus-plugin-aws-public',
+          message: 'error',
+        },
+        {
+          resourceType: 'aws:rds/instance:Instance',
+          resourceId: 'urn:pulumi:dev::my-app::aws:rds/instance:Instance::db',
+          pluginName: 'finfocus-plugin-aws-public',
+          message: 'error',
+        },
+      ],
+    };
+
+    const result = formatCommentBody(reportWithMultipleErrors);
+
+    expect(result).toContain('(2 resources)');
+  });
+
+  it('should produce byte-identical output with and without errors when errors is undefined', () => {
+    const reportNoErrors1: FinfocusReport = mockReport;
+    const reportNoErrors2: FinfocusReport = { ...mockReport };
+
+    const result1 = formatCommentBody(reportNoErrors1);
+    const result2 = formatCommentBody(reportNoErrors2);
+
+    expect(result1).toBe(result2);
+    expect(result1).not.toContain('Resources Not Priced');
+  });
+});

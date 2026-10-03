@@ -130,20 +130,29 @@ export function checkBudgetThresholdWithJson(
   }
 
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
-  const failed = checkThreshold(config.threshold, report.diff.monthly_cost_change, currency);
+
+  // Extract cost change, handling both v0.4.0 (legacy) and v0.4.1 formats
+  let costChange = 0;
+  if ('monthly_cost_change' in report.diff) {
+    costChange = (report.diff as any).monthly_cost_change;
+  } else if ('totalDelta' in report.diff) {
+    costChange = (report.diff as any).totalDelta;
+  }
+
+  const failed = checkThreshold(config.threshold, costChange, currency);
 
   if (failed) {
     return {
       passed: false,
       severity: 'exceeded',
-      message: `Cost increase of ${report.diff.monthly_cost_change} ${currency} exceeds threshold ${config.threshold}`,
+      message: `Cost increase of ${costChange} ${currency} exceeds threshold ${config.threshold}`,
     };
   }
 
   return {
     passed: true,
     severity: 'none',
-    message: `Cost within budget threshold (${report.diff.monthly_cost_change} ${currency} < ${config.threshold})`,
+    message: `Cost within budget threshold (${costChange} ${currency} < ${config.threshold})`,
   };
 }
 
