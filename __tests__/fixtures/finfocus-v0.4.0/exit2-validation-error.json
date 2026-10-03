@@ -1,0 +1,1 @@
+{"error_code":"validation_error","message":"loading Pulumi plan: reading plan file: open /nonexistent/plan.json: no such file or directory","trace_id":"66f61708349945a5e7156a5d98ad741e","tool":"finfocus","version":"0.4.0","schema_version":"1.0.0"}
