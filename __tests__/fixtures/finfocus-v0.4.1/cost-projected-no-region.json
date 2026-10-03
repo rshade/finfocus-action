@@ -1,0 +1,340 @@
+{
+  "finfocus": {
+    "summary": {
+      "totalMonthly": 7.592,
+      "totalHourly": 0.0104,
+      "currency": "USD",
+      "byProvider": {
+        "aws": 7.592
+      },
+      "byService": {
+        "ec2": 7.592,
+        "rds": 0,
+        "s3": 0
+      },
+      "byAdapter": {
+        "finfocus-plugin-aws-public (cached)": 7.592,
+        "none": 0
+      },
+      "resources": [
+        {
+          "resourceType": "aws:ec2/instance:Instance",
+          "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+          "adapter": "finfocus-plugin-aws-public (cached)",
+          "currency": "USD",
+          "monthly": 7.592,
+          "hourly": 0.0104,
+          "notes": "On-demand Linux, Shared tenancy, 730 hrs/month",
+          "breakdown": {
+            "unit_price": 0.0104
+          },
+          "sustainability": {
+            "carbon_footprint": {
+              "value": 2980.078927,
+              "unit": "gCO2e"
+            }
+          },
+          "recommendations": [
+            {
+              "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+              "type": "RECOMMENDATION_ACTION_TYPE_MODIFY",
+              "description": "Upgrade from t3.micro to t3a.micro for better performance at same or lower cost",
+              "estimatedSavings": 0.7299999999999995,
+              "currency": "USD",
+              "reasoning": [
+                "Newer t3a instances offer better performance",
+                "Drop-in replacement with no architecture changes required",
+                "Alternative: consider t4g.micro for ARM compatibility (~20% additional savings)"
+              ],
+              "id": "ad6d2d43-88c6-4461-8992-0b143aafca99",
+              "category": "RECOMMENDATION_CATEGORY_COST",
+              "priority": "RECOMMENDATION_PRIORITY_MEDIUM",
+              "confidenceScore": 0.9,
+              "source": "aws-public",
+              "impact": {
+                "projectionPeriod": "monthly",
+                "currentCost": 7.592,
+                "projectedCost": 6.862,
+                "savingsPercentage": 9.61538461538461
+              },
+              "resource": {
+                "provider": "aws",
+                "resourceType": "ec2",
+                "region": "us-west-2",
+                "sku": "t3.micro"
+              },
+              "actionDetail": {
+                "modify": {
+                  "modificationType": "generation_upgrade",
+                  "currentConfig": {
+                    "instance_type": "t3.micro"
+                  },
+                  "recommendedConfig": {
+                    "instance_type": "t3a.micro"
+                  }
+                }
+              }
+            },
+            {
+              "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+              "type": "RECOMMENDATION_ACTION_TYPE_MODIFY",
+              "description": "Migrate from t3.micro to t4g.micro (Graviton) for ~19% cost savings",
+              "estimatedSavings": 1.46,
+              "currency": "USD",
+              "reasoning": [
+                "Graviton instances are typically ~20% cheaper with comparable performance",
+                "Requires validation that application supports ARM architecture"
+              ],
+              "id": "5efcbca7-1171-4d25-af8a-8d85ad1ae7b1",
+              "category": "RECOMMENDATION_CATEGORY_COST",
+              "priority": "RECOMMENDATION_PRIORITY_LOW",
+              "confidenceScore": 0.7,
+              "source": "aws-public",
+              "metadata": {
+                "architecture_change": "x86_64 -\u003e arm64",
+                "requires_validation": "Application must support ARM architecture"
+              },
+              "impact": {
+                "projectionPeriod": "monthly",
+                "currentCost": 7.592,
+                "projectedCost": 6.132,
+                "savingsPercentage": 19.230769230769234
+              },
+              "resource": {
+                "provider": "aws",
+                "resourceType": "ec2",
+                "region": "us-west-2",
+                "sku": "t3.micro"
+              },
+              "actionDetail": {
+                "modify": {
+                  "modificationType": "graviton_migration",
+                  "currentConfig": {
+                    "architecture": "x86_64",
+                    "instance_type": "t3.micro"
+                  },
+                  "recommendedConfig": {
+                    "architecture": "arm64",
+                    "instance_type": "t4g.micro"
+                  }
+                }
+              }
+            }
+          ],
+          "startDate": "0001-01-01T00:00:00Z",
+          "endDate": "0001-01-01T00:00:00Z"
+        },
+        {
+          "resourceType": "aws:s3/bucket:Bucket",
+          "resourceId": "urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::static-assets",
+          "adapter": "none",
+          "currency": "USD",
+          "monthly": 0,
+          "hourly": 0,
+          "notes": "No pricing information available",
+          "breakdown": null,
+          "error": {
+            "code": "NO_COST_DATA",
+            "message": "No pricing information available",
+            "resourceType": "aws:s3/bucket:Bucket"
+          },
+          "startDate": "0001-01-01T00:00:00Z",
+          "endDate": "0001-01-01T00:00:00Z"
+        },
+        {
+          "resourceType": "aws:rds/instance:Instance",
+          "resourceId": "urn:pulumi:dev::my-app::aws:rds/instance:Instance::database",
+          "adapter": "none",
+          "currency": "USD",
+          "monthly": 0,
+          "hourly": 0,
+          "notes": "No pricing information available",
+          "breakdown": null,
+          "error": {
+            "code": "NO_COST_DATA",
+            "message": "No pricing information available",
+            "resourceType": "aws:rds/instance:Instance"
+          },
+          "startDate": "0001-01-01T00:00:00Z",
+          "endDate": "0001-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "resources": [
+      {
+        "resourceType": "aws:ec2/instance:Instance",
+        "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+        "adapter": "finfocus-plugin-aws-public (cached)",
+        "currency": "USD",
+        "monthly": 7.592,
+        "hourly": 0.0104,
+        "notes": "On-demand Linux, Shared tenancy, 730 hrs/month",
+        "breakdown": {
+          "unit_price": 0.0104
+        },
+        "sustainability": {
+          "carbon_footprint": {
+            "value": 2980.078927,
+            "unit": "gCO2e"
+          }
+        },
+        "recommendations": [
+          {
+            "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+            "type": "RECOMMENDATION_ACTION_TYPE_MODIFY",
+            "description": "Upgrade from t3.micro to t3a.micro for better performance at same or lower cost",
+            "estimatedSavings": 0.7299999999999995,
+            "currency": "USD",
+            "reasoning": [
+              "Newer t3a instances offer better performance",
+              "Drop-in replacement with no architecture changes required",
+              "Alternative: consider t4g.micro for ARM compatibility (~20% additional savings)"
+            ],
+            "id": "ad6d2d43-88c6-4461-8992-0b143aafca99",
+            "category": "RECOMMENDATION_CATEGORY_COST",
+            "priority": "RECOMMENDATION_PRIORITY_MEDIUM",
+            "confidenceScore": 0.9,
+            "source": "aws-public",
+            "impact": {
+              "projectionPeriod": "monthly",
+              "currentCost": 7.592,
+              "projectedCost": 6.862,
+              "savingsPercentage": 9.61538461538461
+            },
+            "resource": {
+              "provider": "aws",
+              "resourceType": "ec2",
+              "region": "us-west-2",
+              "sku": "t3.micro"
+            },
+            "actionDetail": {
+              "modify": {
+                "modificationType": "generation_upgrade",
+                "currentConfig": {
+                  "instance_type": "t3.micro"
+                },
+                "recommendedConfig": {
+                  "instance_type": "t3a.micro"
+                }
+              }
+            }
+          },
+          {
+            "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+            "type": "RECOMMENDATION_ACTION_TYPE_MODIFY",
+            "description": "Migrate from t3.micro to t4g.micro (Graviton) for ~19% cost savings",
+            "estimatedSavings": 1.46,
+            "currency": "USD",
+            "reasoning": [
+              "Graviton instances are typically ~20% cheaper with comparable performance",
+              "Requires validation that application supports ARM architecture"
+            ],
+            "id": "5efcbca7-1171-4d25-af8a-8d85ad1ae7b1",
+            "category": "RECOMMENDATION_CATEGORY_COST",
+            "priority": "RECOMMENDATION_PRIORITY_LOW",
+            "confidenceScore": 0.7,
+            "source": "aws-public",
+            "metadata": {
+              "architecture_change": "x86_64 -\u003e arm64",
+              "requires_validation": "Application must support ARM architecture"
+            },
+            "impact": {
+              "projectionPeriod": "monthly",
+              "currentCost": 7.592,
+              "projectedCost": 6.132,
+              "savingsPercentage": 19.230769230769234
+            },
+            "resource": {
+              "provider": "aws",
+              "resourceType": "ec2",
+              "region": "us-west-2",
+              "sku": "t3.micro"
+            },
+            "actionDetail": {
+              "modify": {
+                "modificationType": "graviton_migration",
+                "currentConfig": {
+                  "architecture": "x86_64",
+                  "instance_type": "t3.micro"
+                },
+                "recommendedConfig": {
+                  "architecture": "arm64",
+                  "instance_type": "t4g.micro"
+                }
+              }
+            }
+          }
+        ],
+        "startDate": "0001-01-01T00:00:00Z",
+        "endDate": "0001-01-01T00:00:00Z",
+        "operation": "create",
+        "beforeMonthly": 0,
+        "deltaMonthly": 7.592
+      },
+      {
+        "resourceType": "aws:s3/bucket:Bucket",
+        "resourceId": "urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::static-assets",
+        "adapter": "none",
+        "currency": "USD",
+        "monthly": 0,
+        "hourly": 0,
+        "notes": "No pricing information available",
+        "breakdown": null,
+        "error": {
+          "code": "NO_COST_DATA",
+          "message": "No pricing information available",
+          "resourceType": "aws:s3/bucket:Bucket"
+        },
+        "startDate": "0001-01-01T00:00:00Z",
+        "endDate": "0001-01-01T00:00:00Z",
+        "operation": "create",
+        "beforeMonthly": 0,
+        "deltaMonthly": 0
+      },
+      {
+        "resourceType": "aws:rds/instance:Instance",
+        "resourceId": "urn:pulumi:dev::my-app::aws:rds/instance:Instance::database",
+        "adapter": "none",
+        "currency": "USD",
+        "monthly": 0,
+        "hourly": 0,
+        "notes": "No pricing information available",
+        "breakdown": null,
+        "error": {
+          "code": "NO_COST_DATA",
+          "message": "No pricing information available",
+          "resourceType": "aws:rds/instance:Instance"
+        },
+        "startDate": "0001-01-01T00:00:00Z",
+        "endDate": "0001-01-01T00:00:00Z",
+        "operation": "create",
+        "beforeMonthly": 0,
+        "deltaMonthly": 0
+      }
+    ],
+    "diff": {
+      "totalBefore": 0,
+      "totalAfter": 7.592,
+      "totalDelta": 7.592,
+      "currency": "USD",
+      "creates": 3,
+      "updates": 0,
+      "deletes": 0,
+      "unchanged": 0
+    },
+    "errors": [
+      {
+        "resourceType": "aws:s3/bucket:Bucket",
+        "resourceId": "urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::static-assets",
+        "pluginName": "finfocus-plugin-aws-public",
+        "message": "plugin call failed: no cost data available"
+      },
+      {
+        "resourceType": "aws:rds/instance:Instance",
+        "resourceId": "urn:pulumi:dev::my-app::aws:rds/instance:Instance::database",
+        "pluginName": "finfocus-plugin-aws-public",
+        "message": "plugin call failed: no cost data available"
+      }
+    ]
+  }
+}
