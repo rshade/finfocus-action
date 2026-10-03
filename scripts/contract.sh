@@ -55,19 +55,25 @@ run_cmd() {
 }
 
 # assert_keys <label> <json-file> <jq-path> <fixture-file>
-# Compares the sorted key set at <jq-path> with the same path in the fixture.
+# Every key in the fixture at <jq-path> must still be present. Extra keys are
+# additive finfocus changes: they are reported as a NOTE and do not fail.
 assert_keys() {
   local label="$1" file="$2" path="$3" fixture="$4"
-  local got exp
+  local got exp missing extra
   if ! got=$(jq -Sc "$path | keys" "$file" 2>/dev/null); then
     fail "$label: output is not JSON with keys at '$path'"
     return
   fi
   exp=$(jq -Sc "$path | keys" "$fixture")
-  if [ "$got" = "$exp" ]; then
-    pass "$label: keys at '$path' match fixture ($got)"
-  else
-    fail "$label: keys at '$path' differ: got $got, fixture $exp"
+  missing=$(jq -nc --argjson g "$got" --argjson e "$exp" '$e - $g')
+  extra=$(jq -nc --argjson g "$got" --argjson e "$exp" '$g - $e')
+  if [ "$missing" != "[]" ]; then
+    fail "$label: keys at '$path' missing $missing (got $got, fixture $exp)"
+    return
+  fi
+  pass "$label: fixture keys at '$path' all present ($exp)"
+  if [ "$extra" != "[]" ]; then
+    echo "NOTE: $label: new keys at '$path': $extra (additive; consider updating the fixture)"
   fi
 }
 
