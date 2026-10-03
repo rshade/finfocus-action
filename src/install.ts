@@ -57,6 +57,14 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * Check if a tag name matches the stable CLI release pattern (v<major>.<minor>.<patch>).
+ * Excludes prefixed tags like kubernetes-v*, jev-v*, and other non-CLI tags.
+ */
+function isStableCliRelease(tagName: string): boolean {
+  return /^v\d+\.\d+\.\d+$/.test(tagName);
+}
+
 export class Installer implements IInstaller {
   async install(version: string, config?: ActionConfiguration): Promise<string> {
     const debug = config?.debug === true;
@@ -209,7 +217,7 @@ export class Installer implements IInstaller {
     }
 
     if (debug) core.info(`=== Resolving 'latest' version ===`);
-    const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+    const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=100`;
 
     const response = await fetch(apiUrl, {
       headers: {
@@ -219,15 +227,44 @@ export class Installer implements IInstaller {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch latest release: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch releases: ${response.status} ${response.statusText}`);
     }
 
-    const data = (await response.json()) as { tag_name: string; name?: string };
+    const releases = (await response.json()) as Array<{
+      tag_name: string;
+      prerelease: boolean;
+      draft: boolean;
+    }>;
+
     if (debug) {
-      core.info(`  Release tag_name: ${data.tag_name}`);
+      core.info(`  Total releases fetched: ${releases.length}`);
     }
 
-    return data.tag_name.replace(/^v/, '');
+    // Filter to stable CLI releases (not prefixed, not prerelease/draft)
+    const stableReleases = releases.filter(
+      (r) => isStableCliRelease(r.tag_name) && !r.prerelease && !r.draft,
+    );
+
+    if (stableReleases.length === 0) {
+      throw new Error(
+        `No stable release found matching v<major>.<minor>.<patch> pattern in the first 100 releases`,
+      );
+    }
+
+    // Sort by semantic version (descending) to get the highest version
+    stableReleases.sort((a, b) => {
+      const aVersion = a.tag_name.replace(/^v/, '');
+      const bVersion = b.tag_name.replace(/^v/, '');
+      return compareVersions(bVersion, aVersion); // b - a for descending order
+    });
+
+    const latestRelease = stableReleases[0];
+    if (debug) {
+      core.info(`  Stable releases found: ${stableReleases.length}`);
+      core.info(`  Selected tag_name: ${latestRelease.tag_name}`);
+    }
+
+    return latestRelease.tag_name.replace(/^v/, '');
   }
 
   private getPlatform(): string {
