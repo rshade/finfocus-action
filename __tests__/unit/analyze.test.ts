@@ -84,6 +84,31 @@ describe('Analyzer', () => {
     );
   });
 
+  it('should surface the finfocus error envelope message on non-zero exit', async () => {
+    const realFs = jest.requireActual<typeof fs>('fs');
+    const envelope = realFs.readFileSync(
+      require('path').join(
+        __dirname,
+        '..',
+        'fixtures',
+        'finfocus-v0.4.0',
+        'exit2-validation-error.json',
+      ),
+      'utf8',
+    );
+
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 2,
+      stdout: '',
+      stderr: envelope,
+    });
+
+    await expect(analyzer.runAnalysis('plan.json')).rejects.toThrow(
+      'loading Pulumi plan: reading plan file',
+    );
+    await expect(analyzer.runAnalysis('plan.json')).rejects.toThrow('configuration error');
+  });
+
   it('should throw error if JSON parsing fails', async () => {
     (exec.getExecOutput as jest.Mock).mockResolvedValue({
       exitCode: 0,

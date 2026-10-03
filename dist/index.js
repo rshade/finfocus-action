@@ -31104,6 +31104,66 @@ module.exports = {
 
 /***/ }),
 
+/***/ 3916:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   a: () => (/* binding */ parseErrorEnvelope),
+/* harmony export */   u: () => (/* binding */ formatEnvelopeError)
+/* harmony export */ });
+/**
+ * Parse the JSON error envelope finfocus prints on stderr for non-zero exits.
+ * Handles a bare JSON document as well as log lines preceding the envelope.
+ * Returns undefined when stderr does not contain a valid envelope.
+ */
+function parseErrorEnvelope(stderr) {
+    const trimmed = stderr.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+    const candidates = [trimmed];
+    const lastLine = trimmed.split('\n').pop()?.trim();
+    if (lastLine && lastLine !== trimmed) {
+        candidates.push(lastLine);
+    }
+    for (const candidate of candidates) {
+        if (!candidate.startsWith('{')) {
+            continue;
+        }
+        try {
+            const parsed = JSON.parse(candidate);
+            if (typeof parsed.error_code === 'string' && typeof parsed.message === 'string') {
+                return parsed;
+            }
+        }
+        catch {
+            // not JSON, try the next candidate
+        }
+    }
+    return undefined;
+}
+/**
+ * Format an error envelope into an actionable error message.
+ * `validation_error` is a configuration error; `internal_error` is a finfocus
+ * tool failure. Neither is ever a budget result.
+ */
+function formatEnvelopeError(envelope, exitCode) {
+    let kind;
+    if (envelope.error_code === 'validation_error') {
+        kind = 'configuration error';
+    }
+    else if (envelope.error_code === 'internal_error') {
+        kind = 'tool failure';
+    }
+    else {
+        kind = `error (${envelope.error_code})`;
+    }
+    return `finfocus ${kind} (exit ${exitCode}): ${envelope.message}`;
+}
+
+
+/***/ }),
+
 /***/ 8638:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
@@ -37557,7 +37617,10 @@ ${resourceTable}${providerBreakdown}${actualCostSection}${recommendationsSection
 `;
 }
 
+// EXTERNAL MODULE: ./src/errors.ts
+var errors = __nccwpck_require__(3916);
 ;// CONCATENATED MODULE: ./src/analyze.ts
+
 
 
 
@@ -37657,6 +37720,10 @@ class Analyzer {
         }
         if (output.exitCode !== 0) {
             main_core/* error */.z3(`  finfocus command FAILED with exit code ${output.exitCode}`);
+            const envelope = (0,errors/* parseErrorEnvelope */.a)(output.stderr);
+            if (envelope) {
+                throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, output.exitCode));
+            }
             throw new Error(`finfocus analysis failed with exit code ${output.exitCode}.\n` +
                 `Stderr: ${output.stderr}\n` +
                 `Stdout: ${output.stdout}`);

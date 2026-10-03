@@ -24,6 +24,7 @@ import {
 import { getFinfocusVersion, supportsExitCodes, supportsScopedBudgets } from './install.js';
 import { parseBudgetScopes } from './config.js';
 import { getCurrencySymbol } from './formatter.js';
+import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
@@ -131,6 +132,10 @@ export class Analyzer implements IAnalyzer {
 
     if (output.exitCode !== 0) {
       core.error(`  finfocus command FAILED with exit code ${output.exitCode}`);
+      const envelope = parseErrorEnvelope(output.stderr);
+      if (envelope) {
+        throw new Error(formatEnvelopeError(envelope, output.exitCode));
+      }
       throw new Error(
         `finfocus analysis failed with exit code ${output.exitCode}.\n` +
           `Stderr: ${output.stderr}\n` +
