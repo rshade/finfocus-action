@@ -78,7 +78,16 @@ test fail.
 
 ### AC-2.3 Threshold breach behaviour
 
-**Status:** TODO. May become `BLOCKED-ON-INPUT`.
+**Status:** DONE — REPRODUCED (owner's flat-schema configs could not work).
+With the real v0.4.0 schema `cost.budgets.global` (both `config.yaml` and
+`config.hujson`, alerts of `actual` and `forecasted`), `cost projected
+--pulumi-json <plan> --exit-on-threshold --exit-code 10` exits **10** and the
+table output prints a `BUDGET STATUS` block ($7.59 vs $5.00, 151.8%). The
+flat `cost.budgets.amount` schema from core's budgets guide is silently
+ignored (exit 0, no block). Exact working config is encoded as check 8 in
+`scripts/contract.sh` (passes against the pinned binary). Register: fixture
+request for an owner-captured breach fixture; core issue draft at
+`.superpowers/issue-drafts/core-budget-flat-schema-ignored.md`.
 
 The owner could not make `--exit-on-threshold` return non-zero for a projected
 $7.59 against a $5 budget. Try to reproduce it with the pinned binary (config in
