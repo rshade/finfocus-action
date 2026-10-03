@@ -15,11 +15,6 @@ const REPO_NAME = 'finfocus';
 const EXIT_CODE_MIN_VERSION = '0.2.5';
 
 /**
- * Minimum finfocus version that supports scoped budgets.
- */
-const SCOPED_BUDGET_MIN_VERSION = '0.2.6';
-
-/**
  * Get the installed finfocus version by running `finfocus --version`.
  * Returns '0.0.0' if version cannot be determined.
  */
@@ -46,14 +41,6 @@ export function supportsExitCodes(version: string): boolean {
 }
 
 /**
- * Check if the given version supports scoped budgets.
- * Requires finfocus v0.2.6 or higher.
- */
-export function supportsScopedBudgets(version: string): boolean {
-  return compareVersions(version, SCOPED_BUDGET_MIN_VERSION) >= 0;
-}
-
-/**
  * Compare two semantic versions.
  * @returns -1 if a < b, 0 if a == b, 1 if a > b
  */
@@ -68,21 +55,6 @@ function compareVersions(a: string, b: string): number {
   if (aPatch > bPatch) return 1;
   if (aPatch < bPatch) return -1;
   return 0;
-}
-
-/**
- * Require a minimum finfocus version for scoped budgets.
- * Throws an error if the installed version is below v0.2.6.
- *
- * @param version - The installed finfocus version
- * @throws Error if version is below minimum required for scoped budgets
- */
-export function requiresScopedBudgetVersion(version: string): void {
-  if (!supportsScopedBudgets(version)) {
-    throw new Error(
-      `Scoped budgets require finfocus v${SCOPED_BUDGET_MIN_VERSION}+. Current version: ${version}`,
-    );
-  }
 }
 
 export class Installer implements IInstaller {

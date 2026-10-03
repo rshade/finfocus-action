@@ -210,6 +210,26 @@ EOF
     fail "budget breach: exit=$EXIT (want 10) out=$(grep -c 'BUDGET STATUS' "$tmp/breach.txt") BUDGET STATUS block(s)"
   fi
 
+  # 9. subcommand existence: every finfocus subcommand the action runs must
+  # exist in the binary's help. Guards against dead calls like the removed
+  # `finfocus budget status` (no such command in v0.4.0).
+  local subcommands=(
+    "cost projected"
+    "cost recommendations"
+    "cost actual"
+    "plugin install"
+    "plugin list"
+  )
+  for sub in "${subcommands[@]}"; do
+    # shellcheck disable=SC2086 # intentional word splitting of the subcommand
+    run_cmd "$tmp/out" "$tmp/err" "$BIN" $sub --help
+    if [ "$EXIT" -eq 0 ]; then
+      pass "subcommand exists: $sub --help exits 0"
+    else
+      fail "subcommand missing: '$sub' --help exited $EXIT: $(tail -n1 "$tmp/err")"
+    fi
+  done
+
   echo
   if [ "$failures" -gt 0 ]; then
     echo "contract: $failures check(s) FAILED"

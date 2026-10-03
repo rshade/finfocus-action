@@ -1,6 +1,11 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
-import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport, ScopedBudgetReport } from './types.js';
+import {
+  BudgetExitCode,
+  BudgetThresholdResult,
+  ActionConfiguration,
+  FinfocusReport,
+} from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 
@@ -29,7 +34,7 @@ export const BudgetThresholdMessages = {
  * @returns BudgetThresholdResult with pass/fail status and severity
  */
 export async function checkBudgetThresholdWithExitCodes(
-  config: ActionConfiguration
+  config: ActionConfiguration,
 ): Promise<BudgetThresholdResult> {
   try {
     const result = await exec.getExecOutput(
@@ -91,7 +96,7 @@ export async function checkBudgetThresholdWithExitCodes(
       throw error;
     }
     throw new Error(
-      `Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -106,7 +111,7 @@ export async function checkBudgetThresholdWithExitCodes(
  */
 export function checkBudgetThresholdWithJson(
   config: ActionConfiguration,
-  report: FinfocusReport
+  report: FinfocusReport,
 ): BudgetThresholdResult {
   if (!config.threshold) {
     return {
@@ -152,7 +157,7 @@ export function checkBudgetThresholdWithJson(
  */
 export async function checkBudgetThreshold(
   config: ActionConfiguration,
-  report: FinfocusReport
+  report: FinfocusReport,
 ): Promise<BudgetThresholdResult> {
   const version = await getFinfocusVersion();
 
@@ -251,105 +256,4 @@ export function checkCarbonThreshold(
     `Malformed carbon threshold input: "${threshold}". Expected format like "10kg" or "10%". Skipping guardrail.`,
   );
   return false;
-}
-
-/**
- * Evaluate the configured budget-health threshold against a budget health report.
- *
- * @param config - Action configuration containing an optional `failOnBudgetHealth` threshold
- * @param budgetHealth - Budget health report providing `healthScore` and `healthStatus`
- * @returns A `BudgetThresholdResult` containing pass/fail outcome, `severity`, and an explanatory `message`
- */
-export function checkBudgetHealthThreshold(
-  config: ActionConfiguration,
-  budgetHealth: BudgetHealthReport,
-): BudgetThresholdResult {
-  // If no threshold is configured, pass
-  if (!config.failOnBudgetHealth) {
-    return {
-      passed: true,
-      severity: 'none',
-      message: 'No health threshold configured',
-    };
-  }
-
-  const threshold = config.failOnBudgetHealth;
-  const score = budgetHealth.healthScore;
-
-  // If health score is not available, we cannot evaluate the threshold
-  if (score === undefined) {
-    core.warning('Budget health score not available, cannot evaluate threshold');
-    return {
-      passed: true,
-      severity: 'none',
-      message: 'Budget health score not available',
-    };
-  }
-
-  // Check if score is below threshold
-  if (score < threshold) {
-    const severity = budgetHealth.healthStatus === 'exceeded' ? 'exceeded' :
-                     budgetHealth.healthStatus === 'critical' ? 'critical' : 'warning';
-
-    return {
-      passed: false,
-      severity,
-      message: `Budget health score ${score} is below threshold ${threshold}`,
-    };
-  }
-
-  return {
-    passed: true,
-    severity: 'none',
-    message: `Budget health score ${score} meets threshold ${threshold}`,
-  };
-}
-
-/**
- * Check if any scoped budget has been breached.
- * A scope is considered breached if its percentUsed >= 100 and status is 'exceeded' or 'critical'.
- * Failed scopes are excluded from breach evaluation.
- *
- * @param report - Scoped budget report from finfocus CLI
- * @param failOnBreach - Whether to fail the action on breach
- * @returns BudgetThresholdResult with pass/fail status
- */
-export function checkScopedBudgetBreach(
-  report: ScopedBudgetReport | undefined,
-  failOnBreach: boolean,
-): BudgetThresholdResult {
-  // If no report or breach check disabled, pass
-  if (!report || !failOnBreach) {
-    return {
-      passed: true,
-      severity: 'none',
-      message: failOnBreach ? 'No scoped budget data available' : 'Scoped budget breach check disabled',
-    };
-  }
-
-  // Find breached scopes (percentUsed >= 100)
-  const breachedScopes = report.scopes.filter(
-    (s) => s.percentUsed >= 100 || s.status === 'exceeded' || s.status === 'critical',
-  );
-
-  if (breachedScopes.length === 0) {
-    return {
-      passed: true,
-      severity: 'none',
-      message: `All ${report.scopes.length} scoped budgets within limits`,
-    };
-  }
-
-  // Determine severity from worst breach
-  const hasExceeded = breachedScopes.some((s) => s.status === 'exceeded');
-  const hasCritical = breachedScopes.some((s) => s.status === 'critical');
-  const severity = hasExceeded ? 'exceeded' : hasCritical ? 'critical' : 'warning';
-
-  const scopeNames = breachedScopes.map((s) => s.scope).join(', ');
-
-  return {
-    passed: false,
-    severity,
-    message: `Budget exceeded for scopes: ${scopeNames}`,
-  };
 }

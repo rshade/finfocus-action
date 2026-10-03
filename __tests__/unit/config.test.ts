@@ -91,12 +91,12 @@ describe('ConfigManager', () => {
       const expectedPath = path.join(mockHomedir, '.finfocus', 'config.yaml');
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expectedPath,
-        expect.stringContaining('budget:'),
+        expect.stringContaining('budgets:'),
         'utf8',
       );
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expectedPath,
-        expect.stringContaining('amount: 1000'),
+        expect.stringContaining('amount: 1000.00'),
         'utf8',
       );
       expect(fs.writeFileSync).toHaveBeenCalledWith(
@@ -125,7 +125,7 @@ describe('ConfigManager', () => {
       const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
       const yamlContent = writeCall[1] as string;
 
-      expect(yamlContent).toContain('amount: 5000');
+      expect(yamlContent).toContain('amount: 5000.00');
       expect(yamlContent).toContain('currency: EUR');
       expect(yamlContent).toContain('period: quarterly');
       expect(yamlContent).toContain('threshold: 75');
@@ -226,9 +226,7 @@ describe('ConfigManager', () => {
 
       await configManager.writeConfig(config);
 
-      expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('No valid alerts found'),
-      );
+      expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('No valid alerts found'));
 
       const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
       const yamlContent = writeCall[1] as string;
@@ -280,7 +278,7 @@ describe('ConfigManager', () => {
       expect(yamlContent).toContain('period: yearly');
     });
 
-    it('should generate valid YAML with proper formatting', async () => {
+    it('should generate valid YAML with the cost.budgets.global schema', async () => {
       const config: ActionConfiguration = {
         budgetAmount: 1500,
         budgetCurrency: 'GBP',
@@ -293,20 +291,24 @@ describe('ConfigManager', () => {
       const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
       const yamlContent = writeCall[1] as string;
 
-      // Check YAML structure
+      // finfocus v0.4.0 reads budgets from cost.budgets (scoped schema), not a
+      // top-level budget: key.
       expect(yamlContent).toContain('# finfocus budget configuration');
-      expect(yamlContent).toContain('budget:');
-      expect(yamlContent).toContain('  amount: 1500');
-      expect(yamlContent).toContain('  currency: GBP');
-      expect(yamlContent).toContain('  period: monthly');
-      expect(yamlContent).toContain('  alerts:');
-      expect(yamlContent).toContain('    - threshold: 85');
-      expect(yamlContent).toContain('      type: actual');
+      expect(yamlContent).not.toContain('\nbudget:');
+      expect(yamlContent).toContain('cost:');
+      expect(yamlContent).toContain('  budgets:');
+      expect(yamlContent).toContain('    global:');
+      expect(yamlContent).toContain('      amount: 1500.00');
+      expect(yamlContent).toContain('      currency: GBP');
+      expect(yamlContent).toContain('      period: monthly');
+      expect(yamlContent).toContain('      alerts:');
+      expect(yamlContent).toContain('        - threshold: 85');
+      expect(yamlContent).toContain('          type: actual');
 
       // Should have proper indentation
-      expect(yamlContent.split('\n').filter((line) => line.startsWith('  ')).length).toBeGreaterThan(
-        0,
-      );
+      expect(
+        yamlContent.split('\n').filter((line) => line.startsWith('  ')).length,
+      ).toBeGreaterThan(0);
     });
 
     it('should log debug info when debug is enabled', async () => {

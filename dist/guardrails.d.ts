@@ -1,4 +1,4 @@
-import { BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport, ScopedBudgetReport } from './types.js';
+import { BudgetThresholdResult, ActionConfiguration, FinfocusReport } from './types.js';
 /**
  * Human-readable messages for each budget threshold result.
  */
@@ -53,21 +53,3 @@ export declare function checkThreshold(threshold: string | null, diff: number, c
  * @returns `true` if the provided `diff` exceeds the parsed threshold, `false` otherwise. Malformed thresholds or percent checks with `baseTotal <= 0` return `false`.
  */
 export declare function checkCarbonThreshold(threshold: string | null, diff: number, baseTotal: number): boolean;
-/**
- * Evaluate the configured budget-health threshold against a budget health report.
- *
- * @param config - Action configuration containing an optional `failOnBudgetHealth` threshold
- * @param budgetHealth - Budget health report providing `healthScore` and `healthStatus`
- * @returns A `BudgetThresholdResult` containing pass/fail outcome, `severity`, and an explanatory `message`
- */
-export declare function checkBudgetHealthThreshold(config: ActionConfiguration, budgetHealth: BudgetHealthReport): BudgetThresholdResult;
-/**
- * Check if any scoped budget has been breached.
- * A scope is considered breached if its percentUsed >= 100 and status is 'exceeded' or 'critical'.
- * Failed scopes are excluded from breach evaluation.
- *
- * @param report - Scoped budget report from finfocus CLI
- * @param failOnBreach - Whether to fail the action on breach
- * @returns BudgetThresholdResult with pass/fail status
- */
-export declare function checkScopedBudgetBreach(report: ScopedBudgetReport | undefined, failOnBreach: boolean): BudgetThresholdResult;
