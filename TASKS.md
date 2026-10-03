@@ -112,7 +112,13 @@ changes. Verify: `markdownlint README.md`.
 
 ### AC-3.1 Decide the budget source
 
-**Status:** TODO
+**Status:** BLOCKED-ON-INPUT — findings in `.superpowers/budget-source.md`
+(with pasted command output). Budget data in v0.4.0 comes from `cost.budgets`
+config (scoped schema `cost.budgets.global`, ...) and the `cost projected`
+table output `BUDGET STATUS` block, plus the `--exit-on-threshold` exit code.
+The JSON output has **no budget fields** (verified with and without budgets
+configured; `.finfocus` keys are only `resources`, `summary`). Delivery per
+task text: core issue draft `.superpowers/issue-drafts/core-budget-json.md`.
 
 `finfocus budget status` does not exist (fixture
 `budget-status-unknown-command.json`). Find out where budget data really comes
