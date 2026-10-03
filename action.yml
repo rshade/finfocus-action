@@ -11,7 +11,7 @@ inputs:
     required: false
     default: ${{ github.token }}
   finfocus-version:
-    description: 'Version of finfocus to install'
+    description: 'Version of finfocus to install. Tested against v0.4.0 and latest. "latest" follows the newest finfocus release, including breaking changes (e.g. the v0.4.0 exit-code change); pin a version for a stable target.'
     required: false
     default: 'latest'
   install-plugins:
