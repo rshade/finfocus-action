@@ -1,0 +1,1 @@
+{"error_code":"internal_error","message":"find pulumi project: no Pulumi project found in current or parent directories; use --pulumi-json to provide input directly","trace_id":"3ce7360bb94a336b05e1e5c9dec7c685","tool":"finfocus","version":"0.4.0","schema_version":"1.0.0"}

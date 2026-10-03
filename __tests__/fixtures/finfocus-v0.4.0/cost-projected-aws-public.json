@@ -1,0 +1,133 @@
+{
+  "finfocus": {
+    "summary": {
+      "totalMonthly": 7.592,
+      "totalHourly": 0.0104,
+      "currency": "USD",
+      "byProvider": {
+        "aws": 7.592
+      },
+      "byService": {
+        "ec2": 7.592,
+        "rds": 0,
+        "s3": 0
+      },
+      "byAdapter": {
+        "finfocus-plugin-aws-public (cached)": 7.592,
+        "none": 0
+      },
+      "resources": [
+        {
+          "resourceType": "aws:ec2/instance:Instance",
+          "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+          "adapter": "finfocus-plugin-aws-public (cached)",
+          "currency": "USD",
+          "monthly": 7.592,
+          "hourly": 0.0104,
+          "notes": "On-demand Linux, Shared tenancy, 730 hrs/month",
+          "breakdown": {
+            "unit_price": 0.0104
+          },
+          "sustainability": {
+            "carbon_footprint": {
+              "value": 2980.078927,
+              "unit": "gCO2e"
+            }
+          },
+          "startDate": "0001-01-01T00:00:00Z",
+          "endDate": "0001-01-01T00:00:00Z"
+        },
+        {
+          "resourceType": "aws:s3/bucket:Bucket",
+          "resourceId": "urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::static-assets",
+          "adapter": "none",
+          "currency": "USD",
+          "monthly": 0,
+          "hourly": 0,
+          "notes": "No pricing information available",
+          "breakdown": null,
+          "error": {
+            "code": "NO_COST_DATA",
+            "message": "No pricing information available",
+            "resourceType": "aws:s3/bucket:Bucket"
+          },
+          "startDate": "0001-01-01T00:00:00Z",
+          "endDate": "0001-01-01T00:00:00Z"
+        },
+        {
+          "resourceType": "aws:rds/instance:Instance",
+          "resourceId": "urn:pulumi:dev::my-app::aws:rds/instance:Instance::database",
+          "adapter": "none",
+          "currency": "USD",
+          "monthly": 0,
+          "hourly": 0,
+          "notes": "No pricing information available",
+          "breakdown": null,
+          "error": {
+            "code": "NO_COST_DATA",
+            "message": "No pricing information available",
+            "resourceType": "aws:rds/instance:Instance"
+          },
+          "startDate": "0001-01-01T00:00:00Z",
+          "endDate": "0001-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "resources": [
+      {
+        "resourceType": "aws:ec2/instance:Instance",
+        "resourceId": "urn:pulumi:dev::my-app::aws:ec2/instance:Instance::web-server",
+        "adapter": "finfocus-plugin-aws-public (cached)",
+        "currency": "USD",
+        "monthly": 7.592,
+        "hourly": 0.0104,
+        "notes": "On-demand Linux, Shared tenancy, 730 hrs/month",
+        "breakdown": {
+          "unit_price": 0.0104
+        },
+        "sustainability": {
+          "carbon_footprint": {
+            "value": 2980.078927,
+            "unit": "gCO2e"
+          }
+        },
+        "startDate": "0001-01-01T00:00:00Z",
+        "endDate": "0001-01-01T00:00:00Z"
+      },
+      {
+        "resourceType": "aws:s3/bucket:Bucket",
+        "resourceId": "urn:pulumi:dev::my-app::aws:s3/bucket:Bucket::static-assets",
+        "adapter": "none",
+        "currency": "USD",
+        "monthly": 0,
+        "hourly": 0,
+        "notes": "No pricing information available",
+        "breakdown": null,
+        "error": {
+          "code": "NO_COST_DATA",
+          "message": "No pricing information available",
+          "resourceType": "aws:s3/bucket:Bucket"
+        },
+        "startDate": "0001-01-01T00:00:00Z",
+        "endDate": "0001-01-01T00:00:00Z"
+      },
+      {
+        "resourceType": "aws:rds/instance:Instance",
+        "resourceId": "urn:pulumi:dev::my-app::aws:rds/instance:Instance::database",
+        "adapter": "none",
+        "currency": "USD",
+        "monthly": 0,
+        "hourly": 0,
+        "notes": "No pricing information available",
+        "breakdown": null,
+        "error": {
+          "code": "NO_COST_DATA",
+          "message": "No pricing information available",
+          "resourceType": "aws:rds/instance:Instance"
+        },
+        "startDate": "0001-01-01T00:00:00Z",
+        "endDate": "0001-01-01T00:00:00Z"
+      }
+    ]
+  }
+}
