@@ -19,14 +19,29 @@ import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
     const debug = config?.debug === true;
-    if (debug) {
-      core.info(`=== Analyzer: Running cost analysis ===`);
-      core.info(`  Plan file path: ${planPath}`);
-      core.info(`  Absolute path: ${path.resolve(planPath)}`);
+
+    // finfocus accepts either --pulumi-json or --terraform-state (mutually
+    // exclusive). terraform-state takes precedence when configured; the plan
+    // path input always has a default, so only warn when a plan file actually
+    // exists on disk alongside the state file.
+    const terraformStatePath = config?.terraformStatePath || '';
+    const inputPath = terraformStatePath || planPath;
+    const inputFlag = terraformStatePath ? '--terraform-state' : '--pulumi-json';
+    if (terraformStatePath && fs.existsSync(planPath)) {
+      core.warning(
+        `Both pulumi-plan-json ("${planPath}") and terraform-state ("${terraformStatePath}") ` +
+          `are present; finfocus treats them as mutually exclusive. Using --terraform-state.`,
+      );
     }
 
-    if (!fs.existsSync(planPath)) {
-      core.error(`  Plan file NOT FOUND: ${planPath}`);
+    if (debug) {
+      core.info(`=== Analyzer: Running cost analysis ===`);
+      core.info(`  Input file path: ${inputPath} (${inputFlag})`);
+      core.info(`  Absolute path: ${path.resolve(inputPath)}`);
+    }
+
+    if (!fs.existsSync(inputPath)) {
+      core.error(`  Input file NOT FOUND: ${inputPath}`);
       if (debug) {
         core.info(`  Current working directory: ${process.cwd()}`);
         core.info(`  Directory contents:`);
@@ -41,48 +56,54 @@ export class Analyzer implements IAnalyzer {
         }
       }
       throw new Error(
-        `Pulumi plan file not found: ${planPath}. ` +
-          `Make sure to run 'pulumi preview --json > ${planPath}' first.`,
+        terraformStatePath
+          ? `Terraform state file not found: ${inputPath}.`
+          : `Pulumi plan file not found: ${inputPath}. ` +
+              `Make sure to run 'pulumi preview --json > ${inputPath}' first.`,
       );
     }
 
-    const planStats = fs.statSync(planPath);
+    const planStats = fs.statSync(inputPath);
     if (debug) {
-      core.info(`  Plan file size: ${planStats.size} bytes`);
-      core.info(`  Plan file modified: ${planStats.mtime.toISOString()}`);
+      core.info(`  Input file size: ${planStats.size} bytes`);
+      core.info(`  Input file modified: ${planStats.mtime.toISOString()}`);
     }
 
     if (planStats.size === 0) {
-      core.error(`  Plan file is EMPTY`);
-      throw new Error(`Pulumi plan file is empty: ${planPath}`);
+      core.error(`  Input file is EMPTY`);
+      throw new Error(
+        terraformStatePath
+          ? `Terraform state file is empty: ${inputPath}`
+          : `Pulumi plan file is empty: ${inputPath}`,
+      );
     }
 
-    const planContent = fs.readFileSync(planPath, 'utf8');
+    const planContent = fs.readFileSync(inputPath, 'utf8');
     if (debug) {
-      core.info(`  Plan file content length: ${planContent.length} chars`);
+      core.info(`  Input file content length: ${planContent.length} chars`);
 
       if (planContent.length < 5000) {
-        core.info(`  Plan file content:\n${planContent}`);
+        core.info(`  Input file content:\n${planContent}`);
       } else {
-        core.info(`  Plan file first 2000 chars:\n${planContent.substring(0, 2000)}`);
+        core.info(`  Input file first 2000 chars:\n${planContent.substring(0, 2000)}`);
         core.info(`  ... (truncated, total ${planContent.length} chars)`);
       }
     }
 
     try {
       JSON.parse(planContent);
-      if (debug) core.info(`  Plan file is valid JSON`);
+      if (debug) core.info(`  Input file is valid JSON`);
     } catch (parseErr) {
-      core.error(`  Plan file is NOT valid JSON`);
+      core.error(`  Input file is NOT valid JSON`);
       core.error(
         `  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
       );
       throw new Error(
-        `Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        `Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
       );
     }
 
-    const args = ['cost', 'projected', '--pulumi-json', planPath, '--output', 'json'];
+    const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
 
     // Add utilization flag if provided and different from default
     if (config?.utilizationRate && config.utilizationRate !== '1.0') {

@@ -130,6 +130,7 @@ async function run(): Promise<void> {
     const includeActualCosts = parseBoolean(includeActualCostsRaw, false);
     const actualCostsPeriod = core.getInput('actual_costs_period') || '7d';
     const pulumiStateJsonPath = core.getInput('pulumi_state_json') || '';
+    const terraformStatePath = core.getInput('terraform_state') || '';
     const actualCostsGroupBy = core.getInput('actual_costs_group_by') || 'provider';
 
     const includeSustainabilityRaw = core.getInput('include_sustainability');
@@ -164,6 +165,7 @@ async function run(): Promise<void> {
       includeActualCosts,
       actualCostsPeriod,
       pulumiStateJsonPath,
+      terraformStatePath,
       actualCostsGroupBy,
       includeSustainability,
       utilizationRate,
