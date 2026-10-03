@@ -11,6 +11,8 @@ import { BudgetExitCode, FinfocusReport, BudgetHealthReport, ActionConfiguration
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as install from '../../src/install.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 jest.mock('@actions/core');
 jest.mock('@actions/exec');
@@ -196,6 +198,72 @@ describe('Guardrails', () => {
       await checkBudgetThresholdWithExitCodes(debugConfig);
 
       expect(core.debug).toHaveBeenCalledWith(expect.stringContaining('exit code: 0'));
+    });
+  });
+
+  describe('AC-2.1: error envelope on non-zero exit', () => {
+    const fixtureDir = path.join(__dirname, '..', 'fixtures', 'finfocus-v0.4.0');
+    const mockConfig = {
+      pulumiPlanJsonPath: 'plan.json',
+      githubToken: 'token',
+      finfocusVersion: 'latest',
+      installPlugins: [],
+      behaviorOnError: 'fail' as const,
+      postComment: true,
+      threshold: null,
+      analyzerMode: false,
+      detailedComment: false,
+      includeRecommendations: true,
+      logLevel: 'error',
+      debug: false,
+      includeActualCosts: false,
+      actualCostsPeriod: '7d',
+      pulumiStateJsonPath: '',
+      actualCostsGroupBy: 'provider',
+      includeSustainability: true,
+      utilizationRate: '1.0',
+      sustainabilityEquivalents: true,
+      failOnCarbonIncrease: null,
+    };
+
+    it('exit 2 with a validation_error envelope is a configuration error, never a budget result', async () => {
+      const stderr = fs.readFileSync(
+        path.join(fixtureDir, 'exit2-validation-error.json'),
+        'utf8',
+      );
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: 2,
+        stdout: '',
+        stderr,
+      });
+
+      // Must not resolve to a "critical budget breach" result: it throws with
+      // the envelope message instead.
+      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
+        'loading Pulumi plan: reading plan file',
+      );
+      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
+        'configuration error',
+      );
+    });
+
+    it('exit 1 with an internal_error envelope is a tool failure', async () => {
+      const stderr = fs.readFileSync(
+        path.join(fixtureDir, 'exit1-no-pulumi-project.json'),
+        'utf8',
+      );
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: 1,
+        stdout: '',
+        stderr,
+      });
+
+      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
+        'no Pulumi project found',
+      );
+      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
+        'tool failure',
+      );
     });
   });
 

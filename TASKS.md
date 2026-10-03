@@ -43,7 +43,13 @@ watch it fail. Action and tool names must be checked to exist.
 
 ### AC-2.1 Parse the error envelope
 
-**Status:** TODO. Depends on AC-1.2.
+**Status:** DONE — verify: `npm test` (270 pass, incl. new envelope tests reading
+`exit2-validation-error.json` and `exit1-no-pulumi-project.json`) and
+`FINFOCUS_BIN=... scripts/contract.sh` exit 0. Non-zero exits with a finfocus
+error envelope now throw with the envelope message (`validation_error` =
+configuration error, `internal_error` = tool failure) in both
+`guardrails.ts` and `analyze.ts`. Break check: exempted exit 2 from envelope
+parsing (back to critical mapping); the AC-2.1 test failed as designed; reverted.
 
 On a non-zero exit, parse the JSON on stderr (`error_code`, `message`) and fail
 with that message. `validation_error` (exit 2) is a configuration error and

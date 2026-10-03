@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import { BudgetExitCode, BudgetThresholdResult, ActionConfiguration, FinfocusReport, BudgetHealthReport, ScopedBudgetReport } from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
+import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 
 /**
  * Human-readable messages for each budget threshold result.
@@ -40,6 +41,16 @@ export async function checkBudgetThresholdWithExitCodes(
       core.debug(`Budget threshold check stdout: ${result.stdout}`);
     }
 
+    // A finfocus error envelope on stderr means the command itself failed
+    // (v0.4.0: exit 2 = validation_error, a configuration error; exit 1 =
+    // internal_error, a tool failure). It is never a budget result.
+    if (result.exitCode !== 0) {
+      const envelope = parseErrorEnvelope(result.stderr);
+      if (envelope) {
+        throw new Error(formatEnvelopeError(envelope, result.exitCode));
+      }
+    }
+
     switch (result.exitCode) {
       case BudgetExitCode.PASS:
         return {
@@ -73,7 +84,11 @@ export async function checkBudgetThresholdWithExitCodes(
         throw new Error(`Unexpected finfocus exit code: ${result.exitCode}`);
     }
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Unexpected finfocus exit code')) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith('Unexpected finfocus exit code') ||
+        error.message.startsWith('finfocus '))
+    ) {
       throw error;
     }
     throw new Error(

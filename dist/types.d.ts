@@ -225,6 +225,18 @@ export declare enum BudgetExitCode {
     EXCEEDED = 3
 }
 /**
+ * JSON error envelope printed by finfocus on stderr for non-zero exits (v0.4.0).
+ * See __tests__/fixtures/finfocus-v0.4.0/exit2-validation-error.json.
+ */
+export interface FinfocusErrorEnvelope {
+    error_code: string;
+    message: string;
+    trace_id?: string;
+    tool?: string;
+    version?: string;
+    schema_version?: string;
+}
+/**
  * Result of a budget threshold check.
  */
 export interface BudgetThresholdResult {

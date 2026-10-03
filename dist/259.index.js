@@ -39,7 +39,10 @@ var BudgetExitCode;
 
 // EXTERNAL MODULE: ./src/install.ts + 6 modules
 var install = __webpack_require__(8638);
+// EXTERNAL MODULE: ./src/errors.ts
+var errors = __webpack_require__(3916);
 ;// CONCATENATED MODULE: ./src/guardrails.ts
+
 
 
 
@@ -76,6 +79,15 @@ async function checkBudgetThresholdWithExitCodes(config) {
             core/* debug */.Yz(`Budget threshold check exit code: ${result.exitCode}`);
             core/* debug */.Yz(`Budget threshold check stdout: ${result.stdout}`);
         }
+        // A finfocus error envelope on stderr means the command itself failed
+        // (v0.4.0: exit 2 = validation_error, a configuration error; exit 1 =
+        // internal_error, a tool failure). It is never a budget result.
+        if (result.exitCode !== 0) {
+            const envelope = (0,errors/* parseErrorEnvelope */.a)(result.stderr);
+            if (envelope) {
+                throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, result.exitCode));
+            }
+        }
         switch (result.exitCode) {
             case BudgetExitCode.PASS:
                 return {
@@ -110,7 +122,9 @@ async function checkBudgetThresholdWithExitCodes(config) {
         }
     }
     catch (error) {
-        if (error instanceof Error && error.message.startsWith('Unexpected finfocus exit code')) {
+        if (error instanceof Error &&
+            (error.message.startsWith('Unexpected finfocus exit code') ||
+                error.message.startsWith('finfocus '))) {
             throw error;
         }
         throw new Error(`Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`);
