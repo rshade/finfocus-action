@@ -38,7 +38,7 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `analyze.ts` | `Analyzer` | Runs `finfocus cost projected`, `recommendations`, `actual`, `budget status` commands; calculates sustainability metrics; extracts budget status and health |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
 | `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status, budget health |
-| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks with exit code support (v0.2.5+); budget health threshold checks |
+| `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code); budget health threshold checks |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
 
 ### Data Flow
@@ -59,7 +59,7 @@ main.ts
         └─> Analyzer.runBudgetStatus()    # Optional: budget health (v0.2.5+)
         └─> Analyzer.runScopedBudgetStatus() # Optional: scoped budgets (v0.2.6+)
         └─> Commenter.upsertComment()     # GitHub API (includes budget status, health, scoped)
-        └─> checkBudgetThreshold()  # Guardrails (uses exit codes for v0.2.5+, JSON fallback for older)
+        └─> checkBudgetThreshold()  # Guardrails (runs cost projected with --exit-on-threshold --exit-code 10, JSON fallback for older)
         └─> checkBudgetHealthThreshold()  # Guardrails (fail if health score below threshold)
         └─> checkScopedBudgetBreach()     # Guardrails (fail if any scope exceeds budget)
 ```
@@ -74,7 +74,7 @@ main.ts
 - `BudgetConfiguration`: Budget settings with amount, currency, period, and alerts
 - `BudgetStatus`: Current budget status with spent, remaining, percent used, and triggered alerts
 - `BudgetAlert`: Individual budget alert with threshold and type
-- `BudgetExitCode`: Enum for finfocus v0.2.5+ exit codes (0=pass, 1=warning, 2=critical, 3=exceeded)
+- `BudgetExitCode`: Enum for threshold check exit codes (0=pass, 10=threshold breached; 10 is action-owned via `--exit-code`, finfocus v0.4.0 reserves 1=internal_error and 2=validation_error)
 - `BudgetThresholdResult`: Result of budget threshold check with severity and message
 - `BudgetHealthStatus`: Type for health status levels ('healthy' | 'warning' | 'critical' | 'exceeded')
 - `BudgetHealthReport`: Extended budget status with healthScore, forecast, forecastAmount, runwayDays
@@ -122,7 +122,7 @@ main.ts
 - Budget configuration is written to `~/.finfocus/config.yaml` for finfocus CLI to read
 - Budget status extraction returns undefined when using `--output json` (forward compatible for future finfocus CLI support)
 - **JSON format compatibility**: finfocus v0.2.4+ wraps JSON output in a `"finfocus"` key. The action handles both wrapped and unwrapped formats for backward compatibility (see `src/analyze.ts:131`)
-- **Exit code support**: finfocus v0.2.5+ returns exit codes for budget thresholds (0=pass, 1=warning, 2=critical, 3=exceeded). The action auto-detects version and falls back to JSON parsing for older versions.
+- **Exit code support**: for budget thresholds the action runs `finfocus cost projected --pulumi-json <plan> --exit-on-threshold --exit-code 10`. Exit 10 is action-owned; finfocus v0.4.0 exits 1 (`internal_error`) or 2 (`validation_error`) on failures, and the action surfaces the error envelope `message` for those. The action auto-detects version and falls back to JSON parsing for versions < 0.2.5.
 
 ## Active Technologies
 - TypeScript 5.9+ (ES2022 target, NodeNext module resolution) + @actions/core ^2.0.2, @actions/exec ^2.0.0, @actions/github ^7.0.0, @actions/tool-cache ^3.0.0 (001-budget-health-suite)

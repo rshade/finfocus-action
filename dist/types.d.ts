@@ -211,18 +211,18 @@ export interface ICommenter {
     upsertComment(report: FinfocusReport, token: string, config?: ActionConfiguration, recommendationsReport?: RecommendationsReport, actualCostReport?: ActualCostReport, sustainabilityReport?: SustainabilityReport, budgetStatus?: BudgetStatus, budgetHealth?: BudgetHealthReport, scopedBudgetReport?: ScopedBudgetReport): Promise<void>;
 }
 /**
- * Exit codes returned by finfocus CLI for budget threshold checks.
- * Only applicable for finfocus v0.2.5 and above.
+ * Exit codes the action uses when checking budget thresholds.
+ *
+ * finfocus v0.4.0 reserves 0 (success), 1 (internal_error) and 2
+ * (validation_error). The action passes `--exit-code 10` with
+ * `--exit-on-threshold`, so THRESHOLD_BREACH is owned by the action and cannot
+ * be confused with a finfocus error exit.
  */
 export declare enum BudgetExitCode {
     /** All thresholds passed */
     PASS = 0,
-    /** Warning threshold breached */
-    WARNING = 1,
-    /** Critical threshold breached */
-    CRITICAL = 2,
-    /** Budget exceeded */
-    EXCEEDED = 3
+    /** Budget threshold breached (action-owned code passed via --exit-code) */
+    THRESHOLD_BREACH = 10
 }
 /**
  * JSON error envelope printed by finfocus on stderr for non-zero exits (v0.4.0).

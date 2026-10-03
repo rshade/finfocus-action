@@ -273,16 +273,18 @@ When scoped budgets are configured, the PR comment includes a "Budget Status by 
 - Resources can count toward multiple scopes (e.g., both `provider/aws` and `type/compute`)
 - Invalid scopes are logged as warnings and skipped
 
-### Budget Threshold Exit Codes (finfocus v0.2.5+)
+### Budget Threshold Exit Codes
 
-When using finfocus v0.2.5 or higher with budget thresholds, the action interprets CLI exit codes for precise budget status:
+finfocus v0.4.0 reserves exit codes 0 (success), 1 (`internal_error`) and 2
+(`validation_error`, e.g. a bad plan path or flag). Because of this, the action
+does not interpret finfocus exit codes as budget severities. Instead it runs
+`finfocus cost projected --pulumi-json <plan> --exit-on-threshold --exit-code 10`:
 
-| Exit Code | Status | Description |
-| :-------- | :----- | :---------- |
-| 0 | Pass | All budget thresholds passed |
-| 1 | Warning | Approaching budget threshold |
-| 2 | Critical | Budget threshold breached |
-| 3 | Exceeded | Budget has been exceeded |
+| Exit Code | Meaning | Action behavior |
+| :-------- | :------ | :-------------- |
+| 0 | All budget thresholds passed | Continue |
+| 10 | Budget threshold breached (code owned by the action) | Fail with "Budget exceeded" |
+| 1, 2, other | The finfocus call itself failed | Fail with the `message` from the finfocus error envelope on stderr |
 
 For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks, maintaining backward compatibility.
 

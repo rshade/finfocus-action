@@ -107,6 +107,30 @@ describe('Guardrails', () => {
       jest.clearAllMocks();
     });
 
+    it('should pass the plan with --pulumi-json and the action-owned threshold exit code', async () => {
+      (exec.getExecOutput as jest.Mock).mockResolvedValue({
+        exitCode: BudgetExitCode.PASS,
+        stdout: 'Budget check passed',
+        stderr: '',
+      });
+
+      await checkBudgetThresholdWithExitCodes(mockConfig);
+
+      expect(exec.getExecOutput).toHaveBeenCalledWith(
+        'finfocus',
+        [
+          'cost',
+          'projected',
+          '--pulumi-json',
+          'plan.json',
+          '--exit-on-threshold',
+          '--exit-code',
+          String(BudgetExitCode.THRESHOLD_BREACH),
+        ],
+        expect.objectContaining({ silent: true, ignoreReturnCode: true }),
+      );
+    });
+
     it('should return passed=true with severity=none for exit code 0 (pass)', async () => {
       (exec.getExecOutput as jest.Mock).mockResolvedValue({
         exitCode: BudgetExitCode.PASS,
@@ -122,40 +146,10 @@ describe('Guardrails', () => {
       expect(result.message).toBe(BudgetThresholdMessages.PASS);
     });
 
-    it('should return passed=false with severity=warning for exit code 1 (warning)', async () => {
+    it('should return passed=false with severity=exceeded for the threshold breach code', async () => {
       (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.WARNING,
-        stdout: 'Warning threshold breached',
-        stderr: '',
-      });
-
-      const result = await checkBudgetThresholdWithExitCodes(mockConfig);
-
-      expect(result.passed).toBe(false);
-      expect(result.severity).toBe('warning');
-      expect(result.exitCode).toBe(1);
-      expect(result.message).toBe(BudgetThresholdMessages.WARNING);
-    });
-
-    it('should return passed=false with severity=critical for exit code 2 (critical)', async () => {
-      (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.CRITICAL,
-        stdout: 'Critical threshold breached',
-        stderr: '',
-      });
-
-      const result = await checkBudgetThresholdWithExitCodes(mockConfig);
-
-      expect(result.passed).toBe(false);
-      expect(result.severity).toBe('critical');
-      expect(result.exitCode).toBe(2);
-      expect(result.message).toBe(BudgetThresholdMessages.CRITICAL);
-    });
-
-    it('should return passed=false with severity=exceeded for exit code 3 (exceeded)', async () => {
-      (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.EXCEEDED,
-        stdout: 'Budget exceeded',
+        exitCode: BudgetExitCode.THRESHOLD_BREACH,
+        stdout: 'Budget threshold breached',
         stderr: '',
       });
 
@@ -163,19 +157,22 @@ describe('Guardrails', () => {
 
       expect(result.passed).toBe(false);
       expect(result.severity).toBe('exceeded');
-      expect(result.exitCode).toBe(3);
+      expect(result.exitCode).toBe(BudgetExitCode.THRESHOLD_BREACH);
       expect(result.message).toBe(BudgetThresholdMessages.EXCEEDED);
     });
 
-    it('should throw error for unexpected exit code (4+)', async () => {
+    it('should fail with stderr for an unknown exit code instead of a generic throw', async () => {
       (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: 4,
+        exitCode: 7,
         stdout: '',
-        stderr: 'Unknown error',
+        stderr: 'something strange happened',
       });
 
       await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.toThrow(
-        'Unexpected finfocus exit code: 4'
+        'something strange happened',
+      );
+      await expect(checkBudgetThresholdWithExitCodes(mockConfig)).rejects.not.toThrow(
+        'Unexpected finfocus exit code',
       );
     });
 
@@ -454,110 +451,36 @@ describe('Guardrails', () => {
     });
   });
 
-  describe('BudgetThresholdMessages (US3: Clear Error Messages)', () => {
-    it('should have distinct warning message for exit code 1', async () => {
+  describe('BudgetThresholdMessages', () => {
+    const mockConfig = {
+      pulumiPlanJsonPath: 'plan.json',
+      githubToken: 'token',
+      finfocusVersion: 'latest',
+      installPlugins: [],
+      behaviorOnError: 'fail' as const,
+      postComment: true,
+      threshold: null,
+      analyzerMode: false,
+      detailedComment: false,
+      includeRecommendations: true,
+      logLevel: 'error',
+      debug: false,
+      includeActualCosts: false,
+      actualCostsPeriod: '7d',
+      pulumiStateJsonPath: '',
+      actualCostsGroupBy: 'provider',
+      includeSustainability: true,
+      utilizationRate: '1.0',
+      sustainabilityEquivalents: true,
+      failOnCarbonIncrease: null,
+    };
+
+    it('should have a distinct exceeded message for the threshold breach code', async () => {
       (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.WARNING,
+        exitCode: BudgetExitCode.THRESHOLD_BREACH,
         stdout: '',
         stderr: '',
       });
-
-      const mockConfig = {
-        pulumiPlanJsonPath: 'plan.json',
-        githubToken: 'token',
-        finfocusVersion: 'latest',
-        installPlugins: [],
-        behaviorOnError: 'fail' as const,
-        postComment: true,
-        threshold: null,
-        analyzerMode: false,
-        detailedComment: false,
-        includeRecommendations: true,
-        logLevel: 'error',
-        debug: false,
-        includeActualCosts: false,
-        actualCostsPeriod: '7d',
-        pulumiStateJsonPath: '',
-        actualCostsGroupBy: 'provider',
-        includeSustainability: true,
-        utilizationRate: '1.0',
-        sustainabilityEquivalents: true,
-        failOnCarbonIncrease: null,
-      };
-
-      const result = await checkBudgetThresholdWithExitCodes(mockConfig);
-
-      expect(result.message).toBe(BudgetThresholdMessages.WARNING);
-      expect(result.message).toContain('Warning');
-      expect(result.message).toContain('Approaching');
-    });
-
-    it('should have distinct critical message for exit code 2', async () => {
-      (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.CRITICAL,
-        stdout: '',
-        stderr: '',
-      });
-
-      const mockConfig = {
-        pulumiPlanJsonPath: 'plan.json',
-        githubToken: 'token',
-        finfocusVersion: 'latest',
-        installPlugins: [],
-        behaviorOnError: 'fail' as const,
-        postComment: true,
-        threshold: null,
-        analyzerMode: false,
-        detailedComment: false,
-        includeRecommendations: true,
-        logLevel: 'error',
-        debug: false,
-        includeActualCosts: false,
-        actualCostsPeriod: '7d',
-        pulumiStateJsonPath: '',
-        actualCostsGroupBy: 'provider',
-        includeSustainability: true,
-        utilizationRate: '1.0',
-        sustainabilityEquivalents: true,
-        failOnCarbonIncrease: null,
-      };
-
-      const result = await checkBudgetThresholdWithExitCodes(mockConfig);
-
-      expect(result.message).toBe(BudgetThresholdMessages.CRITICAL);
-      expect(result.message).toContain('Critical');
-      expect(result.message).toContain('breached');
-    });
-
-    it('should have distinct exceeded message for exit code 3', async () => {
-      (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.EXCEEDED,
-        stdout: '',
-        stderr: '',
-      });
-
-      const mockConfig = {
-        pulumiPlanJsonPath: 'plan.json',
-        githubToken: 'token',
-        finfocusVersion: 'latest',
-        installPlugins: [],
-        behaviorOnError: 'fail' as const,
-        postComment: true,
-        threshold: null,
-        analyzerMode: false,
-        detailedComment: false,
-        includeRecommendations: true,
-        logLevel: 'error',
-        debug: false,
-        includeActualCosts: false,
-        actualCostsPeriod: '7d',
-        pulumiStateJsonPath: '',
-        actualCostsGroupBy: 'provider',
-        includeSustainability: true,
-        utilizationRate: '1.0',
-        sustainabilityEquivalents: true,
-        failOnCarbonIncrease: null,
-      };
 
       const result = await checkBudgetThresholdWithExitCodes(mockConfig);
 
