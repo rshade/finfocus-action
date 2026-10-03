@@ -19,6 +19,11 @@ BIN="${FINFOCUS_BIN:-finfocus}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FIXTURE_DIR="${CONTRACT_FIXTURE_DIR:-$ROOT/__tests__/fixtures/finfocus-v0.4.0}"
 PLAN="$FIXTURE_DIR/aws-simple-plan.json"
+# Resolve a relative/binary path to absolute: finfocus commands run from a
+# scratch directory so the CLI cannot drop artifacts into the repository.
+if [ "$BIN" != "finfocus" ] && [ -e "$BIN" ]; then
+  BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
+fi
 
 failures=0
 pass() { printf 'PASS: %s\n' "$1"; }
@@ -70,6 +75,7 @@ main() {
   check_prereqs
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
+  cd "$tmp"
 
   echo "contract: binary=$BIN fixtures=$FIXTURE_DIR"
 
