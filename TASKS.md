@@ -10,7 +10,9 @@ owner-owned, read-only).
 
 ### AC-1.1 Real-binary contract test
 
-**Status:** TODO
+**Status:** DONE — verify: `FINFOCUS_BIN=/tmp/finfocus-v0.4.0/finfocus scripts/contract.sh`
+exits 0 (11 checks pass) against finfocus v0.4.0. Break check: renamed
+`totalMonthly` in a fixture copy; suite failed with exit 1 naming the changed key.
 
 A script `scripts/contract.sh` (or a Jest suite gated on `FINFOCUS_BIN`) that
 runs the commands the action runs against a real finfocus binary and compares
