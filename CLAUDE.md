@@ -117,7 +117,7 @@ main.ts
 
 ## Important Notes
 
-- The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes
+- The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` copy (for example 0.38.4) produces a bundle that fails the Check dist workflow.
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data
   in the finfocus report
