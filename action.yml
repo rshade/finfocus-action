@@ -15,7 +15,7 @@ inputs:
     required: false
     default: 'latest'
   install-plugins:
-    description: 'Comma-separated list of plugins to install (e.g., aws-public)'
+    description: 'Comma-separated plugins to install. Registry names (aws-public, kubernetes, jev, kubecost, and name@version) are checked against `finfocus plugin list --available`. github.com/owner/repo specifiers are also accepted. kubernetes feeds cost cluster. jev scores recommendations and needs TYPESAFE_API_KEY.'
     required: false
     default: ''
   behavior-on-error:
@@ -106,6 +106,46 @@ inputs:
     description: 'JSON spec for a single-resource what-if cost estimate via `finfocus cost estimate`, e.g. {"provider":"aws","resource_type":"aws:ec2/instance:Instance","properties":{"instanceType":"m5.large"},"region":"us-east-1"}. Empty disables the feature. Tested against finfocus v0.4.0.'
     required: false
     default: ''
+  include-cluster-costs:
+    description: 'Include a Kubernetes cluster cost section from `finfocus cost cluster` (finfocus v0.4.0+). Requires the kubernetes plugin and a kubeconfig on the runner.'
+    required: false
+    default: 'false'
+  cluster-group-by:
+    description: 'cost cluster --group-by: namespace, controller, pod, node, pulumi-stack, or label:<key> (finfocus v0.4.0+).'
+    required: false
+    default: 'namespace'
+  cluster-namespace:
+    description: 'Limit cost cluster to one namespace (omits idle and cluster rows). finfocus v0.4.0+.'
+    required: false
+    default: ''
+  cluster-context:
+    description: 'Kubeconfig context for cost cluster. Default is the current context. finfocus v0.4.0+.'
+    required: false
+    default: ''
+  cluster-selector:
+    description: 'Comma-separated pod label selectors (key=value) passed as repeatable cost cluster --selector. finfocus v0.4.0+.'
+    required: false
+    default: ''
+  enable-jev-scoring:
+    description: 'Opt in to Jev recommendation scoring (finfocus v0.4.0+). Writes scoring.enabled and scoring.plugin jev. Requires the jev plugin and a TYPESAFE_API_KEY environment variable. Scores are shown in the comment; they do not dismiss recommendations.'
+    required: false
+    default: 'false'
+  include-dismissed-recommendations:
+    description: 'Show dismissed and snoozed recommendations (passes --include-dismissed). Default false, so a PR comment does not repeat them. finfocus v0.4.0+.'
+    required: false
+    default: 'false'
+  dismiss-recommendations:
+    description: 'JSON array of recommendations to dismiss before the comment is built, e.g. [{"id":"rec-123","reason":"business-constraint"}]. Reasons: not-applicable, already-implemented, business-constraint, technical-constraint, deferred, inaccurate, other (other requires note). finfocus v0.4.0+.'
+    required: false
+    default: ''
+  snooze-recommendations:
+    description: 'JSON array of recommendations to snooze, e.g. [{"id":"rec-456","until":"2026-04-01","reason":"deferred"}]. until is YYYY-MM-DD or RFC3339. finfocus v0.4.0+.'
+    required: false
+    default: ''
+  state-only:
+    description: 'Run `finfocus overview --state-only --pulumi-state` so finfocus skips pulumi preview. Requires pulumi-state-json. This flag is on overview, not cost projected. When no plan or terraform state file exists, the overview total is used as the comment total. finfocus v0.3.5+ (tested on v0.4.0 and v0.4.3).'
+    required: false
+    default: 'false'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -152,6 +192,12 @@ outputs:
   unpriced-resource-count:
     description: 'Number of resources that could not be priced'
     value: ${{ steps.run.outputs.unpriced-resource-count }}
+  cluster-total-cost:
+    description: 'Monthly cluster cost from finfocus cost cluster, when include-cluster-costs is true'
+    value: ${{ steps.run.outputs.cluster-total-cost }}
+  state-projected-monthly:
+    description: 'Projected monthly cost from finfocus overview --state-only, when state-only is true'
+    value: ${{ steps.run.outputs.state-projected-monthly }}
 
 runs:
   using: 'composite'
@@ -187,6 +233,16 @@ runs:
         INPUT_BUDGET_PERIOD: ${{ inputs.budget-period }}
         INPUT_BUDGET_ALERTS: ${{ inputs.budget-alerts }}
         INPUT_ESTIMATE_SPEC: ${{ inputs.estimate-spec }}
+        INPUT_INCLUDE_CLUSTER_COSTS: ${{ inputs.include-cluster-costs }}
+        INPUT_CLUSTER_GROUP_BY: ${{ inputs.cluster-group-by }}
+        INPUT_CLUSTER_NAMESPACE: ${{ inputs.cluster-namespace }}
+        INPUT_CLUSTER_CONTEXT: ${{ inputs.cluster-context }}
+        INPUT_CLUSTER_SELECTOR: ${{ inputs.cluster-selector }}
+        INPUT_ENABLE_JEV_SCORING: ${{ inputs.enable-jev-scoring }}
+        INPUT_INCLUDE_DISMISSED_RECOMMENDATIONS: ${{ inputs.include-dismissed-recommendations }}
+        INPUT_DISMISS_RECOMMENDATIONS: ${{ inputs.dismiss-recommendations }}
+        INPUT_SNOOZE_RECOMMENDATIONS: ${{ inputs.snooze-recommendations }}
+        INPUT_STATE_ONLY: ${{ inputs.state-only }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

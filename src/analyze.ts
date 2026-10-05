@@ -13,9 +13,18 @@ import {
   BudgetStatus,
   EstimateReport,
   EstimateSpec,
+  ClusterReport,
+  StateOnlyReport,
   isV041Diff,
 } from './types.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
+import {
+  executeCluster,
+  executeRecommendationLifecycle,
+  executeStateOnly,
+  hideDismissedRecommendations,
+  recommendationArgs,
+} from './v04.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
@@ -255,7 +264,7 @@ export class Analyzer implements IAnalyzer {
       );
     }
 
-    const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
+    const args = recommendationArgs(planPath, config);
     if (debug) {
       core.info(`=== Running finfocus recommendations command ===`);
       core.info(`  Command: finfocus ${args.join(' ')}`);
@@ -283,7 +292,10 @@ export class Analyzer implements IAnalyzer {
     }
 
     try {
-      const report = JSON.parse(output.stdout) as RecommendationsReport;
+      const parsed = JSON.parse(output.stdout) as RecommendationsReport & {
+        finfocus?: RecommendationsReport;
+      };
+      const report = hideDismissedRecommendations(parsed.finfocus ?? parsed, config);
       if (debug) {
         core.info(`  Parsed recommendations successfully`);
         core.info(`  Total recommendations: ${report.summary.total_count}`);
@@ -304,6 +316,21 @@ export class Analyzer implements IAnalyzer {
         recommendations: [],
       };
     }
+  }
+
+  async runCluster(config: ActionConfiguration): Promise<ClusterReport> {
+    return executeCluster(config);
+  }
+
+  async runStateOnly(config: ActionConfiguration): Promise<StateOnlyReport> {
+    return executeStateOnly(config);
+  }
+
+  async applyRecommendationLifecycle(
+    planPath: string | undefined,
+    config: ActionConfiguration,
+  ): Promise<void> {
+    return executeRecommendationLifecycle(planPath, config);
   }
 
   async runActualCosts(config: ActionConfiguration): Promise<ActualCostReport> {

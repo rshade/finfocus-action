@@ -222,8 +222,12 @@ EOF
   local subcommands=(
     "cost projected"
     "cost recommendations"
+    "cost recommendations dismiss"
+    "cost recommendations snooze"
+    "cost cluster"
     "cost actual"
     "cost estimate"
+    "overview"
     "plugin install"
     "plugin list"
   )
@@ -306,6 +310,48 @@ EOF
     pass "terraform-state: exit 0, finfocus envelope shape OK"
   else
     fail "terraform-state: exit=$EXIT err=$(tail -n1 "$tmp/err")"
+  fi
+
+  # 12. issue #89 flags that exist on v0.4.0 and v0.4.3. --state-only is an
+  # overview flag. cost projected must not grow that flag or the action would
+  # pass it to the wrong command.
+  run_cmd "$tmp/out" "$tmp/err" "$BIN" cost cluster --help
+  if [ "$EXIT" -eq 0 ] && grep -q -- '--group-by' "$tmp/out" && grep -q -- '--selector' "$tmp/out"; then
+    pass "cost cluster: --group-by and --selector are listed"
+  else
+    fail "cost cluster --help missing --group-by or --selector (exit=$EXIT)"
+  fi
+
+  run_cmd "$tmp/out" "$tmp/err" "$BIN" cost recommendations --help
+  if [ "$EXIT" -eq 0 ] && grep -q -- '--no-scoring' "$tmp/out" && grep -q -- '--include-dismissed' "$tmp/out"; then
+    pass "cost recommendations: --no-scoring and --include-dismissed are listed"
+  else
+    fail "cost recommendations --help missing scoring or dismissal flags (exit=$EXIT)"
+  fi
+
+  run_cmd "$tmp/out" "$tmp/err" "$BIN" overview --help
+  if [ "$EXIT" -eq 0 ] && grep -q -- '--state-only' "$tmp/out" && grep -q -- '--pulumi-state' "$tmp/out"; then
+    pass "overview: --state-only and --pulumi-state are listed"
+  else
+    fail "overview --help missing --state-only (exit=$EXIT)"
+  fi
+
+  run_cmd "$tmp/out" "$tmp/err" "$BIN" cost projected --help
+  if [ "$EXIT" -eq 0 ] && ! grep -Eq '^[[:space:]]+--state-only' "$tmp/out"; then
+    pass "cost projected: --state-only is not a projected flag"
+  else
+    fail "cost projected --help lists --state-only; the action must not pass it there"
+  fi
+
+  # 13. kubernetes and jev are registry names the action accepts.
+  run_cmd "$tmp/plugins.json" "$tmp/err" "$BIN" plugin list --available --output json
+  if [ "$EXIT" -eq 0 ] && jq -e '
+      (map(.name) | index("kubernetes")) != null
+      and (map(.name) | index("jev")) != null
+    ' "$tmp/plugins.json" >/dev/null; then
+    pass "plugin registry: kubernetes and jev are listed"
+  else
+    fail "plugin list --available missing kubernetes or jev (exit=$EXIT)"
   fi
 
   echo
