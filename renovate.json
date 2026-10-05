@@ -2,5 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "typescript 7 is the native compiler and does not ship the JS API. typescript-eslint 8.71 requires typescript <6.1.0.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1.0"
+    }
   ]
 }
