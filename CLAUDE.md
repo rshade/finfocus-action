@@ -118,7 +118,7 @@ main.ts
 
 ## Important Notes
 
-- The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` copy (for example 0.38.4) produces a bundle that fails the Check dist workflow.
+- The `dist/` folder is committed and must be rebuilt with `npm ci` and `npm run build` in that worktree before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` (for example 0.38.4), or a symlink to another checkout's `node_modules`, changes webpack module ids including the async chunk number and fails the Check dist workflow. ncc leaves old chunks in place, so do not delete them unless a following rebuild diff is empty.
 - The finfocus contract job must pass `GITHUB_TOKEN` into `scripts/contract.sh`. `plugin install` reads that variable. `GH_TOKEN` is only for the `gh` CLI download step. Without `GITHUB_TOKEN`, the unauthenticated rate limit fails the v0.4.0 aws-public install and the budget breach check exits 0.
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data

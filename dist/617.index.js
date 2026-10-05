@@ -14,7 +14,9 @@ export const modules = {
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(5260);
 /* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6141);
 /* harmony import */ var _install_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(8638);
-/* harmony import */ var _errors_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(3916);
+/* harmony import */ var _errors_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(3916);
+/* harmony import */ var _display_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(4857);
+
 
 
 
@@ -53,6 +55,7 @@ async function checkBudgetThresholdWithExitCodes(config) {
             '--exit-on-threshold',
             '--exit-code',
             String(_types_js__WEBPACK_IMPORTED_MODULE_2__/* .BudgetExitCode */ .T.THRESHOLD_BREACH),
+            ...(0,_display_js__WEBPACK_IMPORTED_MODULE_4__/* .filterArgs */ .et)(config.resourceFilters),
         ], {
             ignoreReturnCode: true,
             silent: !config.debug,
@@ -79,9 +82,9 @@ async function checkBudgetThresholdWithExitCodes(config) {
         }
         // Not a budget result: the finfocus call itself failed. Surface the error
         // envelope message when present, otherwise the raw stderr.
-        const envelope = (0,_errors_js__WEBPACK_IMPORTED_MODULE_4__/* .parseErrorEnvelope */ .a)(result.stderr);
+        const envelope = (0,_errors_js__WEBPACK_IMPORTED_MODULE_5__/* .parseErrorEnvelope */ .a)(result.stderr);
         if (envelope) {
-            throw new Error((0,_errors_js__WEBPACK_IMPORTED_MODULE_4__/* .formatEnvelopeError */ .u)(envelope, result.exitCode));
+            throw new Error((0,_errors_js__WEBPACK_IMPORTED_MODULE_5__/* .formatEnvelopeError */ .u)(envelope, result.exitCode));
         }
         throw new Error(`finfocus cost projected exited with code ${result.exitCode}: ` +
             (result.stderr.trim() || '(no stderr output)'));
