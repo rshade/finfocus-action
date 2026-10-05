@@ -33384,7 +33384,7 @@ class Installer {
             lib_core/* error */.z3(`  Download FAILED`);
             throw new Error(`Failed to download finfocus from ${downloadUrl}. ` +
                 `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
-                `Error: ${err instanceof Error ? err.message : String(err)}`);
+                `Error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
         }
         let extractPath;
         try {
@@ -33408,7 +33408,7 @@ class Installer {
         }
         catch (err) {
             lib_core/* error */.z3(`  Extraction FAILED`);
-            throw new Error(`Failed to extract finfocus archive. Error: ${err instanceof Error ? err.message : String(err)}`);
+            throw new Error(`Failed to extract finfocus archive. Error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
         }
         if (debug)
             lib_core/* info */.pq(`=== Caching binary ===`);
@@ -37308,7 +37308,7 @@ function parseJsonList(raw, inputName, mapItem) {
         parsed = JSON.parse(raw);
     }
     catch (err) {
-        throw new Error(`${inputName} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`${inputName} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
     }
     if (!Array.isArray(parsed)) {
         throw new Error(`${inputName} must be a JSON array.`);
@@ -37380,7 +37380,7 @@ function registryNamesFromList(stdout) {
         parsed = JSON.parse(stdout);
     }
     catch (err) {
-        throw new Error(`finfocus plugin list --available did not return JSON: ${err instanceof Error ? err.message : String(err)}`);
+        throw new Error(`finfocus plugin list --available did not return JSON: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
     }
     const list = Array.isArray(parsed)
         ? parsed
@@ -37489,7 +37489,7 @@ class PluginManager {
             catch (err) {
                 main_core/* error */.z3(`  Plugin installation threw exception`);
                 main_core/* error */.z3(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
-                throw new Error(`Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`);
+                throw new Error(`Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
             }
         }
         if (debug) {
@@ -37619,7 +37619,7 @@ class Analyzer {
         catch (parseErr) {
             main_core/* error */.z3(`  Input file is NOT valid JSON`);
             main_core/* error */.z3(`  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
-            throw new Error(`Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            throw new Error(`Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`, { cause: parseErr });
         }
         const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
         args.push(...(0,display/* filterArgs */.et)(config?.resourceFilters));
@@ -37696,7 +37696,7 @@ class Analyzer {
             main_core/* error */.z3(`  Raw output (first 1000 chars): ${output.stdout.substring(0, 1000)}`);
             throw new Error(`Failed to parse finfocus JSON output.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}\n` +
-                `Raw output: ${output.stdout.substring(0, 500)}...`);
+                `Raw output: ${output.stdout.substring(0, 500)}...`, { cause: err });
         }
     }
     calculateSustainabilityMetrics(report) {
@@ -37744,7 +37744,7 @@ class Analyzer {
             JSON.parse(planContent);
         }
         catch (parseErr) {
-            throw new Error(`Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            throw new Error(`Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`, { cause: parseErr });
         }
         const args = recommendationArgs(planPath, config);
         if (debug) {
@@ -37963,7 +37963,7 @@ class Analyzer {
             main_core/* error */.z3(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
             throw new Error(`Failed to parse finfocus estimate JSON output.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}\n` +
-                `Raw output: ${output.stdout.substring(0, 500)}...`);
+                `Raw output: ${output.stdout.substring(0, 500)}...`, { cause: err });
         }
     }
     parseEstimateSpec(raw) {

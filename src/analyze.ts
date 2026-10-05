@@ -111,6 +111,7 @@ export class Analyzer implements IAnalyzer {
       );
       throw new Error(
         `Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        { cause: parseErr },
       );
     }
 
@@ -199,6 +200,7 @@ export class Analyzer implements IAnalyzer {
         `Failed to parse finfocus JSON output.\n` +
           `Error: ${err instanceof Error ? err.message : String(err)}\n` +
           `Raw output: ${output.stdout.substring(0, 500)}...`,
+        { cause: err },
       );
     }
   }
@@ -263,6 +265,7 @@ export class Analyzer implements IAnalyzer {
     } catch (parseErr) {
       throw new Error(
         `Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        { cause: parseErr },
       );
     }
 
@@ -522,6 +525,7 @@ export class Analyzer implements IAnalyzer {
         `Failed to parse finfocus estimate JSON output.\n` +
           `Error: ${err instanceof Error ? err.message : String(err)}\n` +
           `Raw output: ${output.stdout.substring(0, 500)}...`,
+        { cause: err },
       );
     }
   }

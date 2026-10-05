@@ -81,6 +81,7 @@ export class PluginManager implements IPluginManager {
         core.error(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
         throw new Error(
           `Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
         );
       }
     }

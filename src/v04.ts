@@ -357,6 +357,7 @@ function parseJsonList<T>(
   } catch (err) {
     throw new Error(
       `${inputName} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     );
   }
   if (!Array.isArray(parsed)) {
