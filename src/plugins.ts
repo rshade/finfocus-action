@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { IPluginManager, ActionConfiguration } from './types.js';
+import { assertInstallablePlugin, parsePluginSpec, registryNamesFromList } from './plugin-specs.js';
 
 export class PluginManager implements IPluginManager {
   async installPlugins(plugins: string[], config?: ActionConfiguration): Promise<void> {
@@ -14,9 +15,15 @@ export class PluginManager implements IPluginManager {
       core.info(`  Plugins to install: [${plugins.map((p) => `"${p}"`).join(', ')}]`);
     }
 
-    if (plugins.length === 0) {
+    const requested = plugins.map((plugin) => plugin.trim()).filter((plugin) => plugin.length > 0);
+    if (requested.length === 0) {
       if (debug) core.info(`  No plugins to install`);
       return;
+    }
+
+    const registryNames = await this.availablePluginNames(debug);
+    for (const plugin of requested) {
+      assertInstallablePlugin(parsePluginSpec(plugin), registryNames);
     }
 
     const pluginDir = path.join(os.homedir(), '.finfocus', 'plugins');
@@ -25,18 +32,12 @@ export class PluginManager implements IPluginManager {
       core.info(`  Plugin directory exists: ${fs.existsSync(pluginDir)}`);
     }
 
-    for (let i = 0; i < plugins.length; i++) {
-      const plugin = plugins[i];
-      const trimmedPlugin = plugin.trim();
+    for (let i = 0; i < requested.length; i++) {
+      const trimmedPlugin = requested[i];
 
       if (debug)
-        core.info(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
+        core.info(`=== Installing plugin ${i + 1}/${requested.length}: "${trimmedPlugin}" ===`);
       else core.info(`Installing finfocus plugin: "${trimmedPlugin}"`);
-
-      if (!trimmedPlugin) {
-        if (debug) core.info(`  Skipping empty plugin name`);
-        continue;
-      }
 
       // We avoid the progress bar in logs by using silent mode in exec
       const args = ['plugin', 'install', trimmedPlugin];
@@ -94,6 +95,26 @@ export class PluginManager implements IPluginManager {
         core.info(`  Plugin directory contents: ${contents.join(', ') || '(empty)'}`);
       }
     }
+  }
+
+  private async availablePluginNames(debug: boolean): Promise<string[]> {
+    if (debug) core.info(`  Running: finfocus plugin list --available --output json`);
+    const output = await exec.getExecOutput(
+      'finfocus',
+      ['plugin', 'list', '--available', '--output', 'json'],
+      { silent: !debug, ignoreReturnCode: true },
+    );
+    if (output.exitCode !== 0) {
+      throw new Error(
+        `Failed to list registry plugins.\n` +
+          `Exit code: ${output.exitCode}\n` +
+          `Stderr: ${output.stderr}\n` +
+          `Stdout: ${output.stdout}`,
+      );
+    }
+    const names = registryNamesFromList(output.stdout);
+    if (debug) core.info(`  Registry plugins: ${names.join(', ')}`);
+    return names;
   }
 
   private async listInstalledPlugins(debug: boolean): Promise<void> {

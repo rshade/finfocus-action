@@ -6,13 +6,24 @@ import {
   ActualCostReport,
   SustainabilityReport,
   EstimateReport,
+  ClusterReport,
+  StateOnlyReport,
   isV041Diff,
 } from './types.js';
+import { reportFromStateOnly } from './v04.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
 import { Commenter } from './comment.js';
 import { ConfigManager } from './config.js';
+import {
+  annotateReportFromPlan,
+  parseGroupBy,
+  parseMaxResourcesDisplayed,
+  parseMinCostThreshold,
+  parseResourceFilters,
+  parseSortBy,
+} from './display.js';
 
 function parseBoolean(value: string, defaultValue: boolean): boolean {
   if (!value || value.trim() === '') return defaultValue;
@@ -150,6 +161,28 @@ async function run(): Promise<void> {
 
     const estimateSpec = core.getInput('estimate_spec') || '';
 
+    const includeClusterCosts = parseBoolean(core.getInput('include_cluster_costs'), false);
+    const clusterGroupBy = core.getInput('cluster_group_by') || 'namespace';
+    const clusterNamespace = core.getInput('cluster_namespace') || '';
+    const clusterContext = core.getInput('cluster_context') || '';
+    const clusterSelector = core.getInput('cluster_selector') || '';
+    const enableJevScoring = parseBoolean(core.getInput('enable_jev_scoring'), false);
+    const includeDismissedRecommendations = parseBoolean(
+      core.getInput('include_dismissed_recommendations'),
+      false,
+    );
+    const dismissRecommendations = core.getInput('dismiss_recommendations') || '';
+    const snoozeRecommendations = core.getInput('snooze_recommendations') || '';
+    const stateOnly = parseBoolean(core.getInput('state_only'), false);
+    const resourceFilters = parseResourceFilters(core.getInput('resource_filter'));
+    const groupBy = parseGroupBy(core.getInput('group_by'));
+    const minCostThreshold = parseMinCostThreshold(core.getInput('min_cost_threshold'));
+    const maxResourcesDisplayed = parseMaxResourcesDisplayed(
+      core.getInput('max_resources_displayed'),
+    );
+    const showOnlyChanges = parseBoolean(core.getInput('show_only_changes'), false);
+    const sortBy = parseSortBy(core.getInput('sort_by'));
+
     config = {
       pulumiPlanJsonPath,
       githubToken,
@@ -177,6 +210,22 @@ async function run(): Promise<void> {
       budgetPeriod,
       budgetAlerts,
       estimateSpec,
+      includeClusterCosts,
+      clusterGroupBy,
+      clusterNamespace,
+      clusterContext,
+      clusterSelector,
+      enableJevScoring,
+      includeDismissedRecommendations,
+      dismissRecommendations,
+      snoozeRecommendations,
+      stateOnly,
+      resourceFilters,
+      groupBy,
+      minCostThreshold,
+      maxResourcesDisplayed,
+      showOnlyChanges,
+      sortBy,
     };
 
     if (config.debug) {
@@ -270,11 +319,30 @@ async function run(): Promise<void> {
     }
 
     // Setup budget configuration if budget amount is provided
+    const configManager = new ConfigManager();
     if (config.budgetAmount && config.budgetAmount > 0) {
       core.info('');
       core.startGroup('📊 Setting up budget configuration');
-      const configManager = new ConfigManager();
       await configManager.writeConfig(config);
+      core.endGroup();
+    }
+
+    if (config.enableJevScoring) {
+      core.info('');
+      core.startGroup('🧮 Enabling Jev recommendation scoring');
+      await configManager.writeScoringConfig(config);
+      if (!process.env.TYPESAFE_API_KEY) {
+        core.warning(
+          'enable-jev-scoring is set but TYPESAFE_API_KEY is not in the environment. ' +
+            'The jev plugin returns UNAUTHENTICATED and recommendations stay unscored.',
+        );
+      }
+      const jevRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'jev');
+      if (!jevRequested) {
+        core.warning(
+          'enable-jev-scoring needs the jev plugin. Add jev to install-plugins if it is not already installed.',
+        );
+      }
       core.endGroup();
     }
 
@@ -288,10 +356,38 @@ async function run(): Promise<void> {
       return;
     }
 
+    let stateOnlyReport: StateOnlyReport | undefined;
+    if (config.stateOnly) {
+      core.info('');
+      core.startGroup('📋 Running state-only overview');
+      stateOnlyReport = await analyzer.runStateOnly(config);
+      core.info(
+        `📋 State-only projected monthly: ${stateOnlyReport.summary.projectedMonthly} ${stateOnlyReport.summary.currency}`,
+      );
+      core.setOutput(
+        'state-projected-monthly',
+        stateOnlyReport.summary.projectedMonthly.toString(),
+      );
+      core.endGroup();
+    }
+
+    const planFileExists = fs.existsSync(config.pulumiPlanJsonPath);
+    const runProjected = Boolean(config.terraformStatePath) || planFileExists || !config.stateOnly;
+
     core.info('');
     core.startGroup('💰 Running cost analysis');
     const analysisStartTime = Date.now();
-    const report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
+    let report;
+    if (runProjected) {
+      report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
+    } else if (stateOnlyReport) {
+      core.info(
+        'No Pulumi plan or Terraform state file is present. Using the state-only overview as the cost total.',
+      );
+      report = reportFromStateOnly(stateOnlyReport);
+    } else {
+      throw new Error('state-only did not produce an overview report.');
+    }
     if (config.debug) {
       core.info(`Analysis took: ${Date.now() - analysisStartTime}ms`);
     }
@@ -360,8 +456,36 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
+    let clusterReport: ClusterReport | undefined;
+    if (config.includeClusterCosts) {
+      const kubernetesRequested = config.installPlugins.some(
+        (plugin) => plugin.split('@')[0] === 'kubernetes',
+      );
+      if (!kubernetesRequested) {
+        core.warning(
+          'include-cluster-costs needs the kubernetes plugin and a kubeconfig on the runner. ' +
+            'Add kubernetes to install-plugins if it is not already installed.',
+        );
+      }
+      core.info('');
+      core.startGroup('☸️ Running cluster cost allocation');
+      clusterReport = await analyzer.runCluster(config);
+      core.setOutput('cluster-total-cost', clusterReport.total.toString());
+      core.info(
+        `☸️ Cluster cost (${clusterReport.group_by}): ${clusterReport.total} ${clusterReport.currency}`,
+      );
+      core.endGroup();
+    }
+
     let recommendationsReport: RecommendationsReport | undefined;
-    if (config.includeRecommendations) {
+    if (config.dismissRecommendations || config.snoozeRecommendations) {
+      core.info('');
+      core.startGroup('🙈 Applying recommendation dismissals');
+      const planForDismissal = planFileExists ? config.pulumiPlanJsonPath : undefined;
+      await analyzer.applyRecommendationLifecycle(planForDismissal, config);
+      core.endGroup();
+    }
+    if (config.includeRecommendations && (planFileExists || !config.stateOnly)) {
       core.info('');
       core.startGroup('💡 Running cost recommendations');
       const recommendationsStartTime = Date.now();
@@ -376,6 +500,10 @@ async function run(): Promise<void> {
         `💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`,
       );
       core.endGroup();
+    } else if (config.includeRecommendations && config.stateOnly && !planFileExists) {
+      core.info(
+        'Skipping recommendations: state-only mode has no Pulumi plan, and cost recommendations requires --pulumi-json.',
+      );
     }
 
     let estimateReport: EstimateReport | undefined;
@@ -439,8 +567,13 @@ async function run(): Promise<void> {
       core.info('');
       core.startGroup('💬 Posting PR comment');
       const commentStartTime = Date.now();
-      await commenter.upsertComment(
+      const commentReport = annotateReportFromPlan(
         report,
+        config.pulumiPlanJsonPath,
+        config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'),
+      );
+      await commenter.upsertComment(
+        commentReport,
         config.githubToken,
         config,
         recommendationsReport,
@@ -448,6 +581,8 @@ async function run(): Promise<void> {
         sustainabilityReport,
         budgetStatus,
         estimateReport,
+        clusterReport,
+        stateOnlyReport,
       );
       if (config.debug) {
         core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);

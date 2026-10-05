@@ -179,12 +179,155 @@ without failing the action. The feature is tested against **finfocus v0.4.0**. T
 `--modify` mode is not exposed: in v0.4.0 it cannot match Pulumi URNs (resource IDs contain
 colons, which the modify parser splits on).
 
+### Cluster costs (finfocus v0.4.0+)
+
+`include-cluster-costs` runs `finfocus cost cluster` and adds a cluster section to the
+PR comment. The runner needs a kubeconfig and the `kubernetes` plugin. Group with
+`cluster-group-by`: `namespace` (default), `controller`, `pod`, `node`, `pulumi-stack`,
+or `label:<key>`.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    install-plugins: aws-public,kubernetes
+    include-cluster-costs: true
+    cluster-group-by: namespace
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+`cluster-namespace` limits the report to one namespace (idle is omitted).
+`cluster-context` selects a kubeconfig context. `cluster-selector` is a
+comma-separated list of `key=value` pod selectors. The output `cluster-total-cost`
+is the monthly total.
+
+### Jev recommendation scoring (finfocus v0.4.0+)
+
+`enable-jev-scoring` writes this block to `~/.finfocus/config.yaml` and leaves
+`--no-scoring` off the recommendations command:
+
+```yaml
+scoring:
+  enabled: true
+  plugin: jev
+  identifier_mode: pseudonymized
+```
+
+Install the `jev` plugin and pass `TYPESAFE_API_KEY` as an environment variable.
+The action does not put that key in an input or in the config file. Scores
+(risk, worth acting) show up on the recommendation table. They rank work for
+review. They do not dismiss a recommendation. An existing `scoring:` section in
+the config file is left as it is.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  env:
+    TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+  with:
+    pulumi-plan-json: plan.json
+    install-plugins: aws-public,jev
+    enable-jev-scoring: true
+```
+
+### Dismissals and snoozes (finfocus v0.4.0+)
+
+By default the action does not pass `--include-dismissed`, and it drops any
+recommendation whose status is `Dismissed` or `Snoozed`. A PR comment does not
+repeat them.
+
+To record a dismissal or snooze on the runner before the comment is built:
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    dismiss-recommendations: >
+      [{"id":"rec-123","reason":"business-constraint"}]
+    snooze-recommendations: >
+      [{"id":"rec-456","until":"2026-04-01","reason":"deferred"}]
+```
+
+Reasons are `not-applicable`, `already-implemented`, `business-constraint`,
+`technical-constraint`, `deferred`, `inaccurate`, and `other`. `other` requires
+`note`. `until` is `YYYY-MM-DD` or RFC3339. Set
+`include-dismissed-recommendations: true` to show them anyway.
+
+### State-only overview (finfocus v0.3.5+, tested on v0.4.0 and v0.4.3)
+
+`--state-only` is a flag on `finfocus overview`, not on `cost projected`. It
+skips `pulumi preview` and prices the exported stack state. Set `state-only`
+and `pulumi-state-json`. The output `state-projected-monthly` is the overview
+total. When no Pulumi plan and no Terraform state file exist, that total is
+also the comment total. Recommendations are skipped in that case because
+`cost recommendations` requires `--pulumi-json`.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    state-only: true
+    pulumi-state-json: state.json
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Plugin names
+
+`install-plugins` is checked against `finfocus plugin list --available` after
+the CLI is installed. `kubernetes` and `jev` are registry names as of finfocus
+v0.4.0. A plugin that is not in the registry must be a `github.com/owner/repo`
+specifier (optional `@version`).
+
+### Plugin decline reasons (finfocus v0.4.0+)
+
+When a plugin `Supports()` call declines a resource, finfocus puts the reason
+in the resource `notes` field, for example
+`(declined by kubernetes: type not served)`. The comment lists those notes
+under **Plugin declines** instead of showing the resource as an unexplained $0.
+Pricing errors in the report `errors` array stay in **Resources Not Priced**.
+
+### Resource filters and comment grouping (finfocus v0.4.0+)
+
+`resource-filter` is passed to `finfocus cost projected` and `cost actual` as
+repeatable `--filter` flags. Separate expressions with commas. finfocus matches
+`type`, `provider`, `service`, and `id` as case-insensitive substrings, so
+`type=ec2` matches `aws:ec2/instance:Instance`. `tag:env=prod` matches a Pulumi
+tag. Several filters are combined with AND. A `*` is a literal character, not
+a wildcard. An expression without `=` fails the action before the CLI runs.
+
+`group-by` rolls the comment up by `resource`, `type`, `provider` (the default),
+`service`, or one `tag:<key>`. Tag groups read `inputs.tags` from the Pulumi
+plan and label missing tags `(untagged)`. This input is not
+`actual-costs-group-by` and not `cluster-group-by`.
+
+`min-cost-threshold` (for example `1USD`) drops cheap rows from the tables. The
+projected monthly total stays the finfocus total. `max-resources-displayed`
+caps the resource table (default 10, `0` shows every row). Group totals are
+computed before that cap. `sort-by` is `cost`, `name`, `type`, or `change`.
+`show-only-changes` keeps plan steps whose op is create, update, delete,
+replace, or import, and prints the plan diff as the net change.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    install-plugins: aws-public
+    resource-filter: type=ec2,tag:Environment=dev
+    group-by: service
+    min-cost-threshold: 1USD
+    max-resources-displayed: 10
+    show-only-changes: true
+    sort-by: cost
+```
+
+Pagination, NDJSON output, and cost forecasting are not part of this action yet.
+
 ## Compatibility
 
 The action is tested against **finfocus v0.4.0** (pinned) and **latest** on
 every pull request and daily via the contract job in
 `.github/workflows/test.yml`, which runs `scripts/contract.sh` against the real
-released binaries.
+released binaries. Latest at the time cluster costs, Jev scoring, dismissals,
+and `overview --state-only` were added was **v0.4.3**. Those commands are also
+present on the v0.4.0 release.
 
 - `finfocus-version: latest` resolves to the newest stable CLI release matching
   `v<major>.<minor>.<patch>` (e.g., `v0.4.1`), excluding plugin releases
@@ -198,20 +341,22 @@ released binaries.
 
 ## Outputs
 
-| Output                   | Description                                                       |
-| :----------------------- | :---------------------------------------------------------------- |
-| `total-monthly-cost`     | The absolute projected monthly cost.                              |
-| `cost-diff`              | The difference in cost compared to the base state.                |
-| `currency`               | The currency code (e.g., USD).                                    |
-| `report-json-path`       | Path to the generated full JSON report.                           |
-| `actual-total-cost`      | Total actual cost for the specified period.                       |
-| `actual-cost-period`     | The date range for actual costs (e.g., 2025-01-01 to 2025-01-07). |
-| `total-carbon-footprint` | Total estimated CO2 emissions (kgCO2e/month).                     |
-| `carbon-intensity`       | Carbon intensity per dollar spent (gCO2e/USD).                    |
-| `budget-spent`           | Current budget spend amount.                                      |
-| `budget-remaining`       | Remaining budget amount.                                          |
-| `budget-percent-used`    | Percentage of budget used.                                        |
+| Output                    | Description                                                       |
+| :------------------------ | :---------------------------------------------------------------- |
+| `total-monthly-cost`      | The absolute projected monthly cost.                              |
+| `cost-diff`               | The difference in cost compared to the base state.                |
+| `currency`                | The currency code (e.g., USD).                                    |
+| `report-json-path`        | Path to the generated full JSON report.                           |
+| `actual-total-cost`       | Total actual cost for the specified period.                       |
+| `actual-cost-period`      | The date range for actual costs (e.g., 2025-01-01 to 2025-01-07). |
+| `total-carbon-footprint`  | Total estimated CO2 emissions (kgCO2e/month).                     |
+| `carbon-intensity`        | Carbon intensity per dollar spent (gCO2e/USD).                    |
+| `budget-spent`            | Current budget spend amount.                                      |
+| `budget-remaining`        | Remaining budget amount.                                          |
+| `budget-percent-used`     | Percentage of budget used.                                        |
 | `unpriced-resource-count` | Number of resources that could not be priced.                     |
+| `cluster-total-cost`      | Monthly cluster cost when `include-cluster-costs` is true.        |
+| `state-projected-monthly` | Projected monthly cost from `overview --state-only`.              |
 
 ### Unpriced Resources in PR Comments
 

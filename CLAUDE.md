@@ -37,10 +37,13 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 |------|-------|----------------|
 | `main.ts` | — | Entry point, config parsing, orchestration |
 | `install.ts` | `Installer` | Downloads finfocus binary from GitHub releases, caches with `@actions/tool-cache` |
-| `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI |
+| `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI. Names are checked against `plugin list --available`; `kubernetes` and `jev` are registry names |
+| `plugin-specs.ts` | — | Parses registry and `github.com/owner/repo` plugin specifiers |
+| `v04.ts` | — | `cost cluster`, Jev scoring flags, dismiss/snooze, `overview --state-only`, Supports() decline notes |
 | `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
-| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected` (with `--pulumi-json` or `--terraform-state`), `recommendations`, `actual`, `estimate` commands; calculates sustainability metrics and budget status |
+| `analyze.ts` | `Analyzer` | Runs `finfocus cost projected` (with `--pulumi-json` or `--terraform-state`), `recommendations`, `actual`, `estimate`, `cost cluster`, and `overview --state-only`; calculates sustainability metrics and budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
+| `display.ts` | — | Resource filters (`--filter`), comment grouping, min cost, display cap, change-only rows |
 | `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
 | `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code) |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
@@ -52,12 +55,16 @@ main.ts
   └─> Installer.install()           # Download/cache finfocus binary
   └─> PluginManager.installPlugins() # Optional plugin installation
   └─> ConfigManager.writeConfig()   # Optional: create budget config.yaml
+  └─> ConfigManager.writeScoringConfig() # Optional: scoring.plugin jev
   └─> [Analyzer Mode Branch]
   │     └─> Analyzer.setupAnalyzerMode()  # Creates policy pack, sets PULUMI_POLICY_PACK
   └─> [Standard Mode Branch]
-        └─> Analyzer.runAnalysis()        # finfocus cost projected
+        └─> Analyzer.runStateOnly()       # optional: finfocus overview --state-only
+        └─> Analyzer.runAnalysis()        # finfocus cost projected (skipped when state-only and no plan)
         └─> Analyzer.calculateSustainabilityMetrics()
-        └─> Analyzer.runRecommendations() # finfocus cost recommendations
+        └─> Analyzer.runCluster()         # optional: finfocus cost cluster (kubernetes plugin)
+        └─> Analyzer.applyRecommendationLifecycle() # optional dismiss/snooze
+        └─> Analyzer.runRecommendations() # finfocus cost recommendations (--no-scoring unless Jev is enabled)
         └─> Analyzer.runEstimate()        # finfocus cost estimate (opt-in via estimate-spec)
         └─> Analyzer.runActualCosts()     # finfocus cost actual
         └─> Analyzer.calculateBudgetStatus() # Local budget math (no CLI call)
@@ -111,7 +118,8 @@ main.ts
 
 ## Important Notes
 
-- The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes
+- The `dist/` folder is committed and must be rebuilt with `npm ci` and `npm run build` in that worktree before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` (for example 0.38.4), or a symlink to another checkout's `node_modules`, changes webpack module ids including the async chunk number and fails the Check dist workflow. ncc leaves old chunks in place, so do not delete them unless a following rebuild diff is empty.
+- The finfocus contract job must pass `GITHUB_TOKEN` into `scripts/contract.sh`. `plugin install` reads that variable. `GH_TOKEN` is only for the `gh` CLI download step. Without `GITHUB_TOKEN`, the unauthenticated rate limit fails the v0.4.0 aws-public install and the budget breach check exits 0.
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data
   in the finfocus report
@@ -131,6 +139,30 @@ main.ts
   exits 1 (`internal_error`) or 2 (`validation_error`) on failures, and the action surfaces the
   error envelope `message` for those. The action auto-detects version and falls back to JSON parsing
   for versions < 0.2.5.
+- **finfocus v0.4.3** is the latest GitHub release checked for issue #89 (published
+  2026-10-05). `scripts/contract.sh` passes against the official v0.4.0 and v0.4.3 release
+  binaries. Do not verify flags against the sibling finfocus checkout when that tree is a
+  dirty feature branch. v0.4.3 `cost projected` JSON adds `diff` and `errors` under
+  `.finfocus`; those keys are additive. `--state-only` exists on `finfocus overview` only.
+  It is not a `cost projected` flag. `cost cluster --group-by` accepts `namespace`,
+  `controller`, `pod`, `node`, `pulumi-stack`, and `label:<key>`.
+- Jev scoring is opt-in. When `enable-jev-scoring` is false, `cost recommendations` runs
+  with `--no-scoring`. When it is true, the action writes `scoring.enabled: true` and
+  `scoring.plugin: jev` and omits `--no-scoring`. `TYPESAFE_API_KEY` stays an environment
+  variable. Scores do not dismiss recommendations.
+- Dismissals: the action does not pass `--include-dismissed` unless asked, and it drops
+  recommendations with status `Dismissed` or `Snoozed`. `dismiss-recommendations` and
+  `snooze-recommendations` run `cost recommendations dismiss|snooze --force` first.
+- Supports() decline reasons are the `notes` text `(declined by <plugin>: <reason>)` on a
+  resource. They are not the report `errors` array.
+- Resource filters are finfocus `--filter` expressions (`type=ec2` is a case-insensitive
+  substring, `tag:env=prod` matches plan tags). They are passed to `cost projected`, `cost
+  actual`, and the budget threshold check. `*` is not a wildcard. Comment `group-by`
+  (`resource`, `type`, `provider`, `service`, `tag:<key>`) is action-side. `cost projected`
+  has no `--group-by`. `min-cost-threshold`, `max-resources-displayed`, `sort-by`, and
+  `show-only-changes` change the comment only. The projected monthly total stays the CLI total.
+- Do not implement pagination, NDJSON, or cost forecasting while issues #49, #21, and #19
+  are still open for re-evaluation. Those overlap #89 and were left out on purpose.
 
 ## Active Technologies
 

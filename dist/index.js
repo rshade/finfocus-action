@@ -31104,6 +31104,475 @@ module.exports = {
 
 /***/ }),
 
+/***/ 4857:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   Lh: () => (/* binding */ parseSortBy),
+/* harmony export */   MH: () => (/* binding */ annotateReportFromPlan),
+/* harmony export */   Pq: () => (/* binding */ parseResourceFilters),
+/* harmony export */   Wk: () => (/* binding */ formatDisplaySections),
+/* harmony export */   eh: () => (/* binding */ parseGroupBy),
+/* harmony export */   et: () => (/* binding */ filterArgs),
+/* harmony export */   js: () => (/* binding */ usesDisplayControls),
+/* harmony export */   qr: () => (/* binding */ parseMaxResourcesDisplayed),
+/* harmony export */   yi: () => (/* binding */ parseMinCostThreshold)
+/* harmony export */ });
+/* unused harmony exports providerOf, serviceOf, resourceName, selectResources */
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(2398);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9896);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__nccwpck_require__.n(fs__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(6141);
+
+
+
+const CHANGE_OPS = new Set([
+    'create',
+    'update',
+    'delete',
+    'replace',
+    'create-replacement',
+    'delete-replaced',
+    'import',
+]);
+const GROUP_KINDS = new Set(['resource', 'type', 'provider', 'service']);
+function parseResourceFilters(raw) {
+    if (!raw || raw.trim() === '') {
+        return [];
+    }
+    const filters = raw
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+    for (const filter of filters) {
+        const parts = filter.split('=');
+        if (parts.length < 2 || parts[0].trim() === '' || parts.slice(1).join('=').trim() === '') {
+            throw new Error(`Invalid resource-filter "${filter}". finfocus expects key=value, for example type=ec2 or tag:env=prod.`);
+        }
+    }
+    return filters;
+}
+function filterArgs(filters) {
+    if (!filters || filters.length === 0) {
+        return [];
+    }
+    const args = [];
+    for (const filter of filters) {
+        args.push('--filter', filter);
+    }
+    return args;
+}
+function parseGroupBy(raw) {
+    const value = (raw ?? '').trim() || 'provider';
+    if (GROUP_KINDS.has(value)) {
+        return value;
+    }
+    if (value.startsWith('tag:')) {
+        const key = value.slice('tag:'.length).trim();
+        if (key.length === 0 || /\s/.test(key) || key.includes('=')) {
+            throw new Error(`Invalid group-by "${value}". Use tag:<key>, for example tag:team. One dimension only.`);
+        }
+        return `tag:${key}`;
+    }
+    throw new Error(`Invalid group-by "${value}". Supported: resource, type, provider, service, tag:<key>.`);
+}
+function parseSortBy(raw) {
+    const value = (raw ?? '').trim() || 'cost';
+    if (value === 'cost' || value === 'name' || value === 'type' || value === 'change') {
+        return value;
+    }
+    throw new Error(`Invalid sort-by "${value}". Supported: cost, name, type, change.`);
+}
+function parseMinCostThreshold(raw) {
+    const value = (raw ?? '').trim();
+    if (value === '') {
+        return 0;
+    }
+    const match = value.match(/^(\d+(?:\.\d+)?)(?:\s*[A-Za-z]+)?$/);
+    if (!match) {
+        throw new Error(`Invalid min-cost-threshold "${value}". Expected a number with an optional currency, for example 1USD.`);
+    }
+    return Number(match[1]);
+}
+function parseMaxResourcesDisplayed(raw) {
+    const value = (raw ?? '').trim();
+    if (value === '') {
+        return 10;
+    }
+    if (!/^\d+$/.test(value)) {
+        throw new Error(`Invalid max-resources-displayed "${value}". Expected a whole number. 0 shows every resource.`);
+    }
+    return Number(value);
+}
+function usesDisplayControls(config) {
+    if (!config) {
+        return false;
+    }
+    if (config.maxResourcesDisplayed !== undefined) {
+        return true;
+    }
+    if (config.showOnlyChanges) {
+        return true;
+    }
+    if ((config.minCostThreshold ?? 0) > 0) {
+        return true;
+    }
+    if (config.sortBy !== undefined && config.sortBy !== 'cost') {
+        return true;
+    }
+    return config.groupBy !== undefined && config.groupBy !== 'provider';
+}
+function providerOf(resourceType) {
+    const provider = resourceType.split(':')[0];
+    return provider || 'other';
+}
+function serviceOf(resourceType) {
+    const parts = resourceType.split(':');
+    if (parts.length < 2 || !parts[1]) {
+        return 'other';
+    }
+    const slash = parts[1].indexOf('/');
+    return slash > 0 ? parts[1].slice(0, slash) : parts[1];
+}
+function resourceName(resourceId) {
+    return resourceId.split('::').pop() || resourceId;
+}
+function annotateReportFromPlan(report, planPath, needed) {
+    if (!needed) {
+        return report;
+    }
+    if (!planPath || !fs__WEBPACK_IMPORTED_MODULE_1__.existsSync(planPath)) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e('show-only-changes and tag grouping need a Pulumi plan with steps. No plan file was found, so every priced resource stays in the comment.');
+        return report;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(fs__WEBPACK_IMPORTED_MODULE_1__.readFileSync(planPath, 'utf8'));
+    }
+    catch (error) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e(`Could not read Pulumi plan for change and tag grouping: ${error instanceof Error ? error.message : String(error)}`);
+        return report;
+    }
+    const annotations = planAnnotations(parsed);
+    if (annotations.size === 0) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e('Pulumi plan has no steps with a urn, so change and tag grouping have nothing to join.');
+        return report;
+    }
+    const resources = (report.resources ?? report.summary?.resources ?? []).map((resource) => {
+        const found = annotations.get(resource.resourceId);
+        if (!found) {
+            return resource;
+        }
+        return { ...resource, change: found.op, tags: found.tags };
+    });
+    return { ...report, resources };
+}
+function planAnnotations(plan) {
+    const found = new Map();
+    const steps = stepsOf(plan);
+    for (const step of steps) {
+        const resource = step.resource && typeof step.resource === 'object' ? step.resource : undefined;
+        const urn = stringField(step, 'urn') ?? (resource ? stringField(resource, 'urn') : undefined);
+        if (!urn) {
+            continue;
+        }
+        const op = stringField(step, 'op') ?? (resource ? stringField(resource, 'op') : undefined);
+        const tags = readTags(step.inputs) ?? (resource ? readTags(resource.inputs) : undefined);
+        found.set(urn, { op, tags });
+    }
+    return found;
+}
+function stepsOf(plan) {
+    if (!plan || typeof plan !== 'object' || !('steps' in plan)) {
+        return [];
+    }
+    const steps = plan.steps;
+    if (!Array.isArray(steps)) {
+        return [];
+    }
+    return steps.filter((step) => !!step && typeof step === 'object');
+}
+function stringField(source, key) {
+    const value = source[key];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+function readTags(inputs) {
+    if (!inputs || typeof inputs !== 'object') {
+        return undefined;
+    }
+    const tags = inputs.tags;
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags)) {
+        return undefined;
+    }
+    const out = {};
+    for (const [key, value] of Object.entries(tags)) {
+        if (value === null || value === undefined || value === '') {
+            continue;
+        }
+        out[key] = String(value);
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+function selectResources(resources, config) {
+    let current = [...resources];
+    let hiddenByChange = 0;
+    const missingChangeData = config.showOnlyChanges === true && !current.some((resource) => resource.change);
+    if (config.showOnlyChanges && !missingChangeData) {
+        const next = current.filter((resource) => resource.change && CHANGE_OPS.has(resource.change));
+        hiddenByChange = current.length - next.length;
+        current = next;
+    }
+    let hiddenByCost = 0;
+    const minCost = config.minCostThreshold ?? 0;
+    if (minCost > 0) {
+        const next = current.filter((resource) => resource.monthly >= minCost);
+        hiddenByCost = current.length - next.length;
+        current = next;
+    }
+    current.sort((a, b) => compareResources(a, b, config.sortBy ?? 'cost'));
+    const grouped = current;
+    const max = config.maxResourcesDisplayed ?? 10;
+    let shown = current;
+    let hiddenByCap = 0;
+    if (max > 0 && current.length > max) {
+        hiddenByCap = current.length - max;
+        shown = current.slice(0, max);
+    }
+    return { shown, grouped, hiddenByChange, hiddenByCost, hiddenByCap, missingChangeData };
+}
+function compareResources(a, b, sortBy) {
+    if (sortBy === 'name') {
+        return resourceName(a.resourceId).localeCompare(resourceName(b.resourceId));
+    }
+    if (sortBy === 'type') {
+        return a.resourceType.localeCompare(b.resourceType) || b.monthly - a.monthly;
+    }
+    if (sortBy === 'change') {
+        return changeRank(a.change) - changeRank(b.change) || b.monthly - a.monthly;
+    }
+    return b.monthly - a.monthly;
+}
+function changeRank(op) {
+    switch (op) {
+        case 'create':
+            return 0;
+        case 'update':
+            return 1;
+        case 'replace':
+        case 'create-replacement':
+        case 'delete-replaced':
+            return 2;
+        case 'delete':
+            return 3;
+        case 'import':
+            return 4;
+        default:
+            return op ? 8 : 9;
+    }
+}
+function formatDisplaySections(report, config, currency) {
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    const selection = selectResources(resources, config);
+    const notes = displayNotes(selection, config, currency);
+    return {
+        resourceTable: formatResourceTable(selection.shown, config, currency, notes, report),
+        groupTable: formatGroupTable(selection, config, currency),
+    };
+}
+function displayNotes(selection, config, currency) {
+    const notes = [];
+    if (selection.missingChangeData) {
+        notes.push('Change detection needs Pulumi plan steps with op and urn. Showing every priced resource.');
+    }
+    else if (selection.hiddenByChange > 0) {
+        notes.push(`Showing only resources affected by this change. ${selection.hiddenByChange} unchanged resources hidden.`);
+    }
+    if (selection.hiddenByCost > 0) {
+        notes.push(`${selection.hiddenByCost} resources under ${(config.minCostThreshold ?? 0).toFixed(2)} ${currency} hidden.`);
+    }
+    if (selection.hiddenByCap > 0) {
+        notes.push(`Showing ${selection.shown.length} of ${selection.shown.length + selection.hiddenByCap} resources.`);
+    }
+    if (selection.hiddenByChange > 0 || selection.hiddenByCost > 0 || selection.hiddenByCap > 0) {
+        notes.push('The projected monthly total above still includes hidden resources.');
+    }
+    return notes;
+}
+function formatResourceTable(shown, config, currency, notes, report) {
+    if (shown.length === 0 && notes.length === 0) {
+        return '';
+    }
+    const showChange = config.showOnlyChanges === true || config.sortBy === 'change';
+    const detailed = config.detailedComment === true;
+    const title = config.showOnlyChanges
+        ? 'Cost Impact of Changes'
+        : detailed
+            ? 'Full Resource Breakdown'
+            : 'Top Resources';
+    const header = showChange
+        ? '| Resource | Type | Change | Monthly Cost |'
+        : detailed
+            ? '| Resource | Type | Monthly Cost | Notes |'
+            : '| Resource | Type | Monthly Cost |';
+    const align = showChange
+        ? '| :--- | :--- | :---: | ---: |'
+        : detailed
+            ? '| :--- | :--- | ---: | :--- |'
+            : '| :--- | :--- | ---: |';
+    const rows = shown
+        .map((resource) => {
+        const name = cell(resourceName(resource.resourceId));
+        const type = cell(resource.resourceType);
+        const cost = `${resource.monthly.toFixed(2)} ${currency}`;
+        if (showChange) {
+            return `| ${name} | ${type} | ${changeLabel(resource.change)} | ${cost} |`;
+        }
+        if (detailed) {
+            const resourceNotes = resource.notes ? cell(resource.notes) : '';
+            return `| ${name} | ${type} | ${cost} | ${resourceNotes} |`;
+        }
+        return `| ${name} | ${type} | ${cost} |`;
+    })
+        .join('\n');
+    const net = config.showOnlyChanges ? netChangeRow(report, currency, showChange) : '';
+    const noteBlock = notes.map((note) => `\n\n*${note}*`).join('');
+    const body = rows
+        ? `${header}\n${align}\n${rows}${net}`
+        : '*No resources match the display filters.*';
+    return `
+
+<details>
+<summary><strong>📊 ${title}</strong> (${shown.length} resources)</summary>
+
+${body}${noteBlock}
+
+</details>
+`;
+}
+function netChangeRow(report, currency, showChange) {
+    if (!report.diff) {
+        return '';
+    }
+    const delta = (0,_types_js__WEBPACK_IMPORTED_MODULE_2__/* .isV041Diff */ .k)(report.diff) ? report.diff.totalDelta : report.diff.monthly_cost_change;
+    const sign = delta > 0 ? '+' : '';
+    const amount = `${sign}${delta.toFixed(2)} ${currency}`;
+    if (!showChange) {
+        return '';
+    }
+    return `\n| **Net change** | | | ${amount} |`;
+}
+function formatGroupTable(selection, config, currency) {
+    const groupBy = config.groupBy || 'provider';
+    if (groupBy === 'resource') {
+        return '';
+    }
+    const grouped = groupResources(selection, groupBy);
+    if (grouped.length === 0) {
+        return '';
+    }
+    const rows = grouped
+        .map((row) => `| ${cell(row.key)} | ${row.monthly.toFixed(2)} ${currency} | ${row.count} |`)
+        .join('\n');
+    const total = grouped.reduce((sum, row) => sum + row.monthly, 0);
+    const count = grouped.reduce((sum, row) => sum + row.count, 0);
+    return `
+
+<details>
+<summary><strong>☁️ ${groupTitle(groupBy)}</strong></summary>
+
+| ${groupColumn(groupBy)} | Monthly Cost | Resources |
+| :--- | ---: | ---: |
+${rows}
+| **Total** | **${total.toFixed(2)} ${currency}** | **${count}** |
+
+</details>
+`;
+}
+function groupResources(selection, groupBy) {
+    const buckets = new Map();
+    for (const resource of selection.grouped) {
+        const key = groupKey(resource, groupBy);
+        const existing = buckets.get(key);
+        if (existing) {
+            existing.monthly += resource.monthly;
+            existing.count += 1;
+        }
+        else {
+            buckets.set(key, { key, monthly: resource.monthly, count: 1 });
+        }
+    }
+    return [...buckets.values()].sort((a, b) => b.monthly - a.monthly || a.key.localeCompare(b.key));
+}
+function groupKey(resource, groupBy) {
+    if (groupBy === 'type') {
+        return resource.resourceType || 'other';
+    }
+    if (groupBy === 'service') {
+        return serviceOf(resource.resourceType);
+    }
+    if (groupBy.startsWith('tag:')) {
+        return tagValue(resource, groupBy.slice('tag:'.length));
+    }
+    return providerOf(resource.resourceType);
+}
+function tagValue(resource, key) {
+    const tags = resource.tags;
+    if (!tags) {
+        return '(untagged)';
+    }
+    if (tags[key]) {
+        return tags[key];
+    }
+    const found = Object.keys(tags).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+    return found && tags[found] ? tags[found] : '(untagged)';
+}
+function groupTitle(groupBy) {
+    if (groupBy === 'type') {
+        return 'Cost by Type';
+    }
+    if (groupBy === 'service') {
+        return 'Cost by Service';
+    }
+    if (groupBy.startsWith('tag:')) {
+        return `Cost by ${groupBy.slice('tag:'.length)}`;
+    }
+    return 'Cost by Provider';
+}
+function groupColumn(groupBy) {
+    if (groupBy === 'type') {
+        return 'Type';
+    }
+    if (groupBy === 'service') {
+        return 'Service';
+    }
+    if (groupBy.startsWith('tag:')) {
+        return groupBy.slice('tag:'.length);
+    }
+    return 'Provider';
+}
+function changeLabel(op) {
+    switch (op) {
+        case 'create':
+            return '✨ Create';
+        case 'update':
+            return '🔄 Update';
+        case 'delete':
+            return '🗑️ Delete';
+        case 'replace':
+        case 'create-replacement':
+        case 'delete-replaced':
+            return '🔁 Replace';
+        default:
+            return op ? cell(op) : '';
+    }
+}
+function cell(value) {
+    return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+}
+
+
+/***/ }),
+
 /***/ 3916:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
@@ -33319,183 +33788,6 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("tls");
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
-
-/***/ }),
-
-/***/ 1120:
-/***/ ((module) => {
-
-var __webpack_unused_export__;
-
-
-const NullObject = function NullObject () { }
-NullObject.prototype = Object.create(null)
-
-/**
- * RegExp to match *( ";" parameter ) in RFC 7231 sec 3.1.1.1
- *
- * parameter     = token "=" ( token / quoted-string )
- * token         = 1*tchar
- * tchar         = "!" / "#" / "$" / "%" / "&" / "'" / "*"
- *               / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
- *               / DIGIT / ALPHA
- *               ; any VCHAR, except delimiters
- * quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE
- * qdtext        = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
- * obs-text      = %x80-FF
- * quoted-pair   = "\" ( HTAB / SP / VCHAR / obs-text )
- */
-const paramRE = /; *([!#$%&'*+.^\w`|~-]+)=("(?:[\v\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\v\u0020-\u00ff])*"|[!#$%&'*+.^\w`|~-]+) */gu
-
-/**
- * RegExp to match quoted-pair in RFC 7230 sec 3.2.6
- *
- * quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )
- * obs-text    = %x80-FF
- */
-const quotedPairRE = /\\([\v\u0020-\u00ff])/gu
-
-/**
- * RegExp to match type in RFC 7231 sec 3.1.1.1
- *
- * media-type = type "/" subtype
- * type       = token
- * subtype    = token
- */
-const mediaTypeRE = /^[!#$%&'*+.^\w|~-]+\/[!#$%&'*+.^\w|~-]+$/u
-
-// default ContentType to prevent repeated object creation
-const defaultContentType = { type: '', parameters: new NullObject() }
-Object.freeze(defaultContentType.parameters)
-Object.freeze(defaultContentType)
-
-/**
- * Parse media type to object.
- *
- * @param {string|object} header
- * @return {Object}
- * @public
- */
-
-function parse (header) {
-  if (typeof header !== 'string') {
-    throw new TypeError('argument header is required and must be a string')
-  }
-
-  let index = header.indexOf(';')
-  const type = index !== -1
-    ? header.slice(0, index).trim()
-    : header.trim()
-
-  if (mediaTypeRE.test(type) === false) {
-    throw new TypeError('invalid media type')
-  }
-
-  const result = {
-    type: type.toLowerCase(),
-    parameters: new NullObject()
-  }
-
-  // parse parameters
-  if (index === -1) {
-    return result
-  }
-
-  let key
-  let match
-  let value
-
-  paramRE.lastIndex = index
-
-  while ((match = paramRE.exec(header))) {
-    if (match.index !== index) {
-      throw new TypeError('invalid parameter format')
-    }
-
-    index += match[0].length
-    key = match[1].toLowerCase()
-    value = match[2]
-
-    if (value[0] === '"') {
-      // remove quotes and escapes
-      value = value
-        .slice(1, value.length - 1)
-
-      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
-    }
-
-    result.parameters[key] = value
-  }
-
-  if (index !== header.length) {
-    throw new TypeError('invalid parameter format')
-  }
-
-  return result
-}
-
-function safeParse (header) {
-  if (typeof header !== 'string') {
-    return defaultContentType
-  }
-
-  let index = header.indexOf(';')
-  const type = index !== -1
-    ? header.slice(0, index).trim()
-    : header.trim()
-
-  if (mediaTypeRE.test(type) === false) {
-    return defaultContentType
-  }
-
-  const result = {
-    type: type.toLowerCase(),
-    parameters: new NullObject()
-  }
-
-  // parse parameters
-  if (index === -1) {
-    return result
-  }
-
-  let key
-  let match
-  let value
-
-  paramRE.lastIndex = index
-
-  while ((match = paramRE.exec(header))) {
-    if (match.index !== index) {
-      return defaultContentType
-    }
-
-    index += match[0].length
-    key = match[1].toLowerCase()
-    value = match[2]
-
-    if (value[0] === '"') {
-      // remove quotes and escapes
-      value = value
-        .slice(1, value.length - 1)
-
-      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
-    }
-
-    result.parameters[key] = value
-  }
-
-  if (index !== header.length) {
-    return defaultContentType
-  }
-
-  return result
-}
-
-__webpack_unused_export__ = { parse, safeParse }
-__webpack_unused_export__ = parse
-module.exports.xL = safeParse
-__webpack_unused_export__ = defaultContentType
-
 
 /***/ }),
 
@@ -36565,6 +36857,21 @@ function copyFile(srcFile, destFile, force) {
 /******/ __nccwpck_require__.m = __webpack_modules__;
 /******/ 
 /************************************************************************/
+/******/ /* webpack/runtime/asset-relocator-loader */
+/******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = decodeURIComponent(new URL('.', import.meta.url).pathname).slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
+/******/ 
+/******/ /* webpack/runtime/compat get default export */
+/******/ (() => {
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__nccwpck_require__.n = (module) => {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			() => (module['default']) :
+/******/ 			() => (module);
+/******/ 		__nccwpck_require__.d(getter, { a: getter });
+/******/ 		return getter;
+/******/ 	};
+/******/ })();
+/******/ 
 /******/ /* webpack/runtime/create fake namespace object */
 /******/ (() => {
 /******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
@@ -36645,10 +36952,6 @@ function copyFile(srcFile, destFile, force) {
 /******/ 	};
 /******/ })();
 /******/ 
-/******/ /* webpack/runtime/compat */
-/******/ 
-/******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = new URL('.', import.meta.url).pathname.slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
-/******/ 
 /******/ /* webpack/runtime/import chunk loading */
 /******/ (() => {
 /******/ 	// no baseURI
@@ -36721,15 +37024,404 @@ var main_core = __nccwpck_require__(2398);
 var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: ./src/types.ts
 var types = __nccwpck_require__(6141);
-// EXTERNAL MODULE: ./src/install.ts + 6 modules
-var install = __nccwpck_require__(8638);
 // EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js + 2 modules
 var main_exec = __nccwpck_require__(5260);
+// EXTERNAL MODULE: ./src/errors.ts
+var errors = __nccwpck_require__(3916);
+;// CONCATENATED MODULE: ./src/v04.ts
+
+
+
+
+const CLUSTER_GROUP_BY = new Set(['namespace', 'controller', 'pod', 'node', 'pulumi-stack']);
+const DISMISSAL_REASONS = [
+    'not-applicable',
+    'already-implemented',
+    'business-constraint',
+    'technical-constraint',
+    'deferred',
+    'inaccurate',
+    'other',
+];
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const REC_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+function assertClusterGroupBy(groupBy) {
+    if (CLUSTER_GROUP_BY.has(groupBy)) {
+        return;
+    }
+    if (groupBy.startsWith('label:') && groupBy.length > 'label:'.length && !/\s/.test(groupBy)) {
+        return;
+    }
+    throw new Error(`Invalid cluster-group-by "${groupBy}". ` +
+        `Use namespace, controller, pod, node, pulumi-stack, or label:<key> ` +
+        `(finfocus cost cluster --group-by).`);
+}
+function parseClusterSelectors(raw) {
+    if (!raw || raw.trim() === '') {
+        return [];
+    }
+    return raw.split(',').map((part) => {
+        const selector = part.trim();
+        const eq = selector.indexOf('=');
+        if (eq <= 0 || eq === selector.length - 1 || /\s/.test(selector)) {
+            throw new Error(`Invalid cluster-selector "${selector}". Use key=value pairs separated by commas.`);
+        }
+        return selector;
+    });
+}
+function clusterArgs(config) {
+    const groupBy = config.clusterGroupBy || 'namespace';
+    assertClusterGroupBy(groupBy);
+    const args = ['cost', 'cluster', '--output', 'json', '--group-by', groupBy];
+    if (config.clusterNamespace) {
+        args.push('--namespace', config.clusterNamespace);
+    }
+    if (config.clusterContext) {
+        args.push('--context', config.clusterContext);
+    }
+    for (const selector of parseClusterSelectors(config.clusterSelector)) {
+        args.push('--selector', selector);
+    }
+    return args;
+}
+function recommendationArgs(planPath, config) {
+    const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
+    if (config?.includeDismissedRecommendations) {
+        args.push('--include-dismissed');
+    }
+    if (config && !config.enableJevScoring) {
+        args.push('--no-scoring');
+    }
+    return args;
+}
+function parseDismissals(raw) {
+    return parseJsonList(raw, 'dismiss-recommendations', (item, index) => {
+        const id = requireId(item, index, 'dismiss-recommendations');
+        const reason = typeof item.reason === 'string' ? item.reason.trim() : '';
+        if (!DISMISSAL_REASONS.includes(reason)) {
+            throw new Error(`dismiss-recommendations[${index}].reason "${reason}" is invalid. ` +
+                `Use ${DISMISSAL_REASONS.join(', ')}.`);
+        }
+        const note = optionalNote(item, index, 'dismiss-recommendations');
+        if (reason === 'other' && !note) {
+            throw new Error(`dismiss-recommendations[${index}] uses reason "other", which requires a note.`);
+        }
+        return { id, reason, note };
+    });
+}
+function parseSnoozes(raw) {
+    return parseJsonList(raw, 'snooze-recommendations', (item, index) => {
+        const id = requireId(item, index, 'snooze-recommendations');
+        const until = typeof item.until === 'string' ? item.until.trim() : '';
+        if (!DATE.test(until) && !RFC3339.test(until)) {
+            throw new Error(`snooze-recommendations[${index}].until "${until}" must be YYYY-MM-DD or RFC3339.`);
+        }
+        const reason = typeof item.reason === 'string' ? item.reason.trim() : '';
+        if (reason && !DISMISSAL_REASONS.includes(reason)) {
+            throw new Error(`snooze-recommendations[${index}].reason "${reason}" is invalid. ` +
+                `Use ${DISMISSAL_REASONS.join(', ')}.`);
+        }
+        const note = optionalNote(item, index, 'snooze-recommendations');
+        if (reason === 'other' && !note) {
+            throw new Error(`snooze-recommendations[${index}] uses reason "other", which requires a note.`);
+        }
+        return { id, until, reason: reason || undefined, note };
+    });
+}
+function dismissArgs(planPath, item) {
+    const args = ['cost', 'recommendations', 'dismiss', item.id, '--reason', item.reason, '--force'];
+    if (item.note) {
+        args.push('--note', item.note);
+    }
+    if (planPath) {
+        args.push('--pulumi-json', planPath);
+    }
+    return args;
+}
+function snoozeArgs(planPath, item) {
+    const args = ['cost', 'recommendations', 'snooze', item.id, '--until', item.until, '--force'];
+    if (item.reason) {
+        args.push('--reason', item.reason);
+    }
+    if (item.note) {
+        args.push('--note', item.note);
+    }
+    if (planPath) {
+        args.push('--pulumi-json', planPath);
+    }
+    return args;
+}
+function stateOnlyArgs(statePath) {
+    return [
+        'overview',
+        '--state-only',
+        '--pulumi-state',
+        statePath,
+        '--output',
+        'json',
+        '--plain',
+        '--yes',
+    ];
+}
+/**
+ * Drop dismissed and snoozed recommendations unless the caller opted into
+ * `--include-dismissed`. Also drop ids the action just dismissed or snoozed,
+ * so a PR comment does not repeat them when the CLI still returns them.
+ */
+function hideDismissedRecommendations(report, config) {
+    if (config?.includeDismissedRecommendations) {
+        return report;
+    }
+    const hidden = new Set();
+    for (const item of parseDismissals(config?.dismissRecommendations)) {
+        hidden.add(item.id);
+    }
+    for (const item of parseSnoozes(config?.snoozeRecommendations)) {
+        hidden.add(item.id);
+    }
+    const recommendations = (report.recommendations ?? []).filter((rec) => {
+        const status = (rec.status ?? '').toLowerCase();
+        if (status === 'dismissed' || status === 'snoozed') {
+            return false;
+        }
+        return !(rec.id && hidden.has(rec.id));
+    });
+    if (recommendations.length === (report.recommendations ?? []).length) {
+        return report;
+    }
+    return {
+        ...report,
+        recommendations,
+        summary: {
+            ...report.summary,
+            total_count: recommendations.length,
+            total_savings: recommendations.reduce((sum, rec) => sum + rec.estimated_savings, 0),
+            count_by_action_type: countByAction(recommendations),
+        },
+    };
+}
+/** Supports() decline reasons are appended to resource notes as "(declined by ...)". */
+function collectDeclineNotes(report) {
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    const notes = [];
+    for (const resource of resources) {
+        if (!resource.notes || !/declined by /i.test(resource.notes)) {
+            continue;
+        }
+        notes.push({
+            resourceType: resource.resourceType,
+            resourceId: resource.resourceId,
+            note: resource.notes,
+        });
+    }
+    return notes;
+}
+function reportFromStateOnly(overview) {
+    const monthly = overview.summary?.projectedMonthly ?? 0;
+    const currency = overview.summary?.currency || 'USD';
+    return {
+        summary: {
+            totalMonthly: monthly,
+            totalHourly: monthly / 730,
+            currency,
+        },
+        projected_monthly_cost: monthly,
+        currency,
+    };
+}
+async function executeCluster(config) {
+    const args = clusterArgs(config);
+    const stdout = await runFinFocus(args, config.debug === true);
+    const report = unwrapJson(stdout);
+    if (!report || !Array.isArray(report.groups) || typeof report.total !== 'number') {
+        throw new Error('finfocus cost cluster JSON is missing groups or total.');
+    }
+    return report;
+}
+async function executeStateOnly(config) {
+    const statePath = config.pulumiStateJsonPath;
+    if (!statePath) {
+        throw new Error('state-only requires pulumi-state-json. ' +
+            'finfocus overview --state-only skips pulumi preview and reads the state file.');
+    }
+    if (!external_fs_.existsSync(statePath)) {
+        throw new Error(`Pulumi state file not found: ${statePath}`);
+    }
+    const stdout = await runFinFocus(stateOnlyArgs(statePath), config.debug === true);
+    const report = unwrapJson(stdout);
+    if (!report?.summary || typeof report.summary.projectedMonthly !== 'number') {
+        throw new Error('finfocus overview JSON is missing summary.projectedMonthly.');
+    }
+    return report;
+}
+async function executeRecommendationLifecycle(planPath, config) {
+    const plan = planPath && external_fs_.existsSync(planPath) ? planPath : undefined;
+    for (const item of parseDismissals(config.dismissRecommendations)) {
+        main_core/* info */.pq(`Dismissing recommendation ${item.id} (${item.reason})`);
+        await runFinFocus(dismissArgs(plan, item), config.debug === true);
+    }
+    for (const item of parseSnoozes(config.snoozeRecommendations)) {
+        main_core/* info */.pq(`Snoozing recommendation ${item.id} until ${item.until}`);
+        await runFinFocus(snoozeArgs(plan, item), config.debug === true);
+    }
+}
+async function runFinFocus(args, debug) {
+    if (debug) {
+        main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+    }
+    const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+        silent: !debug,
+        ignoreReturnCode: true,
+    });
+    if (output.exitCode !== 0) {
+        const envelope = (0,errors/* parseErrorEnvelope */.a)(output.stderr);
+        if (envelope) {
+            throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, output.exitCode));
+        }
+        throw new Error(`finfocus ${args.join(' ')} failed with exit code ${output.exitCode}.\n` +
+            `Stderr: ${output.stderr}\n` +
+            `Stdout: ${output.stdout}`);
+    }
+    return output.stdout;
+}
+function unwrapJson(stdout) {
+    const parsed = JSON.parse(stdout);
+    if (parsed && typeof parsed === 'object' && parsed.finfocus) {
+        return parsed.finfocus;
+    }
+    return parsed;
+}
+function countByAction(recommendations) {
+    const counts = {};
+    for (const rec of recommendations) {
+        counts[rec.action_type] = (counts[rec.action_type] ?? 0) + 1;
+    }
+    return counts;
+}
+function parseJsonList(raw, inputName, mapItem) {
+    if (!raw || raw.trim() === '') {
+        return [];
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    }
+    catch (err) {
+        throw new Error(`${inputName} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (!Array.isArray(parsed)) {
+        throw new Error(`${inputName} must be a JSON array.`);
+    }
+    return parsed.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            throw new Error(`${inputName}[${index}] must be an object.`);
+        }
+        return mapItem(item, index);
+    });
+}
+function requireId(item, index, inputName) {
+    const id = typeof item.id === 'string' ? item.id.trim() : '';
+    if (!REC_ID.test(id)) {
+        throw new Error(`${inputName}[${index}].id "${id}" is empty or contains characters finfocus would treat as a flag.`);
+    }
+    return id;
+}
+function optionalNote(item, index, inputName) {
+    if (item.note === undefined || item.note === '') {
+        return undefined;
+    }
+    if (typeof item.note !== 'string') {
+        throw new Error(`${inputName}[${index}].note must be a string.`);
+    }
+    return item.note;
+}
+
+// EXTERNAL MODULE: ./src/install.ts + 6 modules
+var install = __nccwpck_require__(8638);
 // EXTERNAL MODULE: external "path"
 var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: external "os"
 var external_os_ = __nccwpck_require__(857);
+;// CONCATENATED MODULE: ./src/plugin-specs.ts
+/**
+ * Plugin specifiers accepted by `finfocus plugin install` (finfocus v0.4.0+).
+ * Registry names, including `kubernetes` and `jev`, come from
+ * `finfocus plugin list --available`. GitHub specifiers are accepted as-is.
+ */
+const REGISTRY_NAME = /^[a-z0-9][a-z0-9-]*$/;
+const VERSION = /^[A-Za-z0-9._+-]+$/;
+const GITHUB_SPEC = /^(?:https:\/\/)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:@[A-Za-z0-9._+-]+)?$/;
+function parsePluginSpec(raw) {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+        throw new Error('Plugin name is empty.');
+    }
+    if (GITHUB_SPEC.test(trimmed)) {
+        return { raw: trimmed, name: '', github: true };
+    }
+    const at = trimmed.indexOf('@');
+    const name = at === -1 ? trimmed : trimmed.slice(0, at);
+    const version = at === -1 ? '' : trimmed.slice(at + 1);
+    if (!REGISTRY_NAME.test(name) || (version !== '' && !VERSION.test(version))) {
+        throw new Error(`Invalid plugin name "${trimmed}". ` +
+            `Use a registry name such as kubernetes or jev, an optional @version, ` +
+            `or a github.com/owner/repo specifier.`);
+    }
+    return { raw: trimmed, name, github: false };
+}
+/**
+ * Names from `finfocus plugin list --available --output json`.
+ * The v0.4.0 registry returns a JSON array of `{ name }` objects.
+ */
+function registryNamesFromList(stdout) {
+    let parsed;
+    try {
+        parsed = JSON.parse(stdout);
+    }
+    catch (err) {
+        throw new Error(`finfocus plugin list --available did not return JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const list = Array.isArray(parsed)
+        ? parsed
+        : parsed &&
+            typeof parsed === 'object' &&
+            Array.isArray(parsed.plugins)
+            ? parsed.plugins
+            : undefined;
+    if (!list) {
+        throw new Error('finfocus plugin list --available did not return a JSON array of plugins.');
+    }
+    const names = [];
+    for (const entry of list) {
+        if (typeof entry === 'string' && entry) {
+            names.push(entry);
+        }
+        else if (entry &&
+            typeof entry === 'object' &&
+            typeof entry.name === 'string') {
+            names.push(entry.name);
+        }
+    }
+    if (names.length === 0) {
+        throw new Error('finfocus plugin list --available returned no plugin names.');
+    }
+    return names;
+}
+function assertInstallablePlugin(spec, registryNames) {
+    if (spec.github) {
+        return;
+    }
+    if (registryNames.includes(spec.name)) {
+        return;
+    }
+    throw new Error(`Plugin "${spec.raw}" is not in the finfocus registry. ` +
+        `Known plugins: ${registryNames.join(', ')}. ` +
+        `Custom plugins must use a github.com/owner/repo specifier.`);
+}
+
 ;// CONCATENATED MODULE: ./src/plugins.ts
+
 
 
 
@@ -36742,28 +37434,27 @@ class PluginManager {
             main_core/* info */.pq(`=== PluginManager: Starting plugin installation ===`);
             main_core/* info */.pq(`  Plugins to install: [${plugins.map((p) => `"${p}"`).join(', ')}]`);
         }
-        if (plugins.length === 0) {
+        const requested = plugins.map((plugin) => plugin.trim()).filter((plugin) => plugin.length > 0);
+        if (requested.length === 0) {
             if (debug)
                 main_core/* info */.pq(`  No plugins to install`);
             return;
+        }
+        const registryNames = await this.availablePluginNames(debug);
+        for (const plugin of requested) {
+            assertInstallablePlugin(parsePluginSpec(plugin), registryNames);
         }
         const pluginDir = external_path_.join(external_os_.homedir(), '.finfocus', 'plugins');
         if (debug) {
             main_core/* info */.pq(`  Plugin directory: ${pluginDir}`);
             main_core/* info */.pq(`  Plugin directory exists: ${external_fs_.existsSync(pluginDir)}`);
         }
-        for (let i = 0; i < plugins.length; i++) {
-            const plugin = plugins[i];
-            const trimmedPlugin = plugin.trim();
+        for (let i = 0; i < requested.length; i++) {
+            const trimmedPlugin = requested[i];
             if (debug)
-                main_core/* info */.pq(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
+                main_core/* info */.pq(`=== Installing plugin ${i + 1}/${requested.length}: "${trimmedPlugin}" ===`);
             else
                 main_core/* info */.pq(`Installing finfocus plugin: "${trimmedPlugin}"`);
-            if (!trimmedPlugin) {
-                if (debug)
-                    main_core/* info */.pq(`  Skipping empty plugin name`);
-                continue;
-            }
             // We avoid the progress bar in logs by using silent mode in exec
             const args = ['plugin', 'install', trimmedPlugin];
             if (debug)
@@ -36811,6 +37502,21 @@ class PluginManager {
             }
         }
     }
+    async availablePluginNames(debug) {
+        if (debug)
+            main_core/* info */.pq(`  Running: finfocus plugin list --available --output json`);
+        const output = await main_exec/* getExecOutput */.H('finfocus', ['plugin', 'list', '--available', '--output', 'json'], { silent: !debug, ignoreReturnCode: true });
+        if (output.exitCode !== 0) {
+            throw new Error(`Failed to list registry plugins.\n` +
+                `Exit code: ${output.exitCode}\n` +
+                `Stderr: ${output.stderr}\n` +
+                `Stdout: ${output.stdout}`);
+        }
+        const names = registryNamesFromList(output.stdout);
+        if (debug)
+            main_core/* info */.pq(`  Registry plugins: ${names.join(', ')}`);
+        return names;
+    }
     async listInstalledPlugins(debug) {
         try {
             if (debug)
@@ -36831,9 +37537,11 @@ class PluginManager {
     }
 }
 
-// EXTERNAL MODULE: ./src/errors.ts
-var errors = __nccwpck_require__(3916);
+// EXTERNAL MODULE: ./src/display.ts
+var display = __nccwpck_require__(4857);
 ;// CONCATENATED MODULE: ./src/analyze.ts
+
+
 
 
 
@@ -36914,6 +37622,7 @@ class Analyzer {
             throw new Error(`Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         }
         const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
+        args.push(...(0,display/* filterArgs */.et)(config?.resourceFilters));
         // Add utilization flag if provided and different from default
         if (config?.utilizationRate && config.utilizationRate !== '1.0') {
             args.push('--utilization', config.utilizationRate);
@@ -37037,7 +37746,7 @@ class Analyzer {
         catch (parseErr) {
             throw new Error(`Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         }
-        const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
+        const args = recommendationArgs(planPath, config);
         if (debug) {
             main_core/* info */.pq(`=== Running finfocus recommendations command ===`);
             main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
@@ -37060,7 +37769,8 @@ class Analyzer {
             };
         }
         try {
-            const report = JSON.parse(output.stdout);
+            const parsed = JSON.parse(output.stdout);
+            const report = hideDismissedRecommendations(parsed.finfocus ?? parsed, config);
             if (debug) {
                 main_core/* info */.pq(`  Parsed recommendations successfully`);
                 main_core/* info */.pq(`  Total recommendations: ${report.summary.total_count}`);
@@ -37080,6 +37790,15 @@ class Analyzer {
                 recommendations: [],
             };
         }
+    }
+    async runCluster(config) {
+        return executeCluster(config);
+    }
+    async runStateOnly(config) {
+        return executeStateOnly(config);
+    }
+    async applyRecommendationLifecycle(planPath, config) {
+        return executeRecommendationLifecycle(planPath, config);
     }
     async runActualCosts(config) {
         const debug = config?.debug === true;
@@ -37122,6 +37841,7 @@ class Analyzer {
         if (config.actualCostsGroupBy) {
             args.push('--group-by', config.actualCostsGroupBy);
         }
+        args.push(...(0,display/* filterArgs */.et)(config.resourceFilters));
         if (debug) {
             main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
         }
@@ -37699,8 +38419,21 @@ function getProxyFetch(destinationUrl) {
 function getApiBaseUrl() {
     return process.env['GITHUB_API_URL'] || 'https://api.github.com';
 }
+function getUserAgentWithOrchestrationId(baseUserAgent) {
+    var _a;
+    const orchId = (_a = process.env['ACTIONS_ORCHESTRATION_ID']) === null || _a === void 0 ? void 0 : _a.trim();
+    if (orchId) {
+        const sanitizedId = orchId.replace(/[^a-z0-9_.-]/gi, '_');
+        const tag = `actions_orchestration_id/${sanitizedId}`;
+        if (baseUserAgent === null || baseUserAgent === void 0 ? void 0 : baseUserAgent.includes(tag))
+            return baseUserAgent;
+        const ua = baseUserAgent ? `${baseUserAgent} ` : '';
+        return `${ua}${tag}`;
+    }
+    return baseUserAgent;
+}
 //# sourceMappingURL=utils.js.map
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/universal-user-agent/index.js
+;// CONCATENATED MODULE: ./node_modules/universal-user-agent/index.js
 function getUserAgent() {
   if (typeof navigator === "object" && "userAgent" in navigator) {
     return navigator.userAgent;
@@ -37715,7 +38448,7 @@ function getUserAgent() {
   return "<environment undetectable>";
 }
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/before-after-hook/lib/register.js
+;// CONCATENATED MODULE: ./node_modules/before-after-hook/lib/register.js
 // @ts-check
 
 function register(state, name, method, options) {
@@ -37744,7 +38477,7 @@ function register(state, name, method, options) {
   });
 }
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/before-after-hook/lib/add.js
+;// CONCATENATED MODULE: ./node_modules/before-after-hook/lib/add.js
 // @ts-check
 
 function addHook(state, kind, name, hook) {
@@ -37792,7 +38525,7 @@ function addHook(state, kind, name, hook) {
   });
 }
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/before-after-hook/lib/remove.js
+;// CONCATENATED MODULE: ./node_modules/before-after-hook/lib/remove.js
 // @ts-check
 
 function removeHook(state, name, method) {
@@ -37813,7 +38546,7 @@ function removeHook(state, name, method) {
   state.registry[name].splice(index, 1);
 }
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/before-after-hook/index.js
+;// CONCATENATED MODULE: ./node_modules/before-after-hook/index.js
 // @ts-check
 
 
@@ -37860,15 +38593,15 @@ function Collection() {
 
 /* harmony default export */ const before_after_hook = ({ Singular, Collection });
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/endpoint/dist-bundle/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/endpoint/dist-bundle/index.js
 // pkg/dist-src/defaults.js
 
 
 // pkg/dist-src/version.js
-var VERSION = "0.0.0-development";
+var dist_bundle_VERSION = "0.0.0-development";
 
 // pkg/dist-src/defaults.js
-var userAgent = `octokit-endpoint.js/${VERSION} ${getUserAgent()}`;
+var userAgent = `octokit-endpoint.js/${dist_bundle_VERSION} ${getUserAgent()}`;
 var DEFAULTS = {
   method: "GET",
   baseUrl: "https://api.github.com",
@@ -38019,7 +38752,7 @@ function isKeyOperator(operator) {
 function getValues(context, operator, key, modifier) {
   var value = context[key], result = [];
   if (isDefined(value) && value !== "") {
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
       value = value.toString();
       if (modifier && modifier !== "*") {
         value = value.substring(0, parseInt(modifier, 10));
@@ -38206,9 +38939,900 @@ function withDefaults(oldDefaults, newDefaults) {
 var endpoint = withDefaults(null, DEFAULTS);
 
 
-// EXTERNAL MODULE: ./node_modules/fast-content-type-parse/index.js
-var fast_content_type_parse = __nccwpck_require__(1120);
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/request-error/dist-src/index.js
+;// CONCATENATED MODULE: ./node_modules/content-type/dist/index.js
+/*!
+ * content-type
+ * Copyright(c) 2015 Douglas Christopher Wilson
+ * MIT Licensed
+ */
+const SP = 32; // " "
+const HTAB = 9; // "\t"
+const SEMI = 59; // ";"
+const EQ = 61; // "="
+const DQUOTE = 34; // '"'
+const BSLASH = 92; // "\\"
+const COMMA = 44; // ","
+const LOWER_CASE = 1;
+const OWS = 2;
+const SEMI_FLAG = 4;
+const COMMA_FLAG = 8;
+const TOKEN_FLAG = 16;
+const NON_ASCII = 0xff00;
+const CASE_FLAGS = LOWER_CASE | NON_ASCII;
+/**
+ * Character flags used to normalize HTTP field values while scanning.
+ * Out-of-range reads intentionally coerce to zero in bitwise expressions.
+ */
+const CHAR_MAP = new Uint8Array(0x100);
+CHAR_MAP[HTAB] |= OWS;
+CHAR_MAP[SP] |= OWS;
+CHAR_MAP[SEMI] |= SEMI_FLAG;
+CHAR_MAP[COMMA] |= COMMA_FLAG;
+for (let code = 0x80 /* non-ASCII */; code <= 0xff; code++) {
+    CHAR_MAP[code] |= LOWER_CASE;
+}
+for (const char of "!#$%&'*+-.^_`|~") {
+    CHAR_MAP[char.charCodeAt(0)] |= TOKEN_FLAG;
+}
+for (let code = 0x30 /* 0 */; code <= 0x39 /* 9 */; code++) {
+    CHAR_MAP[code] |= TOKEN_FLAG;
+}
+for (let code = 0x41 /* A */; code <= 0x5a /* Z */; code++) {
+    CHAR_MAP[code] |= LOWER_CASE | TOKEN_FLAG;
+}
+for (let code = 0x61 /* a */; code <= 0x7a /* z */; code++) {
+    CHAR_MAP[code] |= TOKEN_FLAG;
+}
+/**
+ * Null object perf optimization. Faster than `Object.create(null)` and `{ __proto__: null }`.
+ */
+const NullObject = /* @__PURE__ */ (() => {
+    const C = function () { };
+    C.prototype = Object.create(null);
+    return C;
+})();
+/**
+ * Validate a type string against RFC 9110.
+ */
+function isTypeValid(type, start = 0, end = type.length) {
+    let hasSlash = false;
+    for (let index = start; index < end; index++) {
+        const code = type.charCodeAt(index);
+        if (code === 47 /* / */) {
+            if (hasSlash || index === start || index >= end - 1)
+                return false;
+            hasSlash = true;
+        }
+        else if (!isTokenCode(code)) {
+            return false;
+        }
+    }
+    return hasSlash;
+}
+/**
+ * Validate a token against RFC 9110.
+ */
+function isTokenValid(token, start = 0, end = token.length) {
+    if (start >= end)
+        return false;
+    for (let index = start; index < end; index++) {
+        if (!isTokenCode(token.charCodeAt(index)))
+            return false;
+    }
+    return true;
+}
+/**
+ * Check whether a character code belongs to the token production in RFC 9110.
+ */
+function isTokenCode(code) {
+    return (CHAR_MAP[code] & TOKEN_FLAG) !== 0;
+}
+/**
+ * Serialize a parameter value.
+ */
+function parameterValue(str) {
+    const len = str.length;
+    if (len === 0)
+        return '""';
+    let index = 0;
+    while (index < len && isTokenCode(str.charCodeAt(index)))
+        index++;
+    if (index === len)
+        return str;
+    let result = '"';
+    let start = 0;
+    while (index < len) {
+        const code = str.charCodeAt(index);
+        if (code !== HTAB && (code < SP || code === 127 || code > 255)) {
+            throw new TypeError(`Invalid parameter value: ${str}`);
+        }
+        if (code === 34 /* " */ || code === 92 /* \\ */) {
+            result += `${str.slice(start, index)}\\`;
+            start = index;
+        }
+        index++;
+    }
+    return `${result}${str.slice(start)}"`;
+}
+/**
+ * Format an object into a `Content-Type` header.
+ */
+function format(obj) {
+    const { type, parameters } = obj;
+    if (!type || !isTypeValid(type)) {
+        throw new TypeError(`Invalid type: ${type}`);
+    }
+    let result = type;
+    if (parameters) {
+        for (const param of Object.keys(parameters)) {
+            if (!isTokenValid(param)) {
+                throw new TypeError(`Invalid parameter name: ${param}`);
+            }
+            result += `; ${param}=${parameterValue(parameters[param])}`;
+        }
+    }
+    return result;
+}
+/**
+ * Parse a `Content-Type` header.
+ */
+function dist_parse(header, options) {
+    const stopFlags = SEMI_FLAG | (options?.comma === true ? COMMA_FLAG : 0);
+    const len = header.length;
+    let valueStart = options?.start ?? 0;
+    while ((CHAR_MAP[header.charCodeAt(valueStart)] & OWS) !== 0) {
+        valueStart++;
+    }
+    let index = valueStart;
+    let typeFlags = 0;
+    let whitespace = -1;
+    let stop = options?.parameters === false ? COMMA_FLAG : 0;
+    while (index < len) {
+        const code = header.charCodeAt(index);
+        const flags = CHAR_MAP[code];
+        if ((flags & stopFlags) !== 0) {
+            stop |= flags & COMMA_FLAG;
+            break;
+        }
+        if ((flags & OWS) !== 0) {
+            if (whitespace === -1)
+                whitespace = index;
+        }
+        else {
+            whitespace = -1;
+        }
+        typeFlags |= (code & NON_ASCII) | flags;
+        index++;
+    }
+    const valueEnd = whitespace === -1 ? index : whitespace;
+    const value = header.slice(valueStart, valueEnd);
+    const type = (typeFlags & CASE_FLAGS) === 0 ? value : value.toLowerCase();
+    if (index === len || stop !== 0) {
+        return { type, index, parameters: new NullObject() };
+    }
+    return parseParameters(header, type, index, len, stopFlags);
+}
+/**
+ * Parses the parameters of a `Content-Type` header starting at the given index.
+ */
+function parseParameters(header, type, index, len, stopFlags) {
+    const parameters = new NullObject();
+    parameter: while (index < len) {
+        index++; // Skip over ;
+        while ((CHAR_MAP[header.charCodeAt(index)] & OWS) !== 0) {
+            index++;
+        }
+        const keyStart = index;
+        let keyFlags = 0;
+        let keyWhitespace = -1;
+        while (index < len) {
+            const code = header.charCodeAt(index);
+            const flags = CHAR_MAP[code];
+            if ((flags & stopFlags) !== 0) {
+                if ((flags & COMMA_FLAG) !== 0)
+                    break parameter;
+                continue parameter;
+            }
+            if (code === EQ) {
+                const keyEnd = keyWhitespace === -1 ? index : keyWhitespace;
+                const value = header.slice(keyStart, keyEnd);
+                const key = (keyFlags & CASE_FLAGS) === 0 ? value : value.toLowerCase();
+                index++;
+                while ((CHAR_MAP[header.charCodeAt(index)] & OWS) !== 0) {
+                    index++;
+                }
+                if (index < len && header.charCodeAt(index) === DQUOTE) {
+                    const quotedStart = ++index;
+                    let escaped = false;
+                    while (index < len) {
+                        const code = header.charCodeAt(index);
+                        if (code === DQUOTE) {
+                            if (parameters[key] === undefined) {
+                                parameters[key] = escaped
+                                    ? unescapeQuotedPairs(header, quotedStart, index)
+                                    : header.slice(quotedStart, index);
+                            }
+                            index++;
+                            let stop = 0;
+                            // Discard characters between quote and delimiter.
+                            while (index < len) {
+                                const code = header.charCodeAt(index);
+                                const flags = CHAR_MAP[code];
+                                if ((flags & stopFlags) !== 0) {
+                                    stop = flags & COMMA_FLAG;
+                                    break;
+                                }
+                                index++;
+                            }
+                            if (stop !== 0)
+                                break parameter;
+                            continue parameter;
+                        }
+                        if (code === BSLASH && index + 1 < len) {
+                            escaped = true;
+                            index += 2;
+                            continue;
+                        }
+                        index++;
+                    }
+                    continue parameter;
+                }
+                const valueStart = index;
+                let stop = 0;
+                let valueWhitespace = -1;
+                while (index < len) {
+                    const code = header.charCodeAt(index);
+                    const flags = CHAR_MAP[code];
+                    if ((flags & stopFlags) !== 0) {
+                        stop = flags & COMMA_FLAG;
+                        break;
+                    }
+                    if ((flags & OWS) !== 0) {
+                        if (valueWhitespace === -1)
+                            valueWhitespace = index;
+                    }
+                    else {
+                        valueWhitespace = -1;
+                    }
+                    index++;
+                }
+                if (parameters[key] === undefined) {
+                    const valueEnd = valueWhitespace === -1 ? index : valueWhitespace;
+                    parameters[key] = header.slice(valueStart, valueEnd);
+                }
+                if (stop !== 0)
+                    break parameter;
+                continue parameter;
+            }
+            if ((flags & OWS) !== 0) {
+                if (keyWhitespace === -1)
+                    keyWhitespace = index;
+            }
+            else {
+                keyWhitespace = -1;
+            }
+            keyFlags |= (code & NON_ASCII) | flags;
+            index++;
+        }
+    }
+    return { type, index, parameters };
+}
+/**
+ * Remove backslashes from quoted pairs in a known-terminated quoted string body.
+ */
+function unescapeQuotedPairs(str, start, end) {
+    let result = "";
+    for (let index = start; index < end; index++) {
+        if (str.charCodeAt(index) === BSLASH) {
+            result += str.slice(start, index);
+            start = ++index;
+        }
+    }
+    return result + str.slice(start, end);
+}
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/json-with-bigint/json-with-bigint.js
+const intRegex = /^-?\d+$/;
+const noiseValue = /^-?\d+n+$/; // Noise - strings that match the custom format before being converted to it
+const originalStringify = JSON.stringify;
+const originalParse = JSON.parse;
+const customFormat = /^-?\d+n$/;
+
+const bigIntsStringify = /([\[:])?"(-?\d+)n"($|\s*[,\}\]])/g;
+const noiseStringify = /([\[:])?("-?\d+n+)n("$|"\s*[,\}\]])/g;
+
+/**
+ * @typedef {(this: any, key: string | number | undefined, value: any) => any} Replacer
+ * @typedef {(key: string | number | undefined, value: any, context?: { source: string }) => any} Reviver
+ */
+
+/**
+ * Checks if a value is unstringifiable according to native JSON.stringify rules.
+ *
+ * @param {any} val The value to check.
+ * @returns {boolean} True if the value is undefined, a function, or a symbol.
+ */
+const isUnstringifiable = (val) =>
+  val === undefined || typeof val === "function" || typeof val === "symbol";
+
+/**
+ * Checks if a value is a native JSON.rawJSON object (Node.js 22+).
+ *
+ * @param {any} val The value to check.
+ * @returns {boolean} True if the value is a RawJSON instance.
+ */
+const isRawJSON = (val) =>
+  val !== null &&
+  typeof val === "object" &&
+  val.constructor &&
+  val.constructor.name === "RawJSON";
+
+/**
+ * Iteratively converts a JS value to a JSON string.
+ * Used as a fallback when the native JSON.stringify hits the Maximum Call Stack size.
+ * Fully compliant with JSON formatting (space), replacers, and toJSON behaviors.
+ *
+ * @param {any} rootValue The value to stringify.
+ * @param {Replacer | Array<string | number> | null} [replacer] User's custom replacer function.
+ * @param {string | number} [spaceParam] Indentation for pretty-printing.
+ * @returns {string | undefined} The generated JSON string.
+ */
+const stringifyIteratively = (rootValue, replacer, spaceParam) => {
+  let space = "";
+
+  if (typeof spaceParam === "number") {
+    space = " ".repeat(Math.min(10, Math.max(0, Math.floor(spaceParam))));
+  } else if (typeof spaceParam === "string") {
+    space = spaceParam.slice(0, 10);
+  }
+
+  const isFunctionReplacer = typeof replacer === "function";
+  const propertyList = Array.isArray(replacer)
+    ? new Set(replacer.map(String))
+    : null;
+
+  /**
+   * Prepares a value for stringification by resolving toJSON, handling BigInts,
+   * applying custom replacers, and unwrapping primitive objects.
+   *
+   * @param {object|Array} parent The parent object or array holding the value.
+   * @param {string} key The key associated with the value.
+   * @param {any} val The raw value to process.
+   * @returns {any} The processed value ready for stringification.
+   */
+  const prepareVal = (parent, key, val) => {
+    const isObject = val !== null && typeof val === "object";
+    const hasToJSON = isObject && typeof val.toJSON === "function";
+
+    if (hasToJSON) {
+      val = val.toJSON(key);
+    }
+
+    const isNoise = typeof val === "string" && noiseValue.test(val);
+
+    if (isNoise) return val + "n";
+
+    const isBigInt = typeof val === "bigint";
+
+    if (isBigInt) {
+      const supportsRawJSON = "rawJSON" in JSON;
+
+      if (supportsRawJSON) return JSON.rawJSON(val.toString());
+
+      return val.toString() + "n";
+    }
+
+    if (isFunctionReplacer) {
+      val = replacer.call(parent, key, val);
+    }
+
+    const isPostReplacerObject = val !== null && typeof val === "object";
+
+    if (isPostReplacerObject) {
+      const isPrimitiveWrapper =
+        val instanceof Number ||
+        val instanceof String ||
+        val instanceof Boolean;
+
+      if (isPrimitiveWrapper) {
+        val = val.valueOf();
+      }
+    }
+
+    return val;
+  };
+
+  const rootProcessed = prepareVal({ "": rootValue }, "", rootValue);
+
+  if (isUnstringifiable(rootProcessed)) {
+    return undefined;
+  }
+
+  const isRootPrimitive =
+    rootProcessed === null || typeof rootProcessed !== "object";
+  const isRootNativeRawJSON = isRawJSON(rootProcessed);
+
+  if (isRootPrimitive || isRootNativeRawJSON) {
+    return originalStringify(rootProcessed);
+  }
+
+  const chunks = [];
+  let level = 0;
+
+  const stack = [
+    {
+      parent: { "": rootProcessed },
+      key: "",
+      val: rootProcessed,
+      isArray: Array.isArray(rootProcessed),
+      keys: Array.isArray(rootProcessed) ? null : Object.keys(rootProcessed),
+      index: 0,
+      first: true,
+    },
+  ];
+
+  const visited = new WeakSet([rootProcessed]);
+
+  while (stack.length > 0) {
+    const node = stack[stack.length - 1];
+
+    if (node.index === 0) {
+      chunks.push(node.isArray ? "[" : "{");
+      level++;
+    }
+
+    let isDone = false;
+
+    if (node.isArray) {
+      if (node.index < node.val.length) {
+        if (!node.first) chunks.push(",");
+
+        if (space) chunks.push("\n" + space.repeat(level));
+
+        const childRaw = node.val[node.index];
+        const childVal = prepareVal(node.val, String(node.index), childRaw);
+
+        if (isUnstringifiable(childVal)) {
+          chunks.push("null");
+          node.first = false;
+          node.index++;
+        } else {
+          const isComplexObject =
+            childVal !== null && typeof childVal === "object";
+          const isNativeRaw = isRawJSON(childVal);
+
+          if (isComplexObject && !isNativeRaw) {
+            if (visited.has(childVal)) {
+              throw new TypeError("Converting circular structure to JSON");
+            }
+
+            visited.add(childVal);
+
+            stack.push({
+              parent: node.val,
+              key: String(node.index),
+              val: childVal,
+              isArray: Array.isArray(childVal),
+              keys: Array.isArray(childVal) ? null : Object.keys(childVal),
+              index: 0,
+              first: true,
+            });
+
+            node.first = false;
+            node.index++;
+          } else {
+            chunks.push(originalStringify(childVal));
+            node.first = false;
+            node.index++;
+          }
+        }
+      } else {
+        isDone = true;
+      }
+    } else {
+      while (node.index < node.keys.length) {
+        const k = node.keys[node.index++];
+
+        const isFilteredOutByArray = propertyList && !propertyList.has(k);
+
+        if (isFilteredOutByArray) continue;
+
+        const childRaw = node.val[k];
+        const childVal = prepareVal(node.val, k, childRaw);
+
+        if (isUnstringifiable(childVal)) continue;
+
+        if (!node.first) chunks.push(",");
+
+        if (space) {
+          chunks.push("\n" + space.repeat(level) + originalStringify(k) + ": ");
+        } else {
+          chunks.push(originalStringify(k) + ":");
+        }
+
+        const isComplexObject =
+          childVal !== null && typeof childVal === "object";
+        const isNativeRaw = isRawJSON(childVal);
+
+        if (isComplexObject && !isNativeRaw) {
+          if (visited.has(childVal)) {
+            throw new TypeError("Converting circular structure to JSON");
+          }
+
+          visited.add(childVal);
+
+          stack.push({
+            parent: node.val,
+            key: k,
+            val: childVal,
+            isArray: Array.isArray(childVal),
+            keys: Array.isArray(childVal) ? null : Object.keys(childVal),
+            index: 0,
+            first: true,
+          });
+
+          node.first = false;
+
+          break; // Stop current loop level to process the newly pushed stack node
+        } else {
+          chunks.push(originalStringify(childVal));
+          node.first = false;
+        }
+      }
+
+      const isNodeFullyProcessed =
+        node.index >= node.keys.length && stack[stack.length - 1] === node;
+
+      if (isNodeFullyProcessed) {
+        isDone = true;
+      }
+    }
+
+    if (isDone) {
+      level--;
+
+      if (!node.first && space) chunks.push("\n" + space.repeat(level));
+
+      chunks.push(node.isArray ? "]" : "}");
+      visited.delete(node.val);
+      stack.pop();
+    }
+  }
+
+  return chunks.join("");
+};
+
+/**
+ * Converts a JavaScript value to a JSON string.
+ *
+ * Supports serialization of BigInt values using two strategies:
+ * 1. Custom format "123n" → "123" (universal fallback)
+ * 2. Native JSON.rawJSON() (Node.js 22+, fastest) when available
+ *
+ * All other values are serialized exactly like native JSON.stringify().
+ *
+ * @param {*} value The value to convert to a JSON string.
+ * @param {Replacer | Array<string | number> | null} [replacer]
+ * A function that alters the behavior of the stringification process,
+ * or an array of strings/numbers to indicate properties to exclude.
+ * @param {string | number} [space]
+ * A string or number to specify indentation or pretty-printing.
+ * @returns {string} The JSON string representation.
+ */
+const JSONStringify = (value, replacer, space) => {
+  try {
+    const supportsRawJSON = "rawJSON" in JSON;
+
+    if (supportsRawJSON) {
+      return originalStringify(
+        value,
+        (key, val) => {
+          if (typeof val === "bigint") return JSON.rawJSON(val.toString());
+
+          const hasFunctionReplacer = typeof replacer === "function";
+
+          if (hasFunctionReplacer) return replacer(key, val);
+
+          const isKeyInArrayReplacer =
+            Array.isArray(replacer) && replacer.includes(key);
+
+          if (isKeyInArrayReplacer) return val;
+
+          return val;
+        },
+        space,
+      );
+    }
+
+    if (!value) return originalStringify(value, replacer, space);
+
+    const convertedToCustomJSON = originalStringify(
+      value,
+      (key, val) => {
+        const isNoise = typeof val === "string" && noiseValue.test(val);
+
+        if (isNoise) return val.toString() + "n"; // Mark noise values with additional "n" to offset the deletion of one "n" during the processing
+
+        if (typeof val === "bigint") return val.toString() + "n";
+
+        const hasFunctionReplacer = typeof replacer === "function";
+
+        if (hasFunctionReplacer) return replacer(key, val);
+
+        const isKeyInArrayReplacer =
+          Array.isArray(replacer) && replacer.includes(key);
+
+        if (isKeyInArrayReplacer) return val;
+
+        return val;
+      },
+      space,
+    );
+
+    const processedJSON = convertedToCustomJSON.replace(
+      bigIntsStringify,
+      "$1$2$3",
+    ); // Delete one "n" off the end of every BigInt value
+
+    const denoisedJSON = processedJSON.replace(noiseStringify, "$1$2$3"); // Remove one "n" off the end of every noisy string
+
+    return denoisedJSON;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      const convertedJSON = stringifyIteratively(value, replacer, space);
+
+      if (convertedJSON === undefined) return undefined;
+
+      const supportsRawJSON = "rawJSON" in JSON;
+
+      if (supportsRawJSON) return convertedJSON;
+
+      const processedJSON = convertedJSON.replace(bigIntsStringify, "$1$2$3");
+
+      return processedJSON.replace(noiseStringify, "$1$2$3");
+    }
+
+    throw error;
+  }
+};
+
+const featureCache = new Map();
+
+/**
+ * Detects if the current JSON.parse implementation supports the context.source feature.
+ *
+ * Uses toString() fingerprinting to cache results and automatically detect runtime
+ * replacements of JSON.parse (polyfills, mocks, etc.).
+ *
+ * @returns {boolean} true if context.source is supported, false otherwise.
+ */
+const isContextSourceSupported = () => {
+  const parseFingerprint = JSON.parse.toString();
+
+  if (featureCache.has(parseFingerprint)) {
+    return featureCache.get(parseFingerprint);
+  }
+
+  try {
+    const result = JSON.parse(
+      "1",
+      (_, __, context) => !!context?.source && context.source === "1",
+    );
+    featureCache.set(parseFingerprint, result);
+
+    return result;
+  } catch {
+    featureCache.set(parseFingerprint, false);
+
+    return false;
+  }
+};
+
+/**
+ * Reviver function that converts custom-format BigInt strings back to BigInt values.
+ * Also handles "noise" strings that accidentally match the BigInt format.
+ *
+ * @param {string | number | undefined} key The object key.
+ * @param {*} value The value being parsed.
+ * @param {object} [context] Parse context (if supported by JSON.parse).
+ * @param {Reviver} [userReviver] User's custom reviver function.
+ * @returns {any} The transformed value.
+ */
+const convertMarkedBigIntsReviver = (key, value, context, userReviver) => {
+  const isCustomFormatBigInt =
+    typeof value === "string" && customFormat.test(value);
+
+  if (isCustomFormatBigInt) return BigInt(value.slice(0, -1));
+
+  const isNoiseValue = typeof value === "string" && noiseValue.test(value);
+  if (isNoiseValue) return value.slice(0, -1);
+
+  const hasUserReviver = typeof userReviver === "function";
+
+  if (!hasUserReviver) return value;
+
+  return userReviver(key, value, context);
+};
+
+/**
+ * Fast JSON.parse implementation (~2x faster than classic fallback).
+ * Uses JSON.parse's context.source feature to detect integers and convert
+ * large numbers directly to BigInt without string manipulation.
+ *
+ * Does not support legacy custom format from v1 of this library.
+ *
+ * @param {string} text JSON string to parse.
+ * @param {Reviver} [reviver] Transform function to apply to each value.
+ * @returns {any} Parsed JavaScript value.
+ */
+const JSONParseV2 = (text, reviver) => {
+  return JSON.parse(text, (key, value, context) => {
+    const isNumber = typeof value === "number";
+    const isOutOfBounds =
+      value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER;
+    const isBigNumber = isNumber && isOutOfBounds;
+    const isInt = context && intRegex.test(context.source);
+    const isBigInt = isBigNumber && isInt;
+
+    if (isBigInt) return BigInt(context.source);
+
+    const hasCustomReviver = typeof reviver === "function";
+
+    if (!hasCustomReviver) return value;
+
+    return reviver(key, value, context);
+  });
+};
+
+const MAX_INT = Number.MAX_SAFE_INTEGER.toString();
+const MAX_DIGITS = MAX_INT.length;
+const stringsOrLargeNumbers =
+  /"(?:[^"\\]|\\.)*"|-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/g;
+const noiseValueWithQuotes = /^"-?\d+n+"$/; // Noise - strings that match the custom format before being converted to it
+
+/**
+ * Iteratively traverses the parsed object bottom-up (post-order),
+ * emulating the native JSON.parse reviver behavior.
+ * This avoids Call Stack overflows (RangeError) on deeply nested structures.
+ *
+ * @param {any} parsed The natively parsed JSON object.
+ * @param {Reviver} [userReviver] User's custom reviver function.
+ * @returns {any} The fully processed object.
+ */
+const applyReviverIteratively = (parsed, userReviver) => {
+  const rootHolder = { "": parsed };
+  const stack = [{ parent: rootHolder, key: "", visited: false }];
+
+  while (stack.length > 0) {
+    const node = stack[stack.length - 1];
+
+    if (!node.visited) {
+      node.visited = true;
+
+      const value = node.parent[node.key];
+      const isComplexObject = value !== null && typeof value === "object";
+
+      if (isComplexObject) {
+        const keys = Object.keys(value);
+
+        for (let i = keys.length - 1; i >= 0; i--) {
+          stack.push({ parent: value, key: keys[i], visited: false });
+        }
+      }
+    } else {
+      const { parent, key } = node;
+      let value = parent[key];
+
+      if (typeof value === "string") {
+        const isCustomFormatBigInt = customFormat.test(value);
+
+        if (isCustomFormatBigInt) {
+          value = BigInt(value.slice(0, -1));
+        } else {
+          const isNoise = noiseValue.test(value);
+
+          if (isNoise) value = value.slice(0, -1);
+        }
+      }
+
+      const hasUserReviver = typeof userReviver === "function";
+
+      if (hasUserReviver) {
+        value = userReviver.call(parent, key, value);
+      }
+
+      const isDeleted = value === undefined;
+
+      if (isDeleted) {
+        delete parent[key];
+      } else {
+        parent[key] = value;
+      }
+
+      stack.pop();
+    }
+  }
+
+  return rootHolder[""];
+};
+
+/**
+ * Pre-processes the JSON string to mark large numbers with an 'n' suffix.
+ *
+ * @param {string} text The raw JSON string.
+ * @returns {string} The serialized string with marked BigInts.
+ */
+const serializeBigInts = (text) => {
+  return text.replace(
+    stringsOrLargeNumbers,
+    (match, digits, fractional, exponential) => {
+      const isString = match[0] === '"';
+      const isNoise = isString && noiseValueWithQuotes.test(match);
+
+      if (isNoise) return match.substring(0, match.length - 1) + 'n"'; // Mark noise values with additional "n" to offset the deletion of one "n" during the processing
+
+      const hasFractionalOrExponential = fractional || exponential;
+
+      // With a fixed number of digits, we can correctly use lexicographical comparison to do a numeric comparison
+      const isLessThanMaxSafeInt =
+        digits &&
+        (digits.length < MAX_DIGITS ||
+          (digits.length === MAX_DIGITS && digits <= MAX_INT));
+
+      const isStandardValue =
+        isString || hasFractionalOrExponential || isLessThanMaxSafeInt;
+
+      if (isStandardValue) return match;
+
+      return '"' + match + 'n"';
+    },
+  );
+};
+
+/**
+ * Converts a JSON string into a JavaScript value.
+ *
+ * Supports parsing of large integers using two strategies:
+ * 1. Classic fallback: Marks large numbers with "123n" format, then converts to BigInt
+ * 2. Fast path (JSONParseV2): Uses context.source feature (~2x faster) when available
+ *
+ * All other JSON values are parsed exactly like native JSON.parse().
+ *
+ * @param {string} text A valid JSON string.
+ * @param {Reviver} [reviver]
+ * A function that transforms the results. This function is called for each member
+ * of the object. If a member contains nested objects, the nested objects are
+ * transformed before the parent object is.
+ * @returns {any} The parsed JavaScript value.
+ * @throws {SyntaxError} If text is not valid JSON.
+ */
+const JSONParse = (text, reviver) => {
+  if (!text) return originalParse(text, reviver);
+
+  try {
+    if (isContextSourceSupported()) return JSONParseV2(text, reviver); // Shortcut to a faster (2x) and simpler version
+
+    // Find and mark big numbers with "n"
+    const serializedData = serializeBigInts(text);
+
+    return originalParse(serializedData, (key, value, context) =>
+      convertMarkedBigIntsReviver(key, value, context, reviver),
+    );
+  } catch (error) {
+    if (error instanceof RangeError) {
+      const serializedData = serializeBigInts(text);
+      const parsed = originalParse(serializedData);
+
+      return applyReviverIteratively(parsed, reviver);
+    }
+
+    throw error;
+  }
+};
+
+
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/request-error/dist-src/index.js
 class RequestError extends Error {
   name;
   /**
@@ -38249,7 +39873,7 @@ class RequestError extends Error {
 }
 
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/request/dist-bundle/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/request/dist-bundle/index.js
 // pkg/dist-src/index.js
 
 
@@ -38257,16 +39881,17 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "10.0.7";
+var request_dist_bundle_VERSION = "10.0.16";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
   headers: {
-    "user-agent": `octokit-request.js/${dist_bundle_VERSION} ${getUserAgent()}`
+    "user-agent": `octokit-request.js/${request_dist_bundle_VERSION} ${getUserAgent()}`
   }
 };
 
 // pkg/dist-src/fetch-wrapper.js
+
 
 
 // pkg/dist-src/is-plain-object.js
@@ -38291,7 +39916,7 @@ async function fetchWrapper(requestOptions) {
   }
   const log = requestOptions.request?.log || console;
   const parseSuccessResponseBody = requestOptions.request?.parseSuccessResponseBody !== false;
-  const body = dist_bundle_isPlainObject(requestOptions.body) || Array.isArray(requestOptions.body) ? JSON.stringify(requestOptions.body) : requestOptions.body;
+  const body = dist_bundle_isPlainObject(requestOptions.body) || Array.isArray(requestOptions.body) ? JSONStringify(requestOptions.body) : requestOptions.body;
   const requestHeaders = Object.fromEntries(
     Object.entries(requestOptions.headers).map(([name, value]) => [
       name,
@@ -38385,16 +40010,19 @@ async function getResponseData(response) {
   if (!contentType) {
     return response.text().catch(noop);
   }
-  const mimetype = (0,fast_content_type_parse/* safeParse */.xL)(contentType);
+  const mimetype = dist_parse(contentType);
   if (isJSONResponse(mimetype)) {
     let text = "";
     try {
       text = await response.text();
-      return JSON.parse(text);
+      return JSONParse(text);
     } catch (err) {
       return text;
     }
-  } else if (mimetype.type.startsWith("text/") || mimetype.parameters.charset?.toLowerCase() === "utf-8") {
+  } else if (mimetype.type.startsWith("text/") || // `application/octet-stream` is the canonical "arbitrary binary" type
+  // (RFC 2046) and must never be decoded as text, even when the response
+  // carries a (misleading) `charset=utf-8` parameter — see #751.
+  mimetype.parameters.charset?.toLowerCase() === "utf-8" && mimetype.type !== "application/octet-stream") {
     return response.text().catch(noop);
   } else {
     return response.arrayBuffer().catch(
@@ -38413,9 +40041,10 @@ function toErrorMessage(data) {
   if (data instanceof ArrayBuffer) {
     return "Unknown error";
   }
-  if ("message" in data) {
-    const suffix = "documentation_url" in data ? ` - ${data.documentation_url}` : "";
-    return Array.isArray(data.errors) ? `${data.message}: ${data.errors.map((v) => JSON.stringify(v)).join(", ")}${suffix}` : `${data.message}${suffix}`;
+  if (typeof data === "object" && data !== null && "message" in data) {
+    const objectData = data;
+    const suffix = "documentation_url" in objectData ? ` - ${objectData.documentation_url}` : "";
+    return Array.isArray(objectData.errors) ? `${objectData.message}: ${objectData.errors.map((v) => JSON.stringify(v)).join(", ")}${suffix}` : `${objectData.message}${suffix}`;
   }
   return `Unknown error: ${JSON.stringify(data)}`;
 }
@@ -38451,7 +40080,7 @@ var request = dist_bundle_withDefaults(endpoint, defaults_default);
 /* v8 ignore next -- @preserve */
 /* v8 ignore else -- @preserve */
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/graphql/dist-bundle/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/dist-bundle/index.js
 // pkg/dist-src/index.js
 
 
@@ -38482,6 +40111,9 @@ var GraphqlResponseError = class extends Error {
       Error.captureStackTrace(this, this.constructor);
     }
   }
+  request;
+  headers;
+  response;
   name = "GraphqlResponseError";
   errors;
   data;
@@ -38577,8 +40209,9 @@ function withCustomRequest(customRequest) {
   });
 }
 
+/* v8 ignore if -- @preserve */
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/auth-token/dist-bundle/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/auth-token/dist-bundle/index.js
 // pkg/dist-src/is-jwt.js
 var b64url = "(?:[a-zA-Z0-9_-]+)";
 var sep = "\\.";
@@ -38633,11 +40266,11 @@ var createTokenAuth = function createTokenAuth2(token) {
 };
 
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/core/dist-src/version.js
-const version_VERSION = "7.0.6";
+;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/version.js
+const version_VERSION = "7.0.8";
 
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/core/dist-src/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/core/dist-src/index.js
 
 
 
@@ -38778,12 +40411,12 @@ class Octokit {
 }
 
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/version.js
 const dist_src_version_VERSION = "17.0.0";
 
 //# sourceMappingURL=version.js.map
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/generated/endpoints.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/generated/endpoints.js
 const Endpoints = {
   actions: {
     addCustomLabelsToSelfHostedRunnerForOrg: [
@@ -41077,7 +42710,7 @@ var endpoints_default = Endpoints;
 
 //# sourceMappingURL=endpoints.js.map
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/endpoints-to-methods.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/endpoints-to-methods.js
 
 const endpointMethodsMap = /* @__PURE__ */ new Map();
 for (const [scope, endpoints] of Object.entries(endpoints_default)) {
@@ -41203,7 +42836,7 @@ function decorate(octokit, scope, methodName, defaults, decorations) {
 
 //# sourceMappingURL=endpoints-to-methods.js.map
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-rest-endpoint-methods/dist-src/index.js
 
 
 function restEndpointMethods(octokit) {
@@ -41224,7 +42857,7 @@ legacyRestEndpointMethods.VERSION = dist_src_version_VERSION;
 
 //# sourceMappingURL=index.js.map
 
-;// CONCATENATED MODULE: ./node_modules/@actions/github/node_modules/@octokit/plugin-paginate-rest/dist-bundle/index.js
+;// CONCATENATED MODULE: ./node_modules/@octokit/plugin-paginate-rest/dist-bundle/index.js
 // pkg/dist-src/version.js
 var plugin_paginate_rest_dist_bundle_VERSION = "0.0.0-development";
 
@@ -41653,6 +43286,7 @@ const defaults = {
     }
 };
 const GitHub = Octokit.plugin(restEndpointMethods, paginateRest).defaults(defaults);
+
 /**
  * Convience function to correctly format Octokit Options to pass into the constructor.
  *
@@ -41665,6 +43299,11 @@ function getOctokitOptions(token, options) {
     const auth = getAuthString(token, opts);
     if (auth) {
         opts.auth = auth;
+    }
+    // Orchestration ID
+    const userAgent = getUserAgentWithOrchestrationId(opts.userAgent);
+    if (userAgent) {
+        opts.userAgent = userAgent;
     }
     return opts;
 }
@@ -41685,6 +43324,8 @@ function getOctokit(token, options, ...additionalPlugins) {
 }
 //# sourceMappingURL=github.js.map
 ;// CONCATENATED MODULE: ./src/formatter.ts
+
+
 
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
@@ -42047,6 +43688,127 @@ function extractPercentChange(diff) {
     }
     return 0;
 }
+function formatRecommendationsSection(recommendationsReport) {
+    if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
+        return '';
+    }
+    const totalSavings = recommendationsReport.summary.total_savings;
+    const savingsCurrency = recommendationsReport.summary.currency;
+    const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
+    const recRows = recommendationsReport.recommendations
+        .map((rec) => {
+        const name = rec.resource_id.split('::').pop() || rec.resource_id;
+        const savings = `${rec.estimated_savings.toFixed(2)} ${rec.currency}`;
+        if (!scored) {
+            return `| ${name} | ${rec.description} | ${savings} |`;
+        }
+        const risk = formatScore(rec.scores?.risk);
+        const review = rec.scores?.needs_review ? ' review' : '';
+        const worth = formatScore(rec.scores?.worth_acting);
+        return `| ${name} | ${rec.description} | ${savings} | ${risk}${review} | ${worth} |`;
+    })
+        .join('\n');
+    const header = scored
+        ? `| Resource | Recommendation | Savings | Risk | Worth acting |
+| :--- | :--- | ---: | ---: | ---: |`
+        : `| Resource | Recommendation | Savings |
+| :--- | :--- | ---: |`;
+    const scoring = recommendationsReport.scoring;
+    const scoringNote = scoring
+        ? `\n\nScoring${scoring.scorer ? ` (${scoring.scorer})` : ''}: scored ${scoring.scored} of ${scoring.requested}. Scores rank work for review; they do not dismiss a recommendation.` +
+            (scoring.warnings && scoring.warnings.length > 0
+                ? ` Warnings: ${scoring.warnings.join('; ')}.`
+                : '')
+        : '';
+    return `
+
+<details open>
+<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+
+${header}
+${recRows}
+${scoringNote}
+
+</details>
+`;
+}
+function formatScore(value) {
+    return typeof value === 'number' ? value.toFixed(2) : '—';
+}
+function formatDeclineSection(report) {
+    const declines = collectDeclineNotes(report);
+    if (declines.length === 0) {
+        return '';
+    }
+    const rows = declines
+        .slice(0, 20)
+        .map((decline) => {
+        const resourceId = decline.resourceId.split('::').pop() || decline.resourceId;
+        return `| ${decline.resourceType} | ${resourceId} | ${decline.note} |`;
+    })
+        .join('\n');
+    const more = declines.length > 20 ? `\n\nand ${declines.length - 20} more` : '';
+    return `
+
+<details>
+<summary><strong>Plugin declines</strong> (${declines.length})</summary>
+
+| Type | Resource | Reason |
+| :--- | :--- | :--- |
+${rows}${more}
+
+*A plugin Supports() call declined the resource. The note is why it was not priced.*
+
+</details>
+`;
+}
+function formatClusterSection(report) {
+    const currency = report.currency || 'USD';
+    const rows = report.groups
+        .map((group) => {
+        const notes = group.notes && group.notes.length > 0 ? group.notes.join('; ') : '';
+        return `| ${group.key} | ${group.cpu_cost.toFixed(2)} | ${group.mem_cost.toFixed(2)} | ${group.total_cost.toFixed(2)} ${currency} | ${notes} |`;
+    })
+        .join('\n');
+    const idle = typeof report.idle === 'number'
+        ? `\n\nIdle: ${report.idle.toFixed(2)} ${currency}`
+        : '\n\nIdle omitted (namespace scoped).';
+    const incomplete = report.incomplete ? '\n\nSome cluster resources could not be priced.' : '';
+    const warnings = report.warnings && report.warnings.length > 0
+        ? `\n\nWarnings: ${report.warnings.join('; ')}`
+        : '';
+    return `
+
+<details>
+<summary><strong>Cluster costs</strong> — ${report.total.toFixed(2)} ${currency}/mo by ${report.group_by}</summary>
+
+| Group | CPU | Memory | Total | Notes |
+| :--- | ---: | ---: | ---: | :--- |
+${rows}${idle}${incomplete}${warnings}
+
+</details>
+`;
+}
+function formatStateOnlySection(report) {
+    const summary = report.summary;
+    const currency = summary.currency || 'USD';
+    return `
+
+<details>
+<summary><strong>State-only overview</strong> — pulumi preview was not run</summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Projected monthly** | ${summary.projectedMonthly.toFixed(2)} ${currency} |
+| **Actual month-to-date** | ${summary.totalActualMTD.toFixed(2)} ${currency} |
+| **Projected delta** | ${summary.projectedDelta.toFixed(2)} ${currency} |
+| **Potential savings** | ${summary.potentialSavings.toFixed(2)} ${currency} |
+
+*From \`finfocus overview --state-only\`. Pending changes are not included.*
+
+</details>
+`;
+}
 /**
  * Format the unpriced resources section when resources could not be priced.
  * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
@@ -42090,9 +43852,11 @@ ${errorRows}${truncatedNote}
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
  * @param estimateReport - Optional what-if estimate report to include
+ * @param clusterReport - Optional Kubernetes cluster allocation from `finfocus cost cluster`
+ * @param stateOnlyReport - Optional `finfocus overview --state-only` summary
  * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
  */
-function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport) {
+function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
     // Handle both new and legacy report formats
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
     const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
@@ -42110,22 +43874,28 @@ function formatCommentBody(report, config, recommendationsReport, actualCostRepo
             diffText = `📉 ${diffText}`;
         }
     }
-    // Build resource breakdown if available
     const resources = report.resources ?? report.summary?.resources ?? [];
     let resourceTable = '';
+    let providerBreakdown = '';
     const isDetailed = config?.detailedComment === true;
-    if (resources.length > 0) {
-        const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
-        if (isDetailed) {
-            // Detailed view: All resources with notes and breakdown
-            const resourceRows = sortedResources
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                const notes = r.notes ? `<br/>*${r.notes}*` : '';
-                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
-            })
-                .join('\n');
-            resourceTable = `
+    if (config && (0,display/* usesDisplayControls */.js)(config)) {
+        const displayed = (0,display/* formatDisplaySections */.Wk)(report, config, currency);
+        resourceTable = displayed.resourceTable;
+        providerBreakdown = displayed.groupTable;
+    }
+    else {
+        if (resources.length > 0) {
+            const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
+            if (isDetailed) {
+                // Detailed view: All resources with notes and breakdown
+                const resourceRows = sortedResources
+                    .map((r) => {
+                    const name = r.resourceId.split('::').pop() || r.resourceId;
+                    const notes = r.notes ? `<br/>*${r.notes}*` : '';
+                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+                })
+                    .join('\n');
+                resourceTable = `
 
 <details>
 <summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
@@ -42136,18 +43906,18 @@ ${resourceRows}
 
 </details>
 `;
-        }
-        else if (resources.length <= 20) {
-            // Standard view: Top resources in collapsible section
-            const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
-            const resourceRows = topResources
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-            })
-                .join('\n');
-            if (resourceRows) {
-                resourceTable = `
+            }
+            else if (resources.length <= 20) {
+                // Standard view: Top resources in collapsible section
+                const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
+                const resourceRows = topResources
+                    .map((r) => {
+                    const name = r.resourceId.split('::').pop() || r.resourceId;
+                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+                })
+                    .join('\n');
+                if (resourceRows) {
+                    resourceTable = `
 
 <details>
 <summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
@@ -42158,19 +43928,18 @@ ${resourceRows}
 
 </details>
 `;
+                }
             }
         }
-    }
-    // Build provider breakdown only if multiple providers
-    let providerBreakdown = '';
-    if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
-        const providerRows = Object.entries(report.summary.byProvider)
-            .filter(([, cost]) => cost > 0)
-            .sort(([, a], [, b]) => b - a)
-            .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
-            .join('\n');
-        if (providerRows) {
-            providerBreakdown = `
+        // Build provider breakdown only if multiple providers
+        if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
+            const providerRows = Object.entries(report.summary.byProvider)
+                .filter(([, cost]) => cost > 0)
+                .sort(([, a], [, b]) => b - a)
+                .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
+                .join('\n');
+            if (providerRows) {
+                providerBreakdown = `
 
 <details>
 <summary><strong>☁️ Cost by Provider</strong></summary>
@@ -42181,6 +43950,7 @@ ${providerRows}
 
 </details>
 `;
+            }
         }
     }
     // Build Actual Cost Section
@@ -42210,34 +43980,15 @@ ${actualRows}
         }
     }
     const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
-    // Recommendations section - prominent since it's actionable
-    let recommendationsSection = '';
-    if (recommendationsReport && recommendationsReport.recommendations.length > 0) {
-        const totalSavings = recommendationsReport.summary.total_savings;
-        const savingsCurrency = recommendationsReport.summary.currency;
-        const recRows = recommendationsReport.recommendations
-            .map((r) => {
-            const name = r.resource_id.split('::').pop() || r.resource_id;
-            return `| ${name} | ${r.description} | ${r.estimated_savings.toFixed(2)} ${r.currency} |`;
-        })
-            .join('\n');
-        recommendationsSection = `
-
-<details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
-
-| Resource | Recommendation | Savings |
-| :--- | :--- | ---: |
-${recRows}
-
-</details>
-`;
-    }
+    const recommendationsSection = formatRecommendationsSection(recommendationsReport);
     const sustainabilitySection = sustainabilityReport
         ? formatSustainabilitySection(sustainabilityReport, config, report)
         : '';
     const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
     const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
+    const declineSection = formatDeclineSection(report);
+    const clusterSection = clusterReport ? formatClusterSection(clusterReport) : '';
+    const stateOnlySection = stateOnlyReport ? formatStateOnlySection(stateOnlyReport) : '';
     // Basic budget status section (local math; finfocus has no budget status command)
     const budgetSection = formatBudgetSection(budgetStatus);
     // Calculate percent used for dashboard from budget status
@@ -42261,7 +44012,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
@@ -42274,7 +44025,7 @@ ${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSecti
 
 class Commenter {
     marker = '<!-- finfocus-action-comment -->';
-    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport) {
+    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
         const octokit = getOctokit(token);
         const context = github_context;
         if (!context.payload.pull_request) {
@@ -42283,7 +44034,7 @@ class Commenter {
         }
         const prNumber = context.payload.pull_request.number;
         const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport)}`;
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport)}`;
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
             issue_number: prNumber,
@@ -42352,6 +44103,44 @@ class ConfigManager {
             main_core/* info */.pq('  Budget configuration written successfully');
         else
             main_core/* info */.pq('Budget configuration created successfully');
+    }
+    /**
+     * Opt in to Jev recommendation scoring. finfocus reads `scoring.enabled` and
+     * `scoring.plugin` from ~/.finfocus/config.yaml. The action does not write
+     * TYPESAFE_API_KEY; the workflow must pass that secret in the environment.
+     * An existing scoring section is left unchanged.
+     */
+    async writeScoringConfig(config) {
+        if (!config.enableJevScoring) {
+            return;
+        }
+        const configDir = external_path_.join(external_os_.homedir(), '.finfocus');
+        const configPath = external_path_.join(configDir, 'config.yaml');
+        const block = [
+            '# finfocus recommendation scoring',
+            '# Generated by finfocus-action',
+            'scoring:',
+            '  enabled: true',
+            '  plugin: jev',
+            '  identifier_mode: pseudonymized',
+            '',
+        ].join('\n');
+        if (!external_fs_.existsSync(configDir)) {
+            external_fs_.mkdirSync(configDir, { recursive: true });
+        }
+        if (!external_fs_.existsSync(configPath)) {
+            external_fs_.writeFileSync(configPath, block, 'utf8');
+            main_core/* info */.pq('Jev scoring configuration created (scoring.plugin: jev)');
+            return;
+        }
+        const existing = external_fs_.readFileSync(configPath, 'utf8');
+        if (/^scoring:/m.test(existing)) {
+            main_core/* info */.pq('scoring section already present in config.yaml; leaving it unchanged');
+            return;
+        }
+        const separator = existing.endsWith('\n') ? '\n' : '\n\n';
+        external_fs_.writeFileSync(configPath, `${existing}${separator}${block}`, 'utf8');
+        main_core/* info */.pq('Jev scoring configuration appended (scoring.plugin: jev)');
     }
     parseBudgetConfig(config) {
         const amount = config.budgetAmount || 0;
@@ -42443,6 +44232,8 @@ class ConfigManager {
 }
 
 ;// CONCATENATED MODULE: ./src/main.ts
+
+
 
 
 
@@ -42577,6 +44368,22 @@ async function run() {
         const budgetPeriod = main_core/* getInput */.V4('budget_period') || 'monthly';
         const budgetAlerts = main_core/* getInput */.V4('budget_alerts') || '';
         const estimateSpec = main_core/* getInput */.V4('estimate_spec') || '';
+        const includeClusterCosts = parseBoolean(main_core/* getInput */.V4('include_cluster_costs'), false);
+        const clusterGroupBy = main_core/* getInput */.V4('cluster_group_by') || 'namespace';
+        const clusterNamespace = main_core/* getInput */.V4('cluster_namespace') || '';
+        const clusterContext = main_core/* getInput */.V4('cluster_context') || '';
+        const clusterSelector = main_core/* getInput */.V4('cluster_selector') || '';
+        const enableJevScoring = parseBoolean(main_core/* getInput */.V4('enable_jev_scoring'), false);
+        const includeDismissedRecommendations = parseBoolean(main_core/* getInput */.V4('include_dismissed_recommendations'), false);
+        const dismissRecommendations = main_core/* getInput */.V4('dismiss_recommendations') || '';
+        const snoozeRecommendations = main_core/* getInput */.V4('snooze_recommendations') || '';
+        const stateOnly = parseBoolean(main_core/* getInput */.V4('state_only'), false);
+        const resourceFilters = (0,display/* parseResourceFilters */.Pq)(main_core/* getInput */.V4('resource_filter'));
+        const groupBy = (0,display/* parseGroupBy */.eh)(main_core/* getInput */.V4('group_by'));
+        const minCostThreshold = (0,display/* parseMinCostThreshold */.yi)(main_core/* getInput */.V4('min_cost_threshold'));
+        const maxResourcesDisplayed = (0,display/* parseMaxResourcesDisplayed */.qr)(main_core/* getInput */.V4('max_resources_displayed'));
+        const showOnlyChanges = parseBoolean(main_core/* getInput */.V4('show_only_changes'), false);
+        const sortBy = (0,display/* parseSortBy */.Lh)(main_core/* getInput */.V4('sort_by'));
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -42604,6 +44411,22 @@ async function run() {
             budgetPeriod,
             budgetAlerts,
             estimateSpec,
+            includeClusterCosts,
+            clusterGroupBy,
+            clusterNamespace,
+            clusterContext,
+            clusterSelector,
+            enableJevScoring,
+            includeDismissedRecommendations,
+            dismissRecommendations,
+            snoozeRecommendations,
+            stateOnly,
+            resourceFilters,
+            groupBy,
+            minCostThreshold,
+            maxResourcesDisplayed,
+            showOnlyChanges,
+            sortBy,
         };
         if (config.debug) {
             main_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -42687,11 +44510,25 @@ async function run() {
                 main_core/* info */.pq('No plugins to install (install-plugins is empty)');
         }
         // Setup budget configuration if budget amount is provided
+        const configManager = new ConfigManager();
         if (config.budgetAmount && config.budgetAmount > 0) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('📊 Setting up budget configuration');
-            const configManager = new ConfigManager();
             await configManager.writeConfig(config);
+            main_core/* endGroup */.N4();
+        }
+        if (config.enableJevScoring) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('🧮 Enabling Jev recommendation scoring');
+            await configManager.writeScoringConfig(config);
+            if (!process.env.TYPESAFE_API_KEY) {
+                main_core/* warning */.$e('enable-jev-scoring is set but TYPESAFE_API_KEY is not in the environment. ' +
+                    'The jev plugin returns UNAUTHENTICATED and recommendations stay unscored.');
+            }
+            const jevRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'jev');
+            if (!jevRequested) {
+                main_core/* warning */.$e('enable-jev-scoring needs the jev plugin. Add jev to install-plugins if it is not already installed.');
+            }
             main_core/* endGroup */.N4();
         }
         if (config.analyzerMode) {
@@ -42704,10 +44541,31 @@ async function run() {
                 main_core/* info */.pq(`Total execution time: ${Date.now() - startTime}ms`);
             return;
         }
+        let stateOnlyReport;
+        if (config.stateOnly) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('📋 Running state-only overview');
+            stateOnlyReport = await analyzer.runStateOnly(config);
+            main_core/* info */.pq(`📋 State-only projected monthly: ${stateOnlyReport.summary.projectedMonthly} ${stateOnlyReport.summary.currency}`);
+            main_core/* setOutput */.uH('state-projected-monthly', stateOnlyReport.summary.projectedMonthly.toString());
+            main_core/* endGroup */.N4();
+        }
+        const planFileExists = external_fs_.existsSync(config.pulumiPlanJsonPath);
+        const runProjected = Boolean(config.terraformStatePath) || planFileExists || !config.stateOnly;
         main_core/* info */.pq('');
         main_core/* startGroup */.Oh('💰 Running cost analysis');
         const analysisStartTime = Date.now();
-        const report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
+        let report;
+        if (runProjected) {
+            report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
+        }
+        else if (stateOnlyReport) {
+            main_core/* info */.pq('No Pulumi plan or Terraform state file is present. Using the state-only overview as the cost total.');
+            report = reportFromStateOnly(stateOnlyReport);
+        }
+        else {
+            throw new Error('state-only did not produce an overview report.');
+        }
         if (config.debug) {
             main_core/* info */.pq(`Analysis took: ${Date.now() - analysisStartTime}ms`);
         }
@@ -42766,8 +44624,29 @@ async function run() {
             main_core/* info */.pq(`🌱 Carbon Intensity: ${carbonIntensity.toFixed(2)} gCO2e/USD`);
             main_core/* endGroup */.N4();
         }
+        let clusterReport;
+        if (config.includeClusterCosts) {
+            const kubernetesRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'kubernetes');
+            if (!kubernetesRequested) {
+                main_core/* warning */.$e('include-cluster-costs needs the kubernetes plugin and a kubeconfig on the runner. ' +
+                    'Add kubernetes to install-plugins if it is not already installed.');
+            }
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('☸️ Running cluster cost allocation');
+            clusterReport = await analyzer.runCluster(config);
+            main_core/* setOutput */.uH('cluster-total-cost', clusterReport.total.toString());
+            main_core/* info */.pq(`☸️ Cluster cost (${clusterReport.group_by}): ${clusterReport.total} ${clusterReport.currency}`);
+            main_core/* endGroup */.N4();
+        }
         let recommendationsReport;
-        if (config.includeRecommendations) {
+        if (config.dismissRecommendations || config.snoozeRecommendations) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('🙈 Applying recommendation dismissals');
+            const planForDismissal = planFileExists ? config.pulumiPlanJsonPath : undefined;
+            await analyzer.applyRecommendationLifecycle(planForDismissal, config);
+            main_core/* endGroup */.N4();
+        }
+        if (config.includeRecommendations && (planFileExists || !config.stateOnly)) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💡 Running cost recommendations');
             const recommendationsStartTime = Date.now();
@@ -42779,6 +44658,9 @@ async function run() {
             main_core/* setOutput */.uH('recommendation-count', recommendationsReport.summary.total_count.toString());
             main_core/* info */.pq(`💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`);
             main_core/* endGroup */.N4();
+        }
+        else if (config.includeRecommendations && config.stateOnly && !planFileExists) {
+            main_core/* info */.pq('Skipping recommendations: state-only mode has no Pulumi plan, and cost recommendations requires --pulumi-json.');
         }
         let estimateReport;
         if (config.estimateSpec) {
@@ -42829,7 +44711,8 @@ async function run() {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💬 Posting PR comment');
             const commentStartTime = Date.now();
-            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport);
+            const commentReport = (0,display/* annotateReportFromPlan */.MH)(report, config.pulumiPlanJsonPath, config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'));
+            await commenter.upsertComment(commentReport, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
             if (config.debug) {
                 main_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             }
