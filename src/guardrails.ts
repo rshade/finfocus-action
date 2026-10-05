@@ -9,6 +9,7 @@ import {
 } from './types.js';
 import { getFinfocusVersion, supportsExitCodes } from './install.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
+import { filterArgs } from './display.js';
 
 /**
  * Human-readable messages for each budget threshold result.
@@ -48,6 +49,7 @@ export async function checkBudgetThresholdWithExitCodes(
         '--exit-on-threshold',
         '--exit-code',
         String(BudgetExitCode.THRESHOLD_BREACH),
+        ...filterArgs(config.resourceFilters),
       ],
       {
         ignoreReturnCode: true,

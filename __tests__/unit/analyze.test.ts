@@ -47,7 +47,7 @@ describe('Analyzer', () => {
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'finfocus',
       ['cost', 'projected', '--pulumi-json', 'plan.json', '--output', 'json'],
-      expect.objectContaining({ silent: true, ignoreReturnCode: true })
+      expect.objectContaining({ silent: true, ignoreReturnCode: true }),
     );
     expect(report).toEqual(mockReport);
   });
@@ -98,19 +98,19 @@ describe('Analyzer', () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
 
     await expect(analyzer.runAnalysis('missing.json')).rejects.toThrow(
-      'Pulumi plan file not found: missing.json'
+      'Pulumi plan file not found: missing.json',
     );
   });
 
   it('should throw error if plan file is empty', async () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (fs.statSync as jest.Mock).mockReturnValue({ 
-      size: 0, 
-      mtime: new Date('2025-01-01T00:00:00Z') 
+    (fs.statSync as jest.Mock).mockReturnValue({
+      size: 0,
+      mtime: new Date('2025-01-01T00:00:00Z'),
     });
 
     await expect(analyzer.runAnalysis('empty.json')).rejects.toThrow(
-      'Pulumi plan file is empty: empty.json'
+      'Pulumi plan file is empty: empty.json',
     );
   });
 
@@ -122,7 +122,7 @@ describe('Analyzer', () => {
     });
 
     await expect(analyzer.runAnalysis('plan.json')).rejects.toThrow(
-      'finfocus analysis failed with exit code 1'
+      'finfocus analysis failed with exit code 1',
     );
   });
 
@@ -159,7 +159,7 @@ describe('Analyzer', () => {
     });
 
     await expect(analyzer.runAnalysis('plan.json')).rejects.toThrow(
-      'Failed to parse finfocus JSON output'
+      'Failed to parse finfocus JSON output',
     );
   });
 
@@ -185,16 +185,16 @@ describe('Analyzer', () => {
   it('should warn when both pulumi plan and terraform state are configured', async () => {
     (exec.getExecOutput as jest.Mock).mockResolvedValue({
       exitCode: 0,
-      stdout: JSON.stringify({ finfocus: { summary: { totalMonthly: 1, totalHourly: 0, currency: 'USD' } } }),
+      stdout: JSON.stringify({
+        finfocus: { summary: { totalMonthly: 1, totalHourly: 0, currency: 'USD' } },
+      }),
       stderr: '',
     });
 
     const config = { terraformStatePath: 'terraform.tfstate', debug: false } as any;
     await analyzer.runAnalysis('plan.json', config);
 
-    expect(core.warning).toHaveBeenCalledWith(
-      expect.stringContaining('mutually exclusive'),
-    );
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'));
   });
 
   it('should parse sustainability data when present in report', async () => {
@@ -207,13 +207,13 @@ describe('Analyzer', () => {
       resources: [
         {
           resourceType: 'aws:ec2/instance:Instance',
-          monthly: 7.50,
+          monthly: 7.5,
           sustainability: {
             gCO2e: { value: 12.5, unit: 'gCO2e/month' },
-            carbon_footprint: { value: 12.5, unit: 'kgCO2e/month' }
-          }
-        }
-      ]
+            carbon_footprint: { value: 12.5, unit: 'kgCO2e/month' },
+          },
+        },
+      ],
     };
 
     (exec.getExecOutput as jest.Mock).mockResolvedValue({
@@ -245,7 +245,28 @@ describe('Analyzer', () => {
     expect(exec.getExecOutput).toHaveBeenCalledWith(
       'finfocus',
       expect.arrayContaining(['--utilization', '0.8']),
-      expect.anything()
+      expect.anything(),
+    );
+  });
+
+  it('should pass each resource filter to cost projected', async () => {
+    (exec.getExecOutput as jest.Mock).mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        finfocus: { summary: { totalMonthly: 1, totalHourly: 0, currency: 'USD' } },
+      }),
+      stderr: '',
+    });
+
+    await analyzer.runAnalysis('plan.json', {
+      resourceFilters: ['type=ec2', 'tag:env=prod'],
+      debug: false,
+    } as any);
+
+    expect(exec.getExecOutput).toHaveBeenCalledWith(
+      'finfocus',
+      expect.arrayContaining(['--filter', 'type=ec2', '--filter', 'tag:env=prod']),
+      expect.anything(),
     );
   });
 
@@ -504,7 +525,7 @@ describe('Analyzer', () => {
           '--output',
           'json',
         ],
-        expect.objectContaining({ silent: true, ignoreReturnCode: true })
+        expect.objectContaining({ silent: true, ignoreReturnCode: true }),
       );
       expect(report).toBeDefined();
       expect(report?.totalChange).toBe(70.08);
@@ -530,8 +551,17 @@ describe('Analyzer', () => {
 
       expect(exec.getExecOutput).toHaveBeenCalledWith(
         'finfocus',
-        ['cost', 'estimate', '--provider', 'aws', '--resource-type', 'aws:ec2/instance:Instance', '--output', 'json'],
-        expect.anything()
+        [
+          'cost',
+          'estimate',
+          '--provider',
+          'aws',
+          '--resource-type',
+          'aws:ec2/instance:Instance',
+          '--output',
+          'json',
+        ],
+        expect.anything(),
       );
     });
 
@@ -540,7 +570,7 @@ describe('Analyzer', () => {
 
       expect(result).toBeUndefined();
       expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid estimate-spec JSON')
+        expect.stringContaining('Invalid estimate-spec JSON'),
       );
       expect(exec.getExecOutput).not.toHaveBeenCalled();
     });
@@ -569,9 +599,7 @@ describe('Analyzer', () => {
       const result = await analyzer.runEstimate({ estimateSpec: '"aws"' } as any);
 
       expect(result).toBeUndefined();
-      expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('must be a JSON object')
-      );
+      expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('must be a JSON object'));
       expect(exec.getExecOutput).not.toHaveBeenCalled();
     });
 
@@ -584,7 +612,7 @@ describe('Analyzer', () => {
       });
 
       await expect(analyzer.runEstimate({ estimateSpec } as any)).rejects.toThrow(
-        'parsing properties: invalid property format'
+        'parsing properties: invalid property format',
       );
       await expect(analyzer.runEstimate({ estimateSpec } as any)).rejects.toThrow('tool failure');
     });
@@ -597,7 +625,7 @@ describe('Analyzer', () => {
       });
 
       await expect(analyzer.runEstimate({ estimateSpec } as any)).rejects.toThrow(
-        'finfocus estimate failed with exit code 1'
+        'finfocus estimate failed with exit code 1',
       );
     });
   });

@@ -146,6 +146,30 @@ inputs:
     description: 'Run `finfocus overview --state-only --pulumi-state` so finfocus skips pulumi preview. Requires pulumi-state-json. This flag is on overview, not cost projected. When no plan or terraform state file exists, the overview total is used as the comment total. finfocus v0.3.5+ (tested on v0.4.0 and v0.4.3).'
     required: false
     default: 'false'
+  resource-filter:
+    description: 'Comma-separated finfocus filters passed as repeatable --filter on cost projected and cost actual. Syntax is key=value. type, provider, service, and id match case-insensitive substrings (type=ec2 matches aws:ec2/instance:Instance). tag:key=value matches Pulumi tags. A star is literal, not a wildcard. finfocus v0.4.0+.'
+    required: false
+    default: ''
+  group-by:
+    description: 'Group the comment by resource, type, provider, service, or tag:<key>. One dimension. Default provider. Tag grouping reads tags from the Pulumi plan. This is separate from actual-costs-group-by and cluster-group-by.'
+    required: false
+    default: 'provider'
+  min-cost-threshold:
+    description: 'Hide resources whose monthly cost is below this amount, for example 1USD. The projected monthly total is unchanged. Default 0 shows every resource.'
+    required: false
+    default: '0'
+  max-resources-displayed:
+    description: 'Maximum resource rows in the comment. 0 shows every row. Default 10. Group totals use the filtered set before this cap.'
+    required: false
+    default: '10'
+  show-only-changes:
+    description: 'Limit the resource table to Pulumi plan steps whose op is a change (create, update, delete, replace, import). Needs pulumi-plan-json. Default false.'
+    required: false
+    default: 'false'
+  sort-by:
+    description: 'Sort resource rows by cost, name, type, or change. Default cost.'
+    required: false
+    default: 'cost'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -243,6 +267,12 @@ runs:
         INPUT_DISMISS_RECOMMENDATIONS: ${{ inputs.dismiss-recommendations }}
         INPUT_SNOOZE_RECOMMENDATIONS: ${{ inputs.snooze-recommendations }}
         INPUT_STATE_ONLY: ${{ inputs.state-only }}
+        INPUT_RESOURCE_FILTER: ${{ inputs.resource-filter }}
+        INPUT_GROUP_BY: ${{ inputs.group-by }}
+        INPUT_MIN_COST_THRESHOLD: ${{ inputs.min-cost-threshold }}
+        INPUT_MAX_RESOURCES_DISPLAYED: ${{ inputs.max-resources-displayed }}
+        INPUT_SHOW_ONLY_CHANGES: ${{ inputs.show-only-changes }}
+        INPUT_SORT_BY: ${{ inputs.sort-by }}
 branding:
   icon: 'dollar-sign'
   color: 'blue'

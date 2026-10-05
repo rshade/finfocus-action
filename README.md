@@ -284,8 +284,41 @@ in the resource `notes` field, for example
 under **Plugin declines** instead of showing the resource as an unexplained $0.
 Pricing errors in the report `errors` array stay in **Resources Not Priced**.
 
-Pagination, NDJSON output, resource filtering, and cost forecasting are not
-part of this action yet.
+### Resource filters and comment grouping (finfocus v0.4.0+)
+
+`resource-filter` is passed to `finfocus cost projected` and `cost actual` as
+repeatable `--filter` flags. Separate expressions with commas. finfocus matches
+`type`, `provider`, `service`, and `id` as case-insensitive substrings, so
+`type=ec2` matches `aws:ec2/instance:Instance`. `tag:env=prod` matches a Pulumi
+tag. Several filters are combined with AND. A `*` is a literal character, not
+a wildcard. An expression without `=` fails the action before the CLI runs.
+
+`group-by` rolls the comment up by `resource`, `type`, `provider` (the default),
+`service`, or one `tag:<key>`. Tag groups read `inputs.tags` from the Pulumi
+plan and label missing tags `(untagged)`. This input is not
+`actual-costs-group-by` and not `cluster-group-by`.
+
+`min-cost-threshold` (for example `1USD`) drops cheap rows from the tables. The
+projected monthly total stays the finfocus total. `max-resources-displayed`
+caps the resource table (default 10, `0` shows every row). Group totals are
+computed before that cap. `sort-by` is `cost`, `name`, `type`, or `change`.
+`show-only-changes` keeps plan steps whose op is create, update, delete,
+replace, or import, and prints the plan diff as the net change.
+
+```yaml
+- uses: rshade/finfocus-action@v1
+  with:
+    pulumi-plan-json: plan.json
+    install-plugins: aws-public
+    resource-filter: type=ec2,tag:Environment=dev
+    group-by: service
+    min-cost-threshold: 1USD
+    max-resources-displayed: 10
+    show-only-changes: true
+    sort-by: cost
+```
+
+Pagination, NDJSON output, and cost forecasting are not part of this action yet.
 
 ## Compatibility
 

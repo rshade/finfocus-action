@@ -43,6 +43,7 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
 | `analyze.ts` | `Analyzer` | Runs `finfocus cost projected` (with `--pulumi-json` or `--terraform-state`), `recommendations`, `actual`, `estimate`, `cost cluster`, and `overview --state-only`; calculates sustainability metrics and budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
+| `display.ts` | — | Resource filters (`--filter`), comment grouping, min cost, display cap, change-only rows |
 | `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
 | `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code) |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
@@ -154,9 +155,14 @@ main.ts
   `snooze-recommendations` run `cost recommendations dismiss|snooze --force` first.
 - Supports() decline reasons are the `notes` text `(declined by <plugin>: <reason>)` on a
   resource. They are not the report `errors` array.
-- Do not implement pagination, NDJSON, resource filtering, or cost forecasting while issues
-  #49, #21, #20, and #19 are still open for re-evaluation. Those overlap #89 and were left
-  out on purpose.
+- Resource filters are finfocus `--filter` expressions (`type=ec2` is a case-insensitive
+  substring, `tag:env=prod` matches plan tags). They are passed to `cost projected`, `cost
+  actual`, and the budget threshold check. `*` is not a wildcard. Comment `group-by`
+  (`resource`, `type`, `provider`, `service`, `tag:<key>`) is action-side. `cost projected`
+  has no `--group-by`. `min-cost-threshold`, `max-resources-displayed`, `sort-by`, and
+  `show-only-changes` change the comment only. The projected monthly total stays the CLI total.
+- Do not implement pagination, NDJSON, or cost forecasting while issues #49, #21, and #19
+  are still open for re-evaluation. Those overlap #89 and were left out on purpose.
 
 ## Active Technologies
 

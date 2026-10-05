@@ -354,6 +354,27 @@ EOF
     fail "plugin list --available missing kubernetes or jev (exit=$EXIT)"
   fi
 
+  # 14. resource filter (issue #20): --filter is a cost projected flag.
+  # type= matches a case-insensitive substring. The aws-simple plan has one EC2
+  # instance, so type=ec2 keeps exactly that resource.
+  run_cmd "$tmp/out" "$tmp/err" "$BIN" cost projected --help
+  if [ "$EXIT" -eq 0 ] && grep -q -- '--filter' "$tmp/out"; then
+    pass "cost projected: --filter is listed"
+  else
+    fail "cost projected --help missing --filter (exit=$EXIT)"
+  fi
+
+  run_cmd "$tmp/filtered.json" "$tmp/err" \
+    "$BIN" cost projected --pulumi-json "$PLAN" --filter 'type=ec2' --output json
+  if [ "$EXIT" -eq 0 ] && jq -e '
+      (.finfocus.resources | length) == 1
+      and (.finfocus.resources[0].resourceType | test("ec2"; "i"))
+    ' "$tmp/filtered.json" >/dev/null; then
+    pass "cost projected --filter type=ec2: one ec2 resource"
+  else
+    fail "cost projected --filter type=ec2: exit=$EXIT err=$(tail -n1 "$tmp/err")"
+  fi
+
   echo
   if [ "$failures" -gt 0 ]; then
     echo "contract: $failures check(s) FAILED"

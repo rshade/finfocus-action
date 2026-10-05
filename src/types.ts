@@ -47,6 +47,18 @@ export interface ActionConfiguration {
    * It is an overview flag, not a `cost projected` flag.
    */
   stateOnly?: boolean;
+  /** finfocus `--filter` expressions (`type=ec2`, `tag:env=prod`). Passed to cost projected and cost actual. */
+  resourceFilters?: string[];
+  /** Comment grouping: resource, type, provider, service, or tag:<key>. */
+  groupBy?: string;
+  /** Hide resources whose monthly cost is below this amount. 0 keeps them. */
+  minCostThreshold?: number;
+  /** Maximum resource rows in the comment. 0 shows every row. */
+  maxResourcesDisplayed?: number;
+  /** Limit the resource table to resources whose Pulumi plan op is a change. */
+  showOnlyChanges?: boolean;
+  /** Resource table sort: cost, name, type, or change. */
+  sortBy?: 'cost' | 'name' | 'type' | 'change';
 }
 
 export interface BudgetAlert {
@@ -108,6 +120,10 @@ export interface FinfocusResource {
   monthly: number;
   hourly: number;
   notes?: string;
+  /** Pulumi plan op joined by resource urn. Set only for comment display. */
+  change?: string;
+  /** Pulumi plan tags joined by resource urn. Set only for comment display. */
+  tags?: Record<string, string>;
   breakdown?: unknown;
   startDate?: string;
   endDate?: string;

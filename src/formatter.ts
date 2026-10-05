@@ -14,6 +14,7 @@ import {
   isV041Diff,
 } from './types.js';
 import { collectDeclineNotes } from './v04.js';
+import { formatDisplaySections, usesDisplayControls } from './display.js';
 
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
@@ -639,26 +640,30 @@ export function formatCommentBody(
     }
   }
 
-  // Build resource breakdown if available
   const resources = report.resources ?? report.summary?.resources ?? [];
   let resourceTable = '';
-
+  let providerBreakdown = '';
   const isDetailed = config?.detailedComment === true;
 
-  if (resources.length > 0) {
-    const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
+  if (config && usesDisplayControls(config)) {
+    const displayed = formatDisplaySections(report, config, currency);
+    resourceTable = displayed.resourceTable;
+    providerBreakdown = displayed.groupTable;
+  } else {
+    if (resources.length > 0) {
+      const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
 
-    if (isDetailed) {
-      // Detailed view: All resources with notes and breakdown
-      const resourceRows = sortedResources
-        .map((r) => {
-          const name = r.resourceId.split('::').pop() || r.resourceId;
-          const notes = r.notes ? `<br/>*${r.notes}*` : '';
-          return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
-        })
-        .join('\n');
+      if (isDetailed) {
+        // Detailed view: All resources with notes and breakdown
+        const resourceRows = sortedResources
+          .map((r) => {
+            const name = r.resourceId.split('::').pop() || r.resourceId;
+            const notes = r.notes ? `<br/>*${r.notes}*` : '';
+            return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+          })
+          .join('\n');
 
-      resourceTable = `
+        resourceTable = `
 
 <details>
 <summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
@@ -669,18 +674,18 @@ ${resourceRows}
 
 </details>
 `;
-    } else if (resources.length <= 20) {
-      // Standard view: Top resources in collapsible section
-      const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
-      const resourceRows = topResources
-        .map((r) => {
-          const name = r.resourceId.split('::').pop() || r.resourceId;
-          return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-        })
-        .join('\n');
+      } else if (resources.length <= 20) {
+        // Standard view: Top resources in collapsible section
+        const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
+        const resourceRows = topResources
+          .map((r) => {
+            const name = r.resourceId.split('::').pop() || r.resourceId;
+            return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+          })
+          .join('\n');
 
-      if (resourceRows) {
-        resourceTable = `
+        if (resourceRows) {
+          resourceTable = `
 
 <details>
 <summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
@@ -691,21 +696,20 @@ ${resourceRows}
 
 </details>
 `;
+        }
       }
     }
-  }
 
-  // Build provider breakdown only if multiple providers
-  let providerBreakdown = '';
-  if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
-    const providerRows = Object.entries(report.summary.byProvider)
-      .filter(([, cost]) => cost > 0)
-      .sort(([, a], [, b]) => b - a)
-      .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
-      .join('\n');
+    // Build provider breakdown only if multiple providers
+    if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
+      const providerRows = Object.entries(report.summary.byProvider)
+        .filter(([, cost]) => cost > 0)
+        .sort(([, a], [, b]) => b - a)
+        .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
+        .join('\n');
 
-    if (providerRows) {
-      providerBreakdown = `
+      if (providerRows) {
+        providerBreakdown = `
 
 <details>
 <summary><strong>☁️ Cost by Provider</strong></summary>
@@ -716,6 +720,7 @@ ${providerRows}
 
 </details>
 `;
+      }
     }
   }
 
