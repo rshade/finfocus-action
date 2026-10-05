@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.0.0](https://github.com/rshade/finfocus-action/compare/v1.2.2...v2.0.0) (2026-10-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **analyze:** removed the inputs budget-alert-threshold, fail-on-budget-health, show-budget-forecast, budget-scopes and fail-on-budget-scope-breach, and the outputs budget-health-score, budget-forecast, budget-runway-days, budget-status and budget-scopes-status. The budget-amount, budget-currency, budget-period and budget-alerts inputs are now written to config as cost.budgets.global (finfocus ignored the previous top-level budget key).
+
+### Added
+
+* **analyze:** add cost estimate what-if input and comment section (AC-4.1) ([d881699](https://github.com/rshade/finfocus-action/commit/d88169938e9c6c9438cf730ae4307c92960d29d5))
+* **analyze:** support terraform state input for cost projected (AC-4.2) ([471faf5](https://github.com/rshade/finfocus-action/commit/471faf59f89db6b8afb210ffdfe8121a5ed9e69e))
+* **comment:** list resources finfocus could not price (AC-4.4) ([e0d31e1](https://github.com/rshade/finfocus-action/commit/e0d31e121aa473d5475aff92cfcd68321d4c7866))
+* expose finfocus v0.4 cluster, scoring, and state-only ([#103](https://github.com/rshade/finfocus-action/issues/103)) ([c445cb7](https://github.com/rshade/finfocus-action/commit/c445cb7644d34a21435af86cfd38b8cd5426ef01)), closes [#89](https://github.com/rshade/finfocus-action/issues/89)
+
+
+### Fixed
+
+* **analyze:** remove dead budget status calls and unusable features (AC-3.2) ([d636181](https://github.com/rshade/finfocus-action/commit/d6361818812fe75347d389a96ebe2d2a9e7a4298))
+* **ci:** make contract script executable (AC-1.2) ([fde192f](https://github.com/rshade/finfocus-action/commit/fde192f843ed88d18c584bb665e999fd3aec81f4))
+* **comment:** read the v0.4.1 diff shape without any casts (AC-4.4) ([5f753d2](https://github.com/rshade/finfocus-action/commit/5f753d2640f31007b1a3d48ff4ca6a4d9dafadf9))
+* **contract:** run finfocus from scratch dir to avoid repo artifacts (AC-1.1) ([9f0fd05](https://github.com/rshade/finfocus-action/commit/9f0fd05359c848bf524b1c9afc37df1ebefa879b))
+* **guardrails:** parse finfocus error envelope on non-zero exit (AC-2.1) ([fbd1411](https://github.com/rshade/finfocus-action/commit/fbd1411ccee918f2f97c44bf9de8c0d19ab9e272))
+* **guardrails:** use --pulumi-json and action-owned --exit-code 10 (AC-2.2) ([fc1ee8e](https://github.com/rshade/finfocus-action/commit/fc1ee8e1402f64f8d05b6b043b2ed6541bbe989e))
+* **install:** resolve latest to the newest v* release (AC-2.4) ([feefeda](https://github.com/rshade/finfocus-action/commit/feefeda70d1eb97bc53f1ce0b14e82559574c788))
+
+
+### Documentation
+
+* document removed inputs, drop stale test counts and lint config (AC-3.2) ([642313a](https://github.com/rshade/finfocus-action/commit/642313aaaaacea8b5b66ef478cf9b7e1032d2afb))
+* fill spec-gap log for run 1 (AC-4.2) ([fe353b0](https://github.com/rshade/finfocus-action/commit/fe353b01de5b0b7c4543cb604571682c3e6bc7c3))
+* mark AC-2.4 done in TASKS.md (AC-2.4) ([cf212c7](https://github.com/rshade/finfocus-action/commit/cf212c7aaaca764a93917a3fe49ed343660ea8ac))
+* record budget source findings for v0.4.0 (AC-3.1) ([970964f](https://github.com/rshade/finfocus-action/commit/970964f1e9ec558fbe7563619471860bf730b079))
+* state tested finfocus range and latest caveat (AC-2.4) ([91c7ca9](https://github.com/rshade/finfocus-action/commit/91c7ca9eae3117e1c98e887fc4d57eef1c068714))
+
 ## [1.2.2](https://github.com/rshade/finfocus-action/compare/finfocus-action-v1.2.1...finfocus-action-v1.2.2) (2026-02-09)
 
 
