@@ -31104,6 +31104,475 @@ module.exports = {
 
 /***/ }),
 
+/***/ 4857:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   Lh: () => (/* binding */ parseSortBy),
+/* harmony export */   MH: () => (/* binding */ annotateReportFromPlan),
+/* harmony export */   Pq: () => (/* binding */ parseResourceFilters),
+/* harmony export */   Wk: () => (/* binding */ formatDisplaySections),
+/* harmony export */   eh: () => (/* binding */ parseGroupBy),
+/* harmony export */   et: () => (/* binding */ filterArgs),
+/* harmony export */   js: () => (/* binding */ usesDisplayControls),
+/* harmony export */   qr: () => (/* binding */ parseMaxResourcesDisplayed),
+/* harmony export */   yi: () => (/* binding */ parseMinCostThreshold)
+/* harmony export */ });
+/* unused harmony exports providerOf, serviceOf, resourceName, selectResources */
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(2398);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9896);
+/* harmony import */ var fs__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__nccwpck_require__.n(fs__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(6141);
+
+
+
+const CHANGE_OPS = new Set([
+    'create',
+    'update',
+    'delete',
+    'replace',
+    'create-replacement',
+    'delete-replaced',
+    'import',
+]);
+const GROUP_KINDS = new Set(['resource', 'type', 'provider', 'service']);
+function parseResourceFilters(raw) {
+    if (!raw || raw.trim() === '') {
+        return [];
+    }
+    const filters = raw
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+    for (const filter of filters) {
+        const parts = filter.split('=');
+        if (parts.length < 2 || parts[0].trim() === '' || parts.slice(1).join('=').trim() === '') {
+            throw new Error(`Invalid resource-filter "${filter}". finfocus expects key=value, for example type=ec2 or tag:env=prod.`);
+        }
+    }
+    return filters;
+}
+function filterArgs(filters) {
+    if (!filters || filters.length === 0) {
+        return [];
+    }
+    const args = [];
+    for (const filter of filters) {
+        args.push('--filter', filter);
+    }
+    return args;
+}
+function parseGroupBy(raw) {
+    const value = (raw ?? '').trim() || 'provider';
+    if (GROUP_KINDS.has(value)) {
+        return value;
+    }
+    if (value.startsWith('tag:')) {
+        const key = value.slice('tag:'.length).trim();
+        if (key.length === 0 || /\s/.test(key) || key.includes('=')) {
+            throw new Error(`Invalid group-by "${value}". Use tag:<key>, for example tag:team. One dimension only.`);
+        }
+        return `tag:${key}`;
+    }
+    throw new Error(`Invalid group-by "${value}". Supported: resource, type, provider, service, tag:<key>.`);
+}
+function parseSortBy(raw) {
+    const value = (raw ?? '').trim() || 'cost';
+    if (value === 'cost' || value === 'name' || value === 'type' || value === 'change') {
+        return value;
+    }
+    throw new Error(`Invalid sort-by "${value}". Supported: cost, name, type, change.`);
+}
+function parseMinCostThreshold(raw) {
+    const value = (raw ?? '').trim();
+    if (value === '') {
+        return 0;
+    }
+    const match = value.match(/^(\d+(?:\.\d+)?)(?:\s*[A-Za-z]+)?$/);
+    if (!match) {
+        throw new Error(`Invalid min-cost-threshold "${value}". Expected a number with an optional currency, for example 1USD.`);
+    }
+    return Number(match[1]);
+}
+function parseMaxResourcesDisplayed(raw) {
+    const value = (raw ?? '').trim();
+    if (value === '') {
+        return 10;
+    }
+    if (!/^\d+$/.test(value)) {
+        throw new Error(`Invalid max-resources-displayed "${value}". Expected a whole number. 0 shows every resource.`);
+    }
+    return Number(value);
+}
+function usesDisplayControls(config) {
+    if (!config) {
+        return false;
+    }
+    if (config.maxResourcesDisplayed !== undefined) {
+        return true;
+    }
+    if (config.showOnlyChanges) {
+        return true;
+    }
+    if ((config.minCostThreshold ?? 0) > 0) {
+        return true;
+    }
+    if (config.sortBy !== undefined && config.sortBy !== 'cost') {
+        return true;
+    }
+    return config.groupBy !== undefined && config.groupBy !== 'provider';
+}
+function providerOf(resourceType) {
+    const provider = resourceType.split(':')[0];
+    return provider || 'other';
+}
+function serviceOf(resourceType) {
+    const parts = resourceType.split(':');
+    if (parts.length < 2 || !parts[1]) {
+        return 'other';
+    }
+    const slash = parts[1].indexOf('/');
+    return slash > 0 ? parts[1].slice(0, slash) : parts[1];
+}
+function resourceName(resourceId) {
+    return resourceId.split('::').pop() || resourceId;
+}
+function annotateReportFromPlan(report, planPath, needed) {
+    if (!needed) {
+        return report;
+    }
+    if (!planPath || !fs__WEBPACK_IMPORTED_MODULE_1__.existsSync(planPath)) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e('show-only-changes and tag grouping need a Pulumi plan with steps. No plan file was found, so every priced resource stays in the comment.');
+        return report;
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(fs__WEBPACK_IMPORTED_MODULE_1__.readFileSync(planPath, 'utf8'));
+    }
+    catch (error) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e(`Could not read Pulumi plan for change and tag grouping: ${error instanceof Error ? error.message : String(error)}`);
+        return report;
+    }
+    const annotations = planAnnotations(parsed);
+    if (annotations.size === 0) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e('Pulumi plan has no steps with a urn, so change and tag grouping have nothing to join.');
+        return report;
+    }
+    const resources = (report.resources ?? report.summary?.resources ?? []).map((resource) => {
+        const found = annotations.get(resource.resourceId);
+        if (!found) {
+            return resource;
+        }
+        return { ...resource, change: found.op, tags: found.tags };
+    });
+    return { ...report, resources };
+}
+function planAnnotations(plan) {
+    const found = new Map();
+    const steps = stepsOf(plan);
+    for (const step of steps) {
+        const resource = step.resource && typeof step.resource === 'object' ? step.resource : undefined;
+        const urn = stringField(step, 'urn') ?? (resource ? stringField(resource, 'urn') : undefined);
+        if (!urn) {
+            continue;
+        }
+        const op = stringField(step, 'op') ?? (resource ? stringField(resource, 'op') : undefined);
+        const tags = readTags(step.inputs) ?? (resource ? readTags(resource.inputs) : undefined);
+        found.set(urn, { op, tags });
+    }
+    return found;
+}
+function stepsOf(plan) {
+    if (!plan || typeof plan !== 'object' || !('steps' in plan)) {
+        return [];
+    }
+    const steps = plan.steps;
+    if (!Array.isArray(steps)) {
+        return [];
+    }
+    return steps.filter((step) => !!step && typeof step === 'object');
+}
+function stringField(source, key) {
+    const value = source[key];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+function readTags(inputs) {
+    if (!inputs || typeof inputs !== 'object') {
+        return undefined;
+    }
+    const tags = inputs.tags;
+    if (!tags || typeof tags !== 'object' || Array.isArray(tags)) {
+        return undefined;
+    }
+    const out = {};
+    for (const [key, value] of Object.entries(tags)) {
+        if (value === null || value === undefined || value === '') {
+            continue;
+        }
+        out[key] = String(value);
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+}
+function selectResources(resources, config) {
+    let current = [...resources];
+    let hiddenByChange = 0;
+    const missingChangeData = config.showOnlyChanges === true && !current.some((resource) => resource.change);
+    if (config.showOnlyChanges && !missingChangeData) {
+        const next = current.filter((resource) => resource.change && CHANGE_OPS.has(resource.change));
+        hiddenByChange = current.length - next.length;
+        current = next;
+    }
+    let hiddenByCost = 0;
+    const minCost = config.minCostThreshold ?? 0;
+    if (minCost > 0) {
+        const next = current.filter((resource) => resource.monthly >= minCost);
+        hiddenByCost = current.length - next.length;
+        current = next;
+    }
+    current.sort((a, b) => compareResources(a, b, config.sortBy ?? 'cost'));
+    const grouped = current;
+    const max = config.maxResourcesDisplayed ?? 10;
+    let shown = current;
+    let hiddenByCap = 0;
+    if (max > 0 && current.length > max) {
+        hiddenByCap = current.length - max;
+        shown = current.slice(0, max);
+    }
+    return { shown, grouped, hiddenByChange, hiddenByCost, hiddenByCap, missingChangeData };
+}
+function compareResources(a, b, sortBy) {
+    if (sortBy === 'name') {
+        return resourceName(a.resourceId).localeCompare(resourceName(b.resourceId));
+    }
+    if (sortBy === 'type') {
+        return a.resourceType.localeCompare(b.resourceType) || b.monthly - a.monthly;
+    }
+    if (sortBy === 'change') {
+        return changeRank(a.change) - changeRank(b.change) || b.monthly - a.monthly;
+    }
+    return b.monthly - a.monthly;
+}
+function changeRank(op) {
+    switch (op) {
+        case 'create':
+            return 0;
+        case 'update':
+            return 1;
+        case 'replace':
+        case 'create-replacement':
+        case 'delete-replaced':
+            return 2;
+        case 'delete':
+            return 3;
+        case 'import':
+            return 4;
+        default:
+            return op ? 8 : 9;
+    }
+}
+function formatDisplaySections(report, config, currency) {
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    const selection = selectResources(resources, config);
+    const notes = displayNotes(selection, config, currency);
+    return {
+        resourceTable: formatResourceTable(selection.shown, config, currency, notes, report),
+        groupTable: formatGroupTable(selection, config, currency),
+    };
+}
+function displayNotes(selection, config, currency) {
+    const notes = [];
+    if (selection.missingChangeData) {
+        notes.push('Change detection needs Pulumi plan steps with op and urn. Showing every priced resource.');
+    }
+    else if (selection.hiddenByChange > 0) {
+        notes.push(`Showing only resources affected by this change. ${selection.hiddenByChange} unchanged resources hidden.`);
+    }
+    if (selection.hiddenByCost > 0) {
+        notes.push(`${selection.hiddenByCost} resources under ${(config.minCostThreshold ?? 0).toFixed(2)} ${currency} hidden.`);
+    }
+    if (selection.hiddenByCap > 0) {
+        notes.push(`Showing ${selection.shown.length} of ${selection.shown.length + selection.hiddenByCap} resources.`);
+    }
+    if (selection.hiddenByChange > 0 || selection.hiddenByCost > 0 || selection.hiddenByCap > 0) {
+        notes.push('The projected monthly total above still includes hidden resources.');
+    }
+    return notes;
+}
+function formatResourceTable(shown, config, currency, notes, report) {
+    if (shown.length === 0 && notes.length === 0) {
+        return '';
+    }
+    const showChange = config.showOnlyChanges === true || config.sortBy === 'change';
+    const detailed = config.detailedComment === true;
+    const title = config.showOnlyChanges
+        ? 'Cost Impact of Changes'
+        : detailed
+            ? 'Full Resource Breakdown'
+            : 'Top Resources';
+    const header = showChange
+        ? '| Resource | Type | Change | Monthly Cost |'
+        : detailed
+            ? '| Resource | Type | Monthly Cost | Notes |'
+            : '| Resource | Type | Monthly Cost |';
+    const align = showChange
+        ? '| :--- | :--- | :---: | ---: |'
+        : detailed
+            ? '| :--- | :--- | ---: | :--- |'
+            : '| :--- | :--- | ---: |';
+    const rows = shown
+        .map((resource) => {
+        const name = cell(resourceName(resource.resourceId));
+        const type = cell(resource.resourceType);
+        const cost = `${resource.monthly.toFixed(2)} ${currency}`;
+        if (showChange) {
+            return `| ${name} | ${type} | ${changeLabel(resource.change)} | ${cost} |`;
+        }
+        if (detailed) {
+            const resourceNotes = resource.notes ? cell(resource.notes) : '';
+            return `| ${name} | ${type} | ${cost} | ${resourceNotes} |`;
+        }
+        return `| ${name} | ${type} | ${cost} |`;
+    })
+        .join('\n');
+    const net = config.showOnlyChanges ? netChangeRow(report, currency, showChange) : '';
+    const noteBlock = notes.map((note) => `\n\n*${note}*`).join('');
+    const body = rows
+        ? `${header}\n${align}\n${rows}${net}`
+        : '*No resources match the display filters.*';
+    return `
+
+<details>
+<summary><strong>📊 ${title}</strong> (${shown.length} resources)</summary>
+
+${body}${noteBlock}
+
+</details>
+`;
+}
+function netChangeRow(report, currency, showChange) {
+    if (!report.diff) {
+        return '';
+    }
+    const delta = (0,_types_js__WEBPACK_IMPORTED_MODULE_2__/* .isV041Diff */ .k)(report.diff) ? report.diff.totalDelta : report.diff.monthly_cost_change;
+    const sign = delta > 0 ? '+' : '';
+    const amount = `${sign}${delta.toFixed(2)} ${currency}`;
+    if (!showChange) {
+        return '';
+    }
+    return `\n| **Net change** | | | ${amount} |`;
+}
+function formatGroupTable(selection, config, currency) {
+    const groupBy = config.groupBy || 'provider';
+    if (groupBy === 'resource') {
+        return '';
+    }
+    const grouped = groupResources(selection, groupBy);
+    if (grouped.length === 0) {
+        return '';
+    }
+    const rows = grouped
+        .map((row) => `| ${cell(row.key)} | ${row.monthly.toFixed(2)} ${currency} | ${row.count} |`)
+        .join('\n');
+    const total = grouped.reduce((sum, row) => sum + row.monthly, 0);
+    const count = grouped.reduce((sum, row) => sum + row.count, 0);
+    return `
+
+<details>
+<summary><strong>☁️ ${groupTitle(groupBy)}</strong></summary>
+
+| ${groupColumn(groupBy)} | Monthly Cost | Resources |
+| :--- | ---: | ---: |
+${rows}
+| **Total** | **${total.toFixed(2)} ${currency}** | **${count}** |
+
+</details>
+`;
+}
+function groupResources(selection, groupBy) {
+    const buckets = new Map();
+    for (const resource of selection.grouped) {
+        const key = groupKey(resource, groupBy);
+        const existing = buckets.get(key);
+        if (existing) {
+            existing.monthly += resource.monthly;
+            existing.count += 1;
+        }
+        else {
+            buckets.set(key, { key, monthly: resource.monthly, count: 1 });
+        }
+    }
+    return [...buckets.values()].sort((a, b) => b.monthly - a.monthly || a.key.localeCompare(b.key));
+}
+function groupKey(resource, groupBy) {
+    if (groupBy === 'type') {
+        return resource.resourceType || 'other';
+    }
+    if (groupBy === 'service') {
+        return serviceOf(resource.resourceType);
+    }
+    if (groupBy.startsWith('tag:')) {
+        return tagValue(resource, groupBy.slice('tag:'.length));
+    }
+    return providerOf(resource.resourceType);
+}
+function tagValue(resource, key) {
+    const tags = resource.tags;
+    if (!tags) {
+        return '(untagged)';
+    }
+    if (tags[key]) {
+        return tags[key];
+    }
+    const found = Object.keys(tags).find((candidate) => candidate.toLowerCase() === key.toLowerCase());
+    return found && tags[found] ? tags[found] : '(untagged)';
+}
+function groupTitle(groupBy) {
+    if (groupBy === 'type') {
+        return 'Cost by Type';
+    }
+    if (groupBy === 'service') {
+        return 'Cost by Service';
+    }
+    if (groupBy.startsWith('tag:')) {
+        return `Cost by ${groupBy.slice('tag:'.length)}`;
+    }
+    return 'Cost by Provider';
+}
+function groupColumn(groupBy) {
+    if (groupBy === 'type') {
+        return 'Type';
+    }
+    if (groupBy === 'service') {
+        return 'Service';
+    }
+    if (groupBy.startsWith('tag:')) {
+        return groupBy.slice('tag:'.length);
+    }
+    return 'Provider';
+}
+function changeLabel(op) {
+    switch (op) {
+        case 'create':
+            return '✨ Create';
+        case 'update':
+            return '🔄 Update';
+        case 'delete':
+            return '🗑️ Delete';
+        case 'replace':
+        case 'create-replacement':
+        case 'delete-replaced':
+            return '🔁 Replace';
+        default:
+            return op ? cell(op) : '';
+    }
+}
+function cell(value) {
+    return value.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+}
+
+
+/***/ }),
+
 /***/ 3916:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
@@ -36391,6 +36860,18 @@ function copyFile(srcFile, destFile, force) {
 /******/ /* webpack/runtime/asset-relocator-loader */
 /******/ if (typeof __nccwpck_require__ !== 'undefined') __nccwpck_require__.ab = decodeURIComponent(new URL('.', import.meta.url).pathname).slice(import.meta.url.match(/^file:\/\/\/\w:/) ? 1 : 0, -1) + "/";
 /******/ 
+/******/ /* webpack/runtime/compat get default export */
+/******/ (() => {
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__nccwpck_require__.n = (module) => {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			() => (module['default']) :
+/******/ 			() => (module);
+/******/ 		__nccwpck_require__.d(getter, { a: getter });
+/******/ 		return getter;
+/******/ 	};
+/******/ })();
+/******/ 
 /******/ /* webpack/runtime/create fake namespace object */
 /******/ (() => {
 /******/ 	var getProto = Object.getPrototypeOf ? (obj) => (Object.getPrototypeOf(obj)) : (obj) => (obj.__proto__);
@@ -37056,7 +37537,10 @@ class PluginManager {
     }
 }
 
+// EXTERNAL MODULE: ./src/display.ts
+var display = __nccwpck_require__(4857);
 ;// CONCATENATED MODULE: ./src/analyze.ts
+
 
 
 
@@ -37138,6 +37622,7 @@ class Analyzer {
             throw new Error(`Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         }
         const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
+        args.push(...(0,display/* filterArgs */.et)(config?.resourceFilters));
         // Add utilization flag if provided and different from default
         if (config?.utilizationRate && config.utilizationRate !== '1.0') {
             args.push('--utilization', config.utilizationRate);
@@ -37356,6 +37841,7 @@ class Analyzer {
         if (config.actualCostsGroupBy) {
             args.push('--group-by', config.actualCostsGroupBy);
         }
+        args.push(...(0,display/* filterArgs */.et)(config.resourceFilters));
         if (debug) {
             main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
         }
@@ -42840,6 +43326,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 ;// CONCATENATED MODULE: ./src/formatter.ts
 
 
+
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
  *
@@ -43387,22 +43874,28 @@ function formatCommentBody(report, config, recommendationsReport, actualCostRepo
             diffText = `📉 ${diffText}`;
         }
     }
-    // Build resource breakdown if available
     const resources = report.resources ?? report.summary?.resources ?? [];
     let resourceTable = '';
+    let providerBreakdown = '';
     const isDetailed = config?.detailedComment === true;
-    if (resources.length > 0) {
-        const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
-        if (isDetailed) {
-            // Detailed view: All resources with notes and breakdown
-            const resourceRows = sortedResources
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                const notes = r.notes ? `<br/>*${r.notes}*` : '';
-                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
-            })
-                .join('\n');
-            resourceTable = `
+    if (config && (0,display/* usesDisplayControls */.js)(config)) {
+        const displayed = (0,display/* formatDisplaySections */.Wk)(report, config, currency);
+        resourceTable = displayed.resourceTable;
+        providerBreakdown = displayed.groupTable;
+    }
+    else {
+        if (resources.length > 0) {
+            const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
+            if (isDetailed) {
+                // Detailed view: All resources with notes and breakdown
+                const resourceRows = sortedResources
+                    .map((r) => {
+                    const name = r.resourceId.split('::').pop() || r.resourceId;
+                    const notes = r.notes ? `<br/>*${r.notes}*` : '';
+                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+                })
+                    .join('\n');
+                resourceTable = `
 
 <details>
 <summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
@@ -43413,18 +43906,18 @@ ${resourceRows}
 
 </details>
 `;
-        }
-        else if (resources.length <= 20) {
-            // Standard view: Top resources in collapsible section
-            const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
-            const resourceRows = topResources
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-            })
-                .join('\n');
-            if (resourceRows) {
-                resourceTable = `
+            }
+            else if (resources.length <= 20) {
+                // Standard view: Top resources in collapsible section
+                const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
+                const resourceRows = topResources
+                    .map((r) => {
+                    const name = r.resourceId.split('::').pop() || r.resourceId;
+                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+                })
+                    .join('\n');
+                if (resourceRows) {
+                    resourceTable = `
 
 <details>
 <summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
@@ -43435,19 +43928,18 @@ ${resourceRows}
 
 </details>
 `;
+                }
             }
         }
-    }
-    // Build provider breakdown only if multiple providers
-    let providerBreakdown = '';
-    if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
-        const providerRows = Object.entries(report.summary.byProvider)
-            .filter(([, cost]) => cost > 0)
-            .sort(([, a], [, b]) => b - a)
-            .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
-            .join('\n');
-        if (providerRows) {
-            providerBreakdown = `
+        // Build provider breakdown only if multiple providers
+        if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
+            const providerRows = Object.entries(report.summary.byProvider)
+                .filter(([, cost]) => cost > 0)
+                .sort(([, a], [, b]) => b - a)
+                .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
+                .join('\n');
+            if (providerRows) {
+                providerBreakdown = `
 
 <details>
 <summary><strong>☁️ Cost by Provider</strong></summary>
@@ -43458,6 +43950,7 @@ ${providerRows}
 
 </details>
 `;
+            }
         }
     }
     // Build Actual Cost Section
@@ -43748,6 +44241,7 @@ class ConfigManager {
 
 
 
+
 function parseBoolean(value, defaultValue) {
     if (!value || value.trim() === '')
         return defaultValue;
@@ -43884,6 +44378,12 @@ async function run() {
         const dismissRecommendations = main_core/* getInput */.V4('dismiss_recommendations') || '';
         const snoozeRecommendations = main_core/* getInput */.V4('snooze_recommendations') || '';
         const stateOnly = parseBoolean(main_core/* getInput */.V4('state_only'), false);
+        const resourceFilters = (0,display/* parseResourceFilters */.Pq)(main_core/* getInput */.V4('resource_filter'));
+        const groupBy = (0,display/* parseGroupBy */.eh)(main_core/* getInput */.V4('group_by'));
+        const minCostThreshold = (0,display/* parseMinCostThreshold */.yi)(main_core/* getInput */.V4('min_cost_threshold'));
+        const maxResourcesDisplayed = (0,display/* parseMaxResourcesDisplayed */.qr)(main_core/* getInput */.V4('max_resources_displayed'));
+        const showOnlyChanges = parseBoolean(main_core/* getInput */.V4('show_only_changes'), false);
+        const sortBy = (0,display/* parseSortBy */.Lh)(main_core/* getInput */.V4('sort_by'));
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -43921,6 +44421,12 @@ async function run() {
             dismissRecommendations,
             snoozeRecommendations,
             stateOnly,
+            resourceFilters,
+            groupBy,
+            minCostThreshold,
+            maxResourcesDisplayed,
+            showOnlyChanges,
+            sortBy,
         };
         if (config.debug) {
             main_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -44205,7 +44711,8 @@ async function run() {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💬 Posting PR comment');
             const commentStartTime = Date.now();
-            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
+            const commentReport = (0,display/* annotateReportFromPlan */.MH)(report, config.pulumiPlanJsonPath, config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'));
+            await commenter.upsertComment(commentReport, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
             if (config.debug) {
                 main_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             }

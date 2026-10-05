@@ -25,6 +25,7 @@ import {
   hideDismissedRecommendations,
   recommendationArgs,
 } from './v04.js';
+import { filterArgs } from './display.js';
 
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
@@ -114,6 +115,7 @@ export class Analyzer implements IAnalyzer {
     }
 
     const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
+    args.push(...filterArgs(config?.resourceFilters));
 
     // Add utilization flag if provided and different from default
     if (config?.utilizationRate && config.utilizationRate !== '1.0') {
@@ -377,6 +379,7 @@ export class Analyzer implements IAnalyzer {
     if (config.actualCostsGroupBy) {
       args.push('--group-by', config.actualCostsGroupBy);
     }
+    args.push(...filterArgs(config.resourceFilters));
 
     if (debug) {
       core.info(`  Command: finfocus ${args.join(' ')}`);

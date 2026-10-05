@@ -43,6 +43,7 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
 | `analyze.ts` | `Analyzer` | Runs `finfocus cost projected` (with `--pulumi-json` or `--terraform-state`), `recommendations`, `actual`, `estimate`, `cost cluster`, and `overview --state-only`; calculates sustainability metrics and budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
+| `display.ts` | — | Resource filters (`--filter`), comment grouping, min cost, display cap, change-only rows |
 | `formatter.ts` | — | Formats markdown tables for cost, recommendations, sustainability, actual costs, budget status |
 | `guardrails.ts` | — | Threshold checking for cost (`100USD`) and carbon (`10kg`, `10%`) guardrails; budget threshold checks via `--exit-on-threshold --exit-code 10` (action-owned code) |
 | `types.ts` | — | All TypeScript interfaces (`ActionConfiguration`, `FinfocusReport`, `BudgetStatus`, etc.) |
@@ -117,7 +118,7 @@ main.ts
 
 ## Important Notes
 
-- The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` copy (for example 0.38.4) produces a bundle that fails the Check dist workflow.
+- The `dist/` folder is committed and must be rebuilt with `npm ci` and `npm run build` in that worktree before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` (for example 0.38.4), or a symlink to another checkout's `node_modules`, changes webpack module ids including the async chunk number and fails the Check dist workflow. ncc leaves old chunks in place, so do not delete them unless a following rebuild diff is empty.
 - The finfocus contract job must pass `GITHUB_TOKEN` into `scripts/contract.sh`. `plugin install` reads that variable. `GH_TOKEN` is only for the `gh` CLI download step. Without `GITHUB_TOKEN`, the unauthenticated rate limit fails the v0.4.0 aws-public install and the budget breach check exits 0.
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data
@@ -154,9 +155,14 @@ main.ts
   `snooze-recommendations` run `cost recommendations dismiss|snooze --force` first.
 - Supports() decline reasons are the `notes` text `(declined by <plugin>: <reason>)` on a
   resource. They are not the report `errors` array.
-- Do not implement pagination, NDJSON, resource filtering, or cost forecasting while issues
-  #49, #21, #20, and #19 are still open for re-evaluation. Those overlap #89 and were left
-  out on purpose.
+- Resource filters are finfocus `--filter` expressions (`type=ec2` is a case-insensitive
+  substring, `tag:env=prod` matches plan tags). They are passed to `cost projected`, `cost
+  actual`, and the budget threshold check. `*` is not a wildcard. Comment `group-by`
+  (`resource`, `type`, `provider`, `service`, `tag:<key>`) is action-side. `cost projected`
+  has no `--group-by`. `min-cost-threshold`, `max-resources-displayed`, `sort-by`, and
+  `show-only-changes` change the comment only. The projected monthly total stays the CLI total.
+- Do not implement pagination, NDJSON, or cost forecasting while issues #49, #21, and #19
+  are still open for re-evaluation. Those overlap #89 and were left out on purpose.
 
 ## Active Technologies
 

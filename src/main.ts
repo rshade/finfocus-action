@@ -16,6 +16,14 @@ import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
 import { Commenter } from './comment.js';
 import { ConfigManager } from './config.js';
+import {
+  annotateReportFromPlan,
+  parseGroupBy,
+  parseMaxResourcesDisplayed,
+  parseMinCostThreshold,
+  parseResourceFilters,
+  parseSortBy,
+} from './display.js';
 
 function parseBoolean(value: string, defaultValue: boolean): boolean {
   if (!value || value.trim() === '') return defaultValue;
@@ -166,6 +174,14 @@ async function run(): Promise<void> {
     const dismissRecommendations = core.getInput('dismiss_recommendations') || '';
     const snoozeRecommendations = core.getInput('snooze_recommendations') || '';
     const stateOnly = parseBoolean(core.getInput('state_only'), false);
+    const resourceFilters = parseResourceFilters(core.getInput('resource_filter'));
+    const groupBy = parseGroupBy(core.getInput('group_by'));
+    const minCostThreshold = parseMinCostThreshold(core.getInput('min_cost_threshold'));
+    const maxResourcesDisplayed = parseMaxResourcesDisplayed(
+      core.getInput('max_resources_displayed'),
+    );
+    const showOnlyChanges = parseBoolean(core.getInput('show_only_changes'), false);
+    const sortBy = parseSortBy(core.getInput('sort_by'));
 
     config = {
       pulumiPlanJsonPath,
@@ -204,6 +220,12 @@ async function run(): Promise<void> {
       dismissRecommendations,
       snoozeRecommendations,
       stateOnly,
+      resourceFilters,
+      groupBy,
+      minCostThreshold,
+      maxResourcesDisplayed,
+      showOnlyChanges,
+      sortBy,
     };
 
     if (config.debug) {
@@ -545,8 +567,13 @@ async function run(): Promise<void> {
       core.info('');
       core.startGroup('💬 Posting PR comment');
       const commentStartTime = Date.now();
-      await commenter.upsertComment(
+      const commentReport = annotateReportFromPlan(
         report,
+        config.pulumiPlanJsonPath,
+        config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'),
+      );
+      await commenter.upsertComment(
+        commentReport,
         config.githubToken,
         config,
         recommendationsReport,
