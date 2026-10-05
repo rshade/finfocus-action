@@ -125,6 +125,7 @@ export class Installer implements IInstaller {
         `Failed to download finfocus from ${downloadUrl}. ` +
           `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
           `Error: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
       );
     }
 
@@ -152,6 +153,7 @@ export class Installer implements IInstaller {
       core.error(`  Extraction FAILED`);
       throw new Error(
         `Failed to extract finfocus archive. Error: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
       );
     }
 

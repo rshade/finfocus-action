@@ -119,6 +119,7 @@ main.ts
 ## Important Notes
 
 - The `dist/` folder is committed and must be rebuilt with `npm ci` and `npm run build` in that worktree before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` (for example 0.38.4), or a symlink to another checkout's `node_modules`, changes webpack module ids including the async chunk number and fails the Check dist workflow. ncc leaves old chunks in place, so do not delete them unless a following rebuild diff is empty.
+- ESLint 10 recommended rules include `preserve-caught-error` and `no-useless-assignment`. A `new Error` thrown inside `catch` must pass `{ cause }`. Do not take `typescript` 7: that npm package is the native compiler and does not export the JS API that ncc and typescript-eslint use. `typescript-eslint` 8.71 requires `typescript` `<6.1.0`.
 - The finfocus contract job must pass `GITHUB_TOKEN` into `scripts/contract.sh`. `plugin install` reads that variable. `GH_TOKEN` is only for the `gh` CLI download step. Without `GITHUB_TOKEN`, the unauthenticated rate limit fails the v0.4.0 aws-public install and the budget breach check exits 0.
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data

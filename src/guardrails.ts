@@ -100,6 +100,7 @@ export async function checkBudgetThresholdWithExitCodes(
     }
     throw new Error(
       `Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
 }
@@ -135,12 +136,9 @@ export function checkBudgetThresholdWithJson(
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
 
   // Extract cost change, handling both v0.4.0 (legacy) and v0.4.1 formats using type guard
-  let costChange = 0;
-  if (isV041Diff(report.diff)) {
-    costChange = report.diff.totalDelta;
-  } else {
-    costChange = (report.diff as any).monthly_cost_change ?? 0;
-  }
+  const costChange = isV041Diff(report.diff)
+    ? report.diff.totalDelta
+    : ((report.diff as any).monthly_cost_change ?? 0);
 
   const failed = checkThreshold(config.threshold, costChange, currency);
 

@@ -51,6 +51,7 @@ export function registryNamesFromList(stdout: string): string[] {
       `finfocus plugin list --available did not return JSON: ${
         err instanceof Error ? err.message : String(err)
       }`,
+      { cause: err },
     );
   }
 

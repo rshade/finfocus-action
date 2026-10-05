@@ -95,7 +95,7 @@ async function checkBudgetThresholdWithExitCodes(config) {
                 error.message.startsWith('finfocus '))) {
             throw error;
         }
-        throw new Error(`Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Failed to run budget threshold check: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
     }
 }
 /**
@@ -123,13 +123,9 @@ function checkBudgetThresholdWithJson(config, report) {
     }
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
     // Extract cost change, handling both v0.4.0 (legacy) and v0.4.1 formats using type guard
-    let costChange = 0;
-    if ((0,_types_js__WEBPACK_IMPORTED_MODULE_2__/* .isV041Diff */ .k)(report.diff)) {
-        costChange = report.diff.totalDelta;
-    }
-    else {
-        costChange = report.diff.monthly_cost_change ?? 0;
-    }
+    const costChange = (0,_types_js__WEBPACK_IMPORTED_MODULE_2__/* .isV041Diff */ .k)(report.diff)
+        ? report.diff.totalDelta
+        : (report.diff.monthly_cost_change ?? 0);
     const failed = checkThreshold(config.threshold, costChange, currency);
     if (failed) {
         return {
