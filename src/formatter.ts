@@ -9,8 +9,11 @@ import {
   Recommendation,
   EstimateReport,
   FinfocusReportError,
+  ClusterReport,
+  StateOnlyReport,
   isV041Diff,
 } from './types.js';
+import { collectDeclineNotes } from './v04.js';
 
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
@@ -423,6 +426,137 @@ function extractPercentChange(diff?: any): number {
   return 0;
 }
 
+function formatRecommendationsSection(recommendationsReport?: RecommendationsReport): string {
+  if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
+    return '';
+  }
+  const totalSavings = recommendationsReport.summary.total_savings;
+  const savingsCurrency = recommendationsReport.summary.currency;
+  const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
+  const recRows = recommendationsReport.recommendations
+    .map((rec) => {
+      const name = rec.resource_id.split('::').pop() || rec.resource_id;
+      const savings = `${rec.estimated_savings.toFixed(2)} ${rec.currency}`;
+      if (!scored) {
+        return `| ${name} | ${rec.description} | ${savings} |`;
+      }
+      const risk = formatScore(rec.scores?.risk);
+      const review = rec.scores?.needs_review ? ' review' : '';
+      const worth = formatScore(rec.scores?.worth_acting);
+      return `| ${name} | ${rec.description} | ${savings} | ${risk}${review} | ${worth} |`;
+    })
+    .join('\n');
+
+  const header = scored
+    ? `| Resource | Recommendation | Savings | Risk | Worth acting |
+| :--- | :--- | ---: | ---: | ---: |`
+    : `| Resource | Recommendation | Savings |
+| :--- | :--- | ---: |`;
+
+  const scoring = recommendationsReport.scoring;
+  const scoringNote = scoring
+    ? `\n\nScoring${scoring.scorer ? ` (${scoring.scorer})` : ''}: scored ${scoring.scored} of ${scoring.requested}. Scores rank work for review; they do not dismiss a recommendation.` +
+      (scoring.warnings && scoring.warnings.length > 0
+        ? ` Warnings: ${scoring.warnings.join('; ')}.`
+        : '')
+    : '';
+
+  return `
+
+<details open>
+<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+
+${header}
+${recRows}
+${scoringNote}
+
+</details>
+`;
+}
+
+function formatScore(value: number | undefined): string {
+  return typeof value === 'number' ? value.toFixed(2) : '—';
+}
+
+function formatDeclineSection(report: FinfocusReport): string {
+  const declines = collectDeclineNotes(report);
+  if (declines.length === 0) {
+    return '';
+  }
+  const rows = declines
+    .slice(0, 20)
+    .map((decline) => {
+      const resourceId = decline.resourceId.split('::').pop() || decline.resourceId;
+      return `| ${decline.resourceType} | ${resourceId} | ${decline.note} |`;
+    })
+    .join('\n');
+  const more = declines.length > 20 ? `\n\nand ${declines.length - 20} more` : '';
+  return `
+
+<details>
+<summary><strong>Plugin declines</strong> (${declines.length})</summary>
+
+| Type | Resource | Reason |
+| :--- | :--- | :--- |
+${rows}${more}
+
+*A plugin Supports() call declined the resource. The note is why it was not priced.*
+
+</details>
+`;
+}
+
+function formatClusterSection(report: ClusterReport): string {
+  const currency = report.currency || 'USD';
+  const rows = report.groups
+    .map((group) => {
+      const notes = group.notes && group.notes.length > 0 ? group.notes.join('; ') : '';
+      return `| ${group.key} | ${group.cpu_cost.toFixed(2)} | ${group.mem_cost.toFixed(2)} | ${group.total_cost.toFixed(2)} ${currency} | ${notes} |`;
+    })
+    .join('\n');
+  const idle =
+    typeof report.idle === 'number'
+      ? `\n\nIdle: ${report.idle.toFixed(2)} ${currency}`
+      : '\n\nIdle omitted (namespace scoped).';
+  const incomplete = report.incomplete ? '\n\nSome cluster resources could not be priced.' : '';
+  const warnings =
+    report.warnings && report.warnings.length > 0
+      ? `\n\nWarnings: ${report.warnings.join('; ')}`
+      : '';
+  return `
+
+<details>
+<summary><strong>Cluster costs</strong> — ${report.total.toFixed(2)} ${currency}/mo by ${report.group_by}</summary>
+
+| Group | CPU | Memory | Total | Notes |
+| :--- | ---: | ---: | ---: | :--- |
+${rows}${idle}${incomplete}${warnings}
+
+</details>
+`;
+}
+
+function formatStateOnlySection(report: StateOnlyReport): string {
+  const summary = report.summary;
+  const currency = summary.currency || 'USD';
+  return `
+
+<details>
+<summary><strong>State-only overview</strong> — pulumi preview was not run</summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Projected monthly** | ${summary.projectedMonthly.toFixed(2)} ${currency} |
+| **Actual month-to-date** | ${summary.totalActualMTD.toFixed(2)} ${currency} |
+| **Projected delta** | ${summary.projectedDelta.toFixed(2)} ${currency} |
+| **Potential savings** | ${summary.potentialSavings.toFixed(2)} ${currency} |
+
+*From \`finfocus overview --state-only\`. Pending changes are not included.*
+
+</details>
+`;
+}
+
 /**
  * Format the unpriced resources section when resources could not be priced.
  * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
@@ -471,6 +605,8 @@ ${errorRows}${truncatedNote}
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
  * @param estimateReport - Optional what-if estimate report to include
+ * @param clusterReport - Optional Kubernetes cluster allocation from `finfocus cost cluster`
+ * @param stateOnlyReport - Optional `finfocus overview --state-only` summary
  * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
  */
 export function formatCommentBody(
@@ -481,6 +617,8 @@ export function formatCommentBody(
   sustainabilityReport?: SustainabilityReport,
   budgetStatus?: BudgetStatus,
   estimateReport?: EstimateReport,
+  clusterReport?: ClusterReport,
+  stateOnlyReport?: StateOnlyReport,
 ): string {
   // Handle both new and legacy report formats
   const currency = report.summary?.currency ?? report.currency ?? 'USD';
@@ -613,30 +751,7 @@ ${actualRows}
 
   const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
 
-  // Recommendations section - prominent since it's actionable
-  let recommendationsSection = '';
-  if (recommendationsReport && recommendationsReport.recommendations.length > 0) {
-    const totalSavings = recommendationsReport.summary.total_savings;
-    const savingsCurrency = recommendationsReport.summary.currency;
-    const recRows = recommendationsReport.recommendations
-      .map((r) => {
-        const name = r.resource_id.split('::').pop() || r.resource_id;
-        return `| ${name} | ${r.description} | ${r.estimated_savings.toFixed(2)} ${r.currency} |`;
-      })
-      .join('\n');
-
-    recommendationsSection = `
-
-<details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
-
-| Resource | Recommendation | Savings |
-| :--- | :--- | ---: |
-${recRows}
-
-</details>
-`;
-  }
+  const recommendationsSection = formatRecommendationsSection(recommendationsReport);
 
   const sustainabilitySection = sustainabilityReport
     ? formatSustainabilitySection(sustainabilityReport, config, report)
@@ -645,6 +760,9 @@ ${recRows}
   const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
 
   const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
+  const declineSection = formatDeclineSection(report);
+  const clusterSection = clusterReport ? formatClusterSection(clusterReport) : '';
+  const stateOnlySection = stateOnlyReport ? formatStateOnlySection(stateOnlyReport) : '';
 
   // Basic budget status section (local math; finfocus has no budget status command)
   const budgetSection = formatBudgetSection(budgetStatus);
@@ -679,7 +797,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>

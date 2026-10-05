@@ -26,6 +26,27 @@ export interface ActionConfiguration {
   budgetPeriod?: string;
   budgetAlerts?: string;
   estimateSpec?: string;
+  /** Opt-in `finfocus cost cluster` (v0.4.0+). Needs the kubernetes plugin and a kubeconfig. */
+  includeClusterCosts?: boolean;
+  /** `cost cluster --group-by`. Default namespace. */
+  clusterGroupBy?: string;
+  clusterNamespace?: string;
+  clusterContext?: string;
+  /** Comma-separated `key=value` pairs passed as repeatable `--selector`. */
+  clusterSelector?: string;
+  /** Opt-in Jev scoring. Writes `scoring.enabled` and `scoring.plugin: jev`. Needs TYPESAFE_API_KEY. */
+  enableJevScoring?: boolean;
+  /** Pass `cost recommendations --include-dismissed`. Default false, so dismissals stay out of the comment. */
+  includeDismissedRecommendations?: boolean;
+  /** JSON array of `{id, reason, note?}` applied with `cost recommendations dismiss` before the comment. */
+  dismissRecommendations?: string;
+  /** JSON array of `{id, until, reason?, note?}` applied with `cost recommendations snooze`. */
+  snoozeRecommendations?: string;
+  /**
+   * Run `finfocus overview --state-only --pulumi-state`. The flag skips pulumi preview.
+   * It is an overview flag, not a `cost projected` flag.
+   */
+  stateOnly?: boolean;
 }
 
 export interface BudgetAlert {
@@ -148,10 +169,12 @@ export interface FinfocusReport {
   resources?: FinfocusResource[];
   // New fields for v0.4.1
   errors?: FinfocusReportError[] | null;
-  diff?: FinfocusReportDiff | {
-    monthly_cost_change: number;
-    percent_change: number;
-  };
+  diff?:
+    | FinfocusReportDiff
+    | {
+        monthly_cost_change: number;
+        percent_change: number;
+      };
   // Legacy fields for backward compatibility
   projected_monthly_cost?: number;
   currency?: string;
@@ -184,6 +207,12 @@ export interface IAnalyzer {
   ): Promise<RecommendationsReport>;
   runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
   runEstimate(config: ActionConfiguration): Promise<EstimateReport | undefined>;
+  runCluster(config: ActionConfiguration): Promise<ClusterReport>;
+  runStateOnly(config: ActionConfiguration): Promise<StateOnlyReport>;
+  applyRecommendationLifecycle(
+    planPath: string | undefined,
+    config: ActionConfiguration,
+  ): Promise<void>;
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
   calculateSustainabilityMetrics(report: FinfocusReport): {
     totalCO2e: number;
@@ -204,17 +233,77 @@ export interface RecommendationsSummary {
   count_by_action_type: Record<string, number>;
 }
 
+export interface RecommendationScores {
+  risk?: number;
+  false_positive?: number;
+  worth_acting?: number;
+  priority?: number;
+  insufficient_evidence?: number;
+  duplicate_group_id?: string;
+  needs_review?: boolean;
+}
+
+export interface ScoringSummary {
+  scorer?: string;
+  model?: string;
+  calibration?: string;
+  requested: number;
+  scored: number;
+  unscored?: number;
+  warnings?: string[];
+}
+
 export interface Recommendation {
   resource_id: string;
   action_type: string;
   description: string;
   estimated_savings: number;
   currency: string;
+  /** finfocus recommendation id, used by dismiss and snooze. */
+  id?: string;
+  /** Active, Dismissed, or Snoozed. */
+  status?: string;
+  scores?: RecommendationScores;
 }
 
 export interface RecommendationsReport {
   summary: RecommendationsSummary;
   recommendations: Recommendation[];
+  scoring?: ScoringSummary;
+}
+
+/** JSON output of `finfocus cost cluster --output json` (finfocus v0.4.0+). */
+export interface ClusterGroup {
+  key: string;
+  cpu_cost: number;
+  mem_cost: number;
+  total_cost: number;
+  rows: number;
+  notes?: string[];
+}
+
+export interface ClusterReport {
+  mode: string;
+  period: string;
+  currency: string;
+  group_by: string;
+  total: number;
+  idle?: number;
+  namespace_scoped: boolean;
+  incomplete: boolean;
+  groups: ClusterGroup[];
+  warnings?: string[];
+}
+
+/** Summary of `finfocus overview --output json`. */
+export interface StateOnlyReport {
+  summary: {
+    totalActualMTD: number;
+    projectedMonthly: number;
+    projectedDelta: number;
+    potentialSavings: number;
+    currency: string;
+  };
 }
 
 /**
@@ -271,6 +360,8 @@ export interface ICommenter {
     sustainabilityReport?: SustainabilityReport,
     budgetStatus?: BudgetStatus,
     estimateReport?: EstimateReport,
+    clusterReport?: ClusterReport,
+    stateOnlyReport?: StateOnlyReport,
   ): Promise<void>;
 }
 

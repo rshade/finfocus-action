@@ -1,4 +1,4 @@
-import { IAnalyzer, FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, BudgetStatus, EstimateReport } from './types.js';
+import { IAnalyzer, FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, BudgetStatus, EstimateReport, ClusterReport, StateOnlyReport } from './types.js';
 export declare class Analyzer implements IAnalyzer {
     runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport>;
     calculateSustainabilityMetrics(report: FinfocusReport): {
@@ -7,6 +7,9 @@ export declare class Analyzer implements IAnalyzer {
         carbonIntensity: number;
     };
     runRecommendations(planPath: string, config?: ActionConfiguration): Promise<RecommendationsReport>;
+    runCluster(config: ActionConfiguration): Promise<ClusterReport>;
+    runStateOnly(config: ActionConfiguration): Promise<StateOnlyReport>;
+    applyRecommendationLifecycle(planPath: string | undefined, config: ActionConfiguration): Promise<void>;
     runActualCosts(config: ActionConfiguration): Promise<ActualCostReport>;
     runEstimate(config: ActionConfiguration): Promise<EstimateReport | undefined>;
     private parseEstimateSpec;

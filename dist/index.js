@@ -36721,15 +36721,404 @@ var main_core = __nccwpck_require__(2398);
 var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: ./src/types.ts
 var types = __nccwpck_require__(6141);
-// EXTERNAL MODULE: ./src/install.ts + 6 modules
-var install = __nccwpck_require__(8638);
 // EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js + 2 modules
 var main_exec = __nccwpck_require__(5260);
+// EXTERNAL MODULE: ./src/errors.ts
+var errors = __nccwpck_require__(3916);
+;// CONCATENATED MODULE: ./src/v04.ts
+
+
+
+
+const CLUSTER_GROUP_BY = new Set(['namespace', 'controller', 'pod', 'node', 'pulumi-stack']);
+const DISMISSAL_REASONS = [
+    'not-applicable',
+    'already-implemented',
+    'business-constraint',
+    'technical-constraint',
+    'deferred',
+    'inaccurate',
+    'other',
+];
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const REC_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+function assertClusterGroupBy(groupBy) {
+    if (CLUSTER_GROUP_BY.has(groupBy)) {
+        return;
+    }
+    if (groupBy.startsWith('label:') && groupBy.length > 'label:'.length && !/\s/.test(groupBy)) {
+        return;
+    }
+    throw new Error(`Invalid cluster-group-by "${groupBy}". ` +
+        `Use namespace, controller, pod, node, pulumi-stack, or label:<key> ` +
+        `(finfocus cost cluster --group-by).`);
+}
+function parseClusterSelectors(raw) {
+    if (!raw || raw.trim() === '') {
+        return [];
+    }
+    return raw.split(',').map((part) => {
+        const selector = part.trim();
+        const eq = selector.indexOf('=');
+        if (eq <= 0 || eq === selector.length - 1 || /\s/.test(selector)) {
+            throw new Error(`Invalid cluster-selector "${selector}". Use key=value pairs separated by commas.`);
+        }
+        return selector;
+    });
+}
+function clusterArgs(config) {
+    const groupBy = config.clusterGroupBy || 'namespace';
+    assertClusterGroupBy(groupBy);
+    const args = ['cost', 'cluster', '--output', 'json', '--group-by', groupBy];
+    if (config.clusterNamespace) {
+        args.push('--namespace', config.clusterNamespace);
+    }
+    if (config.clusterContext) {
+        args.push('--context', config.clusterContext);
+    }
+    for (const selector of parseClusterSelectors(config.clusterSelector)) {
+        args.push('--selector', selector);
+    }
+    return args;
+}
+function recommendationArgs(planPath, config) {
+    const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
+    if (config?.includeDismissedRecommendations) {
+        args.push('--include-dismissed');
+    }
+    if (config && !config.enableJevScoring) {
+        args.push('--no-scoring');
+    }
+    return args;
+}
+function parseDismissals(raw) {
+    return parseJsonList(raw, 'dismiss-recommendations', (item, index) => {
+        const id = requireId(item, index, 'dismiss-recommendations');
+        const reason = typeof item.reason === 'string' ? item.reason.trim() : '';
+        if (!DISMISSAL_REASONS.includes(reason)) {
+            throw new Error(`dismiss-recommendations[${index}].reason "${reason}" is invalid. ` +
+                `Use ${DISMISSAL_REASONS.join(', ')}.`);
+        }
+        const note = optionalNote(item, index, 'dismiss-recommendations');
+        if (reason === 'other' && !note) {
+            throw new Error(`dismiss-recommendations[${index}] uses reason "other", which requires a note.`);
+        }
+        return { id, reason, note };
+    });
+}
+function parseSnoozes(raw) {
+    return parseJsonList(raw, 'snooze-recommendations', (item, index) => {
+        const id = requireId(item, index, 'snooze-recommendations');
+        const until = typeof item.until === 'string' ? item.until.trim() : '';
+        if (!DATE.test(until) && !RFC3339.test(until)) {
+            throw new Error(`snooze-recommendations[${index}].until "${until}" must be YYYY-MM-DD or RFC3339.`);
+        }
+        const reason = typeof item.reason === 'string' ? item.reason.trim() : '';
+        if (reason && !DISMISSAL_REASONS.includes(reason)) {
+            throw new Error(`snooze-recommendations[${index}].reason "${reason}" is invalid. ` +
+                `Use ${DISMISSAL_REASONS.join(', ')}.`);
+        }
+        const note = optionalNote(item, index, 'snooze-recommendations');
+        if (reason === 'other' && !note) {
+            throw new Error(`snooze-recommendations[${index}] uses reason "other", which requires a note.`);
+        }
+        return { id, until, reason: reason || undefined, note };
+    });
+}
+function dismissArgs(planPath, item) {
+    const args = ['cost', 'recommendations', 'dismiss', item.id, '--reason', item.reason, '--force'];
+    if (item.note) {
+        args.push('--note', item.note);
+    }
+    if (planPath) {
+        args.push('--pulumi-json', planPath);
+    }
+    return args;
+}
+function snoozeArgs(planPath, item) {
+    const args = ['cost', 'recommendations', 'snooze', item.id, '--until', item.until, '--force'];
+    if (item.reason) {
+        args.push('--reason', item.reason);
+    }
+    if (item.note) {
+        args.push('--note', item.note);
+    }
+    if (planPath) {
+        args.push('--pulumi-json', planPath);
+    }
+    return args;
+}
+function stateOnlyArgs(statePath) {
+    return [
+        'overview',
+        '--state-only',
+        '--pulumi-state',
+        statePath,
+        '--output',
+        'json',
+        '--plain',
+        '--yes',
+    ];
+}
+/**
+ * Drop dismissed and snoozed recommendations unless the caller opted into
+ * `--include-dismissed`. Also drop ids the action just dismissed or snoozed,
+ * so a PR comment does not repeat them when the CLI still returns them.
+ */
+function hideDismissedRecommendations(report, config) {
+    if (config?.includeDismissedRecommendations) {
+        return report;
+    }
+    const hidden = new Set();
+    for (const item of parseDismissals(config?.dismissRecommendations)) {
+        hidden.add(item.id);
+    }
+    for (const item of parseSnoozes(config?.snoozeRecommendations)) {
+        hidden.add(item.id);
+    }
+    const recommendations = (report.recommendations ?? []).filter((rec) => {
+        const status = (rec.status ?? '').toLowerCase();
+        if (status === 'dismissed' || status === 'snoozed') {
+            return false;
+        }
+        return !(rec.id && hidden.has(rec.id));
+    });
+    if (recommendations.length === (report.recommendations ?? []).length) {
+        return report;
+    }
+    return {
+        ...report,
+        recommendations,
+        summary: {
+            ...report.summary,
+            total_count: recommendations.length,
+            total_savings: recommendations.reduce((sum, rec) => sum + rec.estimated_savings, 0),
+            count_by_action_type: countByAction(recommendations),
+        },
+    };
+}
+/** Supports() decline reasons are appended to resource notes as "(declined by ...)". */
+function collectDeclineNotes(report) {
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    const notes = [];
+    for (const resource of resources) {
+        if (!resource.notes || !/declined by /i.test(resource.notes)) {
+            continue;
+        }
+        notes.push({
+            resourceType: resource.resourceType,
+            resourceId: resource.resourceId,
+            note: resource.notes,
+        });
+    }
+    return notes;
+}
+function reportFromStateOnly(overview) {
+    const monthly = overview.summary?.projectedMonthly ?? 0;
+    const currency = overview.summary?.currency || 'USD';
+    return {
+        summary: {
+            totalMonthly: monthly,
+            totalHourly: monthly / 730,
+            currency,
+        },
+        projected_monthly_cost: monthly,
+        currency,
+    };
+}
+async function executeCluster(config) {
+    const args = clusterArgs(config);
+    const stdout = await runFinFocus(args, config.debug === true);
+    const report = unwrapJson(stdout);
+    if (!report || !Array.isArray(report.groups) || typeof report.total !== 'number') {
+        throw new Error('finfocus cost cluster JSON is missing groups or total.');
+    }
+    return report;
+}
+async function executeStateOnly(config) {
+    const statePath = config.pulumiStateJsonPath;
+    if (!statePath) {
+        throw new Error('state-only requires pulumi-state-json. ' +
+            'finfocus overview --state-only skips pulumi preview and reads the state file.');
+    }
+    if (!external_fs_.existsSync(statePath)) {
+        throw new Error(`Pulumi state file not found: ${statePath}`);
+    }
+    const stdout = await runFinFocus(stateOnlyArgs(statePath), config.debug === true);
+    const report = unwrapJson(stdout);
+    if (!report?.summary || typeof report.summary.projectedMonthly !== 'number') {
+        throw new Error('finfocus overview JSON is missing summary.projectedMonthly.');
+    }
+    return report;
+}
+async function executeRecommendationLifecycle(planPath, config) {
+    const plan = planPath && external_fs_.existsSync(planPath) ? planPath : undefined;
+    for (const item of parseDismissals(config.dismissRecommendations)) {
+        main_core/* info */.pq(`Dismissing recommendation ${item.id} (${item.reason})`);
+        await runFinFocus(dismissArgs(plan, item), config.debug === true);
+    }
+    for (const item of parseSnoozes(config.snoozeRecommendations)) {
+        main_core/* info */.pq(`Snoozing recommendation ${item.id} until ${item.until}`);
+        await runFinFocus(snoozeArgs(plan, item), config.debug === true);
+    }
+}
+async function runFinFocus(args, debug) {
+    if (debug) {
+        main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+    }
+    const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+        silent: !debug,
+        ignoreReturnCode: true,
+    });
+    if (output.exitCode !== 0) {
+        const envelope = (0,errors/* parseErrorEnvelope */.a)(output.stderr);
+        if (envelope) {
+            throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, output.exitCode));
+        }
+        throw new Error(`finfocus ${args.join(' ')} failed with exit code ${output.exitCode}.\n` +
+            `Stderr: ${output.stderr}\n` +
+            `Stdout: ${output.stdout}`);
+    }
+    return output.stdout;
+}
+function unwrapJson(stdout) {
+    const parsed = JSON.parse(stdout);
+    if (parsed && typeof parsed === 'object' && parsed.finfocus) {
+        return parsed.finfocus;
+    }
+    return parsed;
+}
+function countByAction(recommendations) {
+    const counts = {};
+    for (const rec of recommendations) {
+        counts[rec.action_type] = (counts[rec.action_type] ?? 0) + 1;
+    }
+    return counts;
+}
+function parseJsonList(raw, inputName, mapItem) {
+    if (!raw || raw.trim() === '') {
+        return [];
+    }
+    let parsed;
+    try {
+        parsed = JSON.parse(raw);
+    }
+    catch (err) {
+        throw new Error(`${inputName} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (!Array.isArray(parsed)) {
+        throw new Error(`${inputName} must be a JSON array.`);
+    }
+    return parsed.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            throw new Error(`${inputName}[${index}] must be an object.`);
+        }
+        return mapItem(item, index);
+    });
+}
+function requireId(item, index, inputName) {
+    const id = typeof item.id === 'string' ? item.id.trim() : '';
+    if (!REC_ID.test(id)) {
+        throw new Error(`${inputName}[${index}].id "${id}" is empty or contains characters finfocus would treat as a flag.`);
+    }
+    return id;
+}
+function optionalNote(item, index, inputName) {
+    if (item.note === undefined || item.note === '') {
+        return undefined;
+    }
+    if (typeof item.note !== 'string') {
+        throw new Error(`${inputName}[${index}].note must be a string.`);
+    }
+    return item.note;
+}
+
+// EXTERNAL MODULE: ./src/install.ts + 6 modules
+var install = __nccwpck_require__(8638);
 // EXTERNAL MODULE: external "path"
 var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: external "os"
 var external_os_ = __nccwpck_require__(857);
+;// CONCATENATED MODULE: ./src/plugin-specs.ts
+/**
+ * Plugin specifiers accepted by `finfocus plugin install` (finfocus v0.4.0+).
+ * Registry names, including `kubernetes` and `jev`, come from
+ * `finfocus plugin list --available`. GitHub specifiers are accepted as-is.
+ */
+const REGISTRY_NAME = /^[a-z0-9][a-z0-9-]*$/;
+const VERSION = /^[A-Za-z0-9._+-]+$/;
+const GITHUB_SPEC = /^(?:https:\/\/)?github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:@[A-Za-z0-9._+-]+)?$/;
+function parsePluginSpec(raw) {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+        throw new Error('Plugin name is empty.');
+    }
+    if (GITHUB_SPEC.test(trimmed)) {
+        return { raw: trimmed, name: '', github: true };
+    }
+    const at = trimmed.indexOf('@');
+    const name = at === -1 ? trimmed : trimmed.slice(0, at);
+    const version = at === -1 ? '' : trimmed.slice(at + 1);
+    if (!REGISTRY_NAME.test(name) || (version !== '' && !VERSION.test(version))) {
+        throw new Error(`Invalid plugin name "${trimmed}". ` +
+            `Use a registry name such as kubernetes or jev, an optional @version, ` +
+            `or a github.com/owner/repo specifier.`);
+    }
+    return { raw: trimmed, name, github: false };
+}
+/**
+ * Names from `finfocus plugin list --available --output json`.
+ * The v0.4.0 registry returns a JSON array of `{ name }` objects.
+ */
+function registryNamesFromList(stdout) {
+    let parsed;
+    try {
+        parsed = JSON.parse(stdout);
+    }
+    catch (err) {
+        throw new Error(`finfocus plugin list --available did not return JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const list = Array.isArray(parsed)
+        ? parsed
+        : parsed &&
+            typeof parsed === 'object' &&
+            Array.isArray(parsed.plugins)
+            ? parsed.plugins
+            : undefined;
+    if (!list) {
+        throw new Error('finfocus plugin list --available did not return a JSON array of plugins.');
+    }
+    const names = [];
+    for (const entry of list) {
+        if (typeof entry === 'string' && entry) {
+            names.push(entry);
+        }
+        else if (entry &&
+            typeof entry === 'object' &&
+            typeof entry.name === 'string') {
+            names.push(entry.name);
+        }
+    }
+    if (names.length === 0) {
+        throw new Error('finfocus plugin list --available returned no plugin names.');
+    }
+    return names;
+}
+function assertInstallablePlugin(spec, registryNames) {
+    if (spec.github) {
+        return;
+    }
+    if (registryNames.includes(spec.name)) {
+        return;
+    }
+    throw new Error(`Plugin "${spec.raw}" is not in the finfocus registry. ` +
+        `Known plugins: ${registryNames.join(', ')}. ` +
+        `Custom plugins must use a github.com/owner/repo specifier.`);
+}
+
 ;// CONCATENATED MODULE: ./src/plugins.ts
+
 
 
 
@@ -36742,28 +37131,27 @@ class PluginManager {
             main_core/* info */.pq(`=== PluginManager: Starting plugin installation ===`);
             main_core/* info */.pq(`  Plugins to install: [${plugins.map((p) => `"${p}"`).join(', ')}]`);
         }
-        if (plugins.length === 0) {
+        const requested = plugins.map((plugin) => plugin.trim()).filter((plugin) => plugin.length > 0);
+        if (requested.length === 0) {
             if (debug)
                 main_core/* info */.pq(`  No plugins to install`);
             return;
+        }
+        const registryNames = await this.availablePluginNames(debug);
+        for (const plugin of requested) {
+            assertInstallablePlugin(parsePluginSpec(plugin), registryNames);
         }
         const pluginDir = external_path_.join(external_os_.homedir(), '.finfocus', 'plugins');
         if (debug) {
             main_core/* info */.pq(`  Plugin directory: ${pluginDir}`);
             main_core/* info */.pq(`  Plugin directory exists: ${external_fs_.existsSync(pluginDir)}`);
         }
-        for (let i = 0; i < plugins.length; i++) {
-            const plugin = plugins[i];
-            const trimmedPlugin = plugin.trim();
+        for (let i = 0; i < requested.length; i++) {
+            const trimmedPlugin = requested[i];
             if (debug)
-                main_core/* info */.pq(`=== Installing plugin ${i + 1}/${plugins.length}: "${trimmedPlugin}" ===`);
+                main_core/* info */.pq(`=== Installing plugin ${i + 1}/${requested.length}: "${trimmedPlugin}" ===`);
             else
                 main_core/* info */.pq(`Installing finfocus plugin: "${trimmedPlugin}"`);
-            if (!trimmedPlugin) {
-                if (debug)
-                    main_core/* info */.pq(`  Skipping empty plugin name`);
-                continue;
-            }
             // We avoid the progress bar in logs by using silent mode in exec
             const args = ['plugin', 'install', trimmedPlugin];
             if (debug)
@@ -36811,6 +37199,21 @@ class PluginManager {
             }
         }
     }
+    async availablePluginNames(debug) {
+        if (debug)
+            main_core/* info */.pq(`  Running: finfocus plugin list --available --output json`);
+        const output = await main_exec/* getExecOutput */.H('finfocus', ['plugin', 'list', '--available', '--output', 'json'], { silent: !debug, ignoreReturnCode: true });
+        if (output.exitCode !== 0) {
+            throw new Error(`Failed to list registry plugins.\n` +
+                `Exit code: ${output.exitCode}\n` +
+                `Stderr: ${output.stderr}\n` +
+                `Stdout: ${output.stdout}`);
+        }
+        const names = registryNamesFromList(output.stdout);
+        if (debug)
+            main_core/* info */.pq(`  Registry plugins: ${names.join(', ')}`);
+        return names;
+    }
     async listInstalledPlugins(debug) {
         try {
             if (debug)
@@ -36831,9 +37234,8 @@ class PluginManager {
     }
 }
 
-// EXTERNAL MODULE: ./src/errors.ts
-var errors = __nccwpck_require__(3916);
 ;// CONCATENATED MODULE: ./src/analyze.ts
+
 
 
 
@@ -37037,7 +37439,7 @@ class Analyzer {
         catch (parseErr) {
             throw new Error(`Pulumi plan file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
         }
-        const args = ['cost', 'recommendations', '--pulumi-json', planPath, '--output', 'json'];
+        const args = recommendationArgs(planPath, config);
         if (debug) {
             main_core/* info */.pq(`=== Running finfocus recommendations command ===`);
             main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
@@ -37060,7 +37462,8 @@ class Analyzer {
             };
         }
         try {
-            const report = JSON.parse(output.stdout);
+            const parsed = JSON.parse(output.stdout);
+            const report = hideDismissedRecommendations(parsed.finfocus ?? parsed, config);
             if (debug) {
                 main_core/* info */.pq(`  Parsed recommendations successfully`);
                 main_core/* info */.pq(`  Total recommendations: ${report.summary.total_count}`);
@@ -37080,6 +37483,15 @@ class Analyzer {
                 recommendations: [],
             };
         }
+    }
+    async runCluster(config) {
+        return executeCluster(config);
+    }
+    async runStateOnly(config) {
+        return executeStateOnly(config);
+    }
+    async applyRecommendationLifecycle(planPath, config) {
+        return executeRecommendationLifecycle(planPath, config);
     }
     async runActualCosts(config) {
         const debug = config?.debug === true;
@@ -37865,10 +38277,10 @@ function Collection() {
 
 
 // pkg/dist-src/version.js
-var VERSION = "0.0.0-development";
+var dist_bundle_VERSION = "0.0.0-development";
 
 // pkg/dist-src/defaults.js
-var userAgent = `octokit-endpoint.js/${VERSION} ${getUserAgent()}`;
+var userAgent = `octokit-endpoint.js/${dist_bundle_VERSION} ${getUserAgent()}`;
 var DEFAULTS = {
   method: "GET",
   baseUrl: "https://api.github.com",
@@ -38257,12 +38669,12 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "10.0.7";
+var request_dist_bundle_VERSION = "10.0.7";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
   headers: {
-    "user-agent": `octokit-request.js/${dist_bundle_VERSION} ${getUserAgent()}`
+    "user-agent": `octokit-request.js/${request_dist_bundle_VERSION} ${getUserAgent()}`
   }
 };
 
@@ -41686,6 +42098,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 //# sourceMappingURL=github.js.map
 ;// CONCATENATED MODULE: ./src/formatter.ts
 
+
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
  *
@@ -42047,6 +42460,127 @@ function extractPercentChange(diff) {
     }
     return 0;
 }
+function formatRecommendationsSection(recommendationsReport) {
+    if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
+        return '';
+    }
+    const totalSavings = recommendationsReport.summary.total_savings;
+    const savingsCurrency = recommendationsReport.summary.currency;
+    const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
+    const recRows = recommendationsReport.recommendations
+        .map((rec) => {
+        const name = rec.resource_id.split('::').pop() || rec.resource_id;
+        const savings = `${rec.estimated_savings.toFixed(2)} ${rec.currency}`;
+        if (!scored) {
+            return `| ${name} | ${rec.description} | ${savings} |`;
+        }
+        const risk = formatScore(rec.scores?.risk);
+        const review = rec.scores?.needs_review ? ' review' : '';
+        const worth = formatScore(rec.scores?.worth_acting);
+        return `| ${name} | ${rec.description} | ${savings} | ${risk}${review} | ${worth} |`;
+    })
+        .join('\n');
+    const header = scored
+        ? `| Resource | Recommendation | Savings | Risk | Worth acting |
+| :--- | :--- | ---: | ---: | ---: |`
+        : `| Resource | Recommendation | Savings |
+| :--- | :--- | ---: |`;
+    const scoring = recommendationsReport.scoring;
+    const scoringNote = scoring
+        ? `\n\nScoring${scoring.scorer ? ` (${scoring.scorer})` : ''}: scored ${scoring.scored} of ${scoring.requested}. Scores rank work for review; they do not dismiss a recommendation.` +
+            (scoring.warnings && scoring.warnings.length > 0
+                ? ` Warnings: ${scoring.warnings.join('; ')}.`
+                : '')
+        : '';
+    return `
+
+<details open>
+<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+
+${header}
+${recRows}
+${scoringNote}
+
+</details>
+`;
+}
+function formatScore(value) {
+    return typeof value === 'number' ? value.toFixed(2) : '—';
+}
+function formatDeclineSection(report) {
+    const declines = collectDeclineNotes(report);
+    if (declines.length === 0) {
+        return '';
+    }
+    const rows = declines
+        .slice(0, 20)
+        .map((decline) => {
+        const resourceId = decline.resourceId.split('::').pop() || decline.resourceId;
+        return `| ${decline.resourceType} | ${resourceId} | ${decline.note} |`;
+    })
+        .join('\n');
+    const more = declines.length > 20 ? `\n\nand ${declines.length - 20} more` : '';
+    return `
+
+<details>
+<summary><strong>Plugin declines</strong> (${declines.length})</summary>
+
+| Type | Resource | Reason |
+| :--- | :--- | :--- |
+${rows}${more}
+
+*A plugin Supports() call declined the resource. The note is why it was not priced.*
+
+</details>
+`;
+}
+function formatClusterSection(report) {
+    const currency = report.currency || 'USD';
+    const rows = report.groups
+        .map((group) => {
+        const notes = group.notes && group.notes.length > 0 ? group.notes.join('; ') : '';
+        return `| ${group.key} | ${group.cpu_cost.toFixed(2)} | ${group.mem_cost.toFixed(2)} | ${group.total_cost.toFixed(2)} ${currency} | ${notes} |`;
+    })
+        .join('\n');
+    const idle = typeof report.idle === 'number'
+        ? `\n\nIdle: ${report.idle.toFixed(2)} ${currency}`
+        : '\n\nIdle omitted (namespace scoped).';
+    const incomplete = report.incomplete ? '\n\nSome cluster resources could not be priced.' : '';
+    const warnings = report.warnings && report.warnings.length > 0
+        ? `\n\nWarnings: ${report.warnings.join('; ')}`
+        : '';
+    return `
+
+<details>
+<summary><strong>Cluster costs</strong> — ${report.total.toFixed(2)} ${currency}/mo by ${report.group_by}</summary>
+
+| Group | CPU | Memory | Total | Notes |
+| :--- | ---: | ---: | ---: | :--- |
+${rows}${idle}${incomplete}${warnings}
+
+</details>
+`;
+}
+function formatStateOnlySection(report) {
+    const summary = report.summary;
+    const currency = summary.currency || 'USD';
+    return `
+
+<details>
+<summary><strong>State-only overview</strong> — pulumi preview was not run</summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Projected monthly** | ${summary.projectedMonthly.toFixed(2)} ${currency} |
+| **Actual month-to-date** | ${summary.totalActualMTD.toFixed(2)} ${currency} |
+| **Projected delta** | ${summary.projectedDelta.toFixed(2)} ${currency} |
+| **Potential savings** | ${summary.potentialSavings.toFixed(2)} ${currency} |
+
+*From \`finfocus overview --state-only\`. Pending changes are not included.*
+
+</details>
+`;
+}
 /**
  * Format the unpriced resources section when resources could not be priced.
  * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
@@ -42090,9 +42624,11 @@ ${errorRows}${truncatedNote}
  * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
  * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
  * @param estimateReport - Optional what-if estimate report to include
+ * @param clusterReport - Optional Kubernetes cluster allocation from `finfocus cost cluster`
+ * @param stateOnlyReport - Optional `finfocus overview --state-only` summary
  * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
  */
-function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport) {
+function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
     // Handle both new and legacy report formats
     const currency = report.summary?.currency ?? report.currency ?? 'USD';
     const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
@@ -42210,34 +42746,15 @@ ${actualRows}
         }
     }
     const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
-    // Recommendations section - prominent since it's actionable
-    let recommendationsSection = '';
-    if (recommendationsReport && recommendationsReport.recommendations.length > 0) {
-        const totalSavings = recommendationsReport.summary.total_savings;
-        const savingsCurrency = recommendationsReport.summary.currency;
-        const recRows = recommendationsReport.recommendations
-            .map((r) => {
-            const name = r.resource_id.split('::').pop() || r.resource_id;
-            return `| ${name} | ${r.description} | ${r.estimated_savings.toFixed(2)} ${r.currency} |`;
-        })
-            .join('\n');
-        recommendationsSection = `
-
-<details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
-
-| Resource | Recommendation | Savings |
-| :--- | :--- | ---: |
-${recRows}
-
-</details>
-`;
-    }
+    const recommendationsSection = formatRecommendationsSection(recommendationsReport);
     const sustainabilitySection = sustainabilityReport
         ? formatSustainabilitySection(sustainabilityReport, config, report)
         : '';
     const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
     const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
+    const declineSection = formatDeclineSection(report);
+    const clusterSection = clusterReport ? formatClusterSection(clusterReport) : '';
+    const stateOnlySection = stateOnlyReport ? formatStateOnlySection(stateOnlyReport) : '';
     // Basic budget status section (local math; finfocus has no budget status command)
     const budgetSection = formatBudgetSection(budgetStatus);
     // Calculate percent used for dashboard from budget status
@@ -42261,7 +42778,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
@@ -42274,7 +42791,7 @@ ${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSecti
 
 class Commenter {
     marker = '<!-- finfocus-action-comment -->';
-    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport) {
+    async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
         const octokit = getOctokit(token);
         const context = github_context;
         if (!context.payload.pull_request) {
@@ -42283,7 +42800,7 @@ class Commenter {
         }
         const prNumber = context.payload.pull_request.number;
         const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport)}`;
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport)}`;
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
             issue_number: prNumber,
@@ -42352,6 +42869,44 @@ class ConfigManager {
             main_core/* info */.pq('  Budget configuration written successfully');
         else
             main_core/* info */.pq('Budget configuration created successfully');
+    }
+    /**
+     * Opt in to Jev recommendation scoring. finfocus reads `scoring.enabled` and
+     * `scoring.plugin` from ~/.finfocus/config.yaml. The action does not write
+     * TYPESAFE_API_KEY; the workflow must pass that secret in the environment.
+     * An existing scoring section is left unchanged.
+     */
+    async writeScoringConfig(config) {
+        if (!config.enableJevScoring) {
+            return;
+        }
+        const configDir = external_path_.join(external_os_.homedir(), '.finfocus');
+        const configPath = external_path_.join(configDir, 'config.yaml');
+        const block = [
+            '# finfocus recommendation scoring',
+            '# Generated by finfocus-action',
+            'scoring:',
+            '  enabled: true',
+            '  plugin: jev',
+            '  identifier_mode: pseudonymized',
+            '',
+        ].join('\n');
+        if (!external_fs_.existsSync(configDir)) {
+            external_fs_.mkdirSync(configDir, { recursive: true });
+        }
+        if (!external_fs_.existsSync(configPath)) {
+            external_fs_.writeFileSync(configPath, block, 'utf8');
+            main_core/* info */.pq('Jev scoring configuration created (scoring.plugin: jev)');
+            return;
+        }
+        const existing = external_fs_.readFileSync(configPath, 'utf8');
+        if (/^scoring:/m.test(existing)) {
+            main_core/* info */.pq('scoring section already present in config.yaml; leaving it unchanged');
+            return;
+        }
+        const separator = existing.endsWith('\n') ? '\n' : '\n\n';
+        external_fs_.writeFileSync(configPath, `${existing}${separator}${block}`, 'utf8');
+        main_core/* info */.pq('Jev scoring configuration appended (scoring.plugin: jev)');
     }
     parseBudgetConfig(config) {
         const amount = config.budgetAmount || 0;
@@ -42443,6 +42998,7 @@ class ConfigManager {
 }
 
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -42577,6 +43133,16 @@ async function run() {
         const budgetPeriod = main_core/* getInput */.V4('budget_period') || 'monthly';
         const budgetAlerts = main_core/* getInput */.V4('budget_alerts') || '';
         const estimateSpec = main_core/* getInput */.V4('estimate_spec') || '';
+        const includeClusterCosts = parseBoolean(main_core/* getInput */.V4('include_cluster_costs'), false);
+        const clusterGroupBy = main_core/* getInput */.V4('cluster_group_by') || 'namespace';
+        const clusterNamespace = main_core/* getInput */.V4('cluster_namespace') || '';
+        const clusterContext = main_core/* getInput */.V4('cluster_context') || '';
+        const clusterSelector = main_core/* getInput */.V4('cluster_selector') || '';
+        const enableJevScoring = parseBoolean(main_core/* getInput */.V4('enable_jev_scoring'), false);
+        const includeDismissedRecommendations = parseBoolean(main_core/* getInput */.V4('include_dismissed_recommendations'), false);
+        const dismissRecommendations = main_core/* getInput */.V4('dismiss_recommendations') || '';
+        const snoozeRecommendations = main_core/* getInput */.V4('snooze_recommendations') || '';
+        const stateOnly = parseBoolean(main_core/* getInput */.V4('state_only'), false);
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -42604,6 +43170,16 @@ async function run() {
             budgetPeriod,
             budgetAlerts,
             estimateSpec,
+            includeClusterCosts,
+            clusterGroupBy,
+            clusterNamespace,
+            clusterContext,
+            clusterSelector,
+            enableJevScoring,
+            includeDismissedRecommendations,
+            dismissRecommendations,
+            snoozeRecommendations,
+            stateOnly,
         };
         if (config.debug) {
             main_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -42687,11 +43263,25 @@ async function run() {
                 main_core/* info */.pq('No plugins to install (install-plugins is empty)');
         }
         // Setup budget configuration if budget amount is provided
+        const configManager = new ConfigManager();
         if (config.budgetAmount && config.budgetAmount > 0) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('📊 Setting up budget configuration');
-            const configManager = new ConfigManager();
             await configManager.writeConfig(config);
+            main_core/* endGroup */.N4();
+        }
+        if (config.enableJevScoring) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('🧮 Enabling Jev recommendation scoring');
+            await configManager.writeScoringConfig(config);
+            if (!process.env.TYPESAFE_API_KEY) {
+                main_core/* warning */.$e('enable-jev-scoring is set but TYPESAFE_API_KEY is not in the environment. ' +
+                    'The jev plugin returns UNAUTHENTICATED and recommendations stay unscored.');
+            }
+            const jevRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'jev');
+            if (!jevRequested) {
+                main_core/* warning */.$e('enable-jev-scoring needs the jev plugin. Add jev to install-plugins if it is not already installed.');
+            }
             main_core/* endGroup */.N4();
         }
         if (config.analyzerMode) {
@@ -42704,10 +43294,31 @@ async function run() {
                 main_core/* info */.pq(`Total execution time: ${Date.now() - startTime}ms`);
             return;
         }
+        let stateOnlyReport;
+        if (config.stateOnly) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('📋 Running state-only overview');
+            stateOnlyReport = await analyzer.runStateOnly(config);
+            main_core/* info */.pq(`📋 State-only projected monthly: ${stateOnlyReport.summary.projectedMonthly} ${stateOnlyReport.summary.currency}`);
+            main_core/* setOutput */.uH('state-projected-monthly', stateOnlyReport.summary.projectedMonthly.toString());
+            main_core/* endGroup */.N4();
+        }
+        const planFileExists = external_fs_.existsSync(config.pulumiPlanJsonPath);
+        const runProjected = Boolean(config.terraformStatePath) || planFileExists || !config.stateOnly;
         main_core/* info */.pq('');
         main_core/* startGroup */.Oh('💰 Running cost analysis');
         const analysisStartTime = Date.now();
-        const report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
+        let report;
+        if (runProjected) {
+            report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
+        }
+        else if (stateOnlyReport) {
+            main_core/* info */.pq('No Pulumi plan or Terraform state file is present. Using the state-only overview as the cost total.');
+            report = reportFromStateOnly(stateOnlyReport);
+        }
+        else {
+            throw new Error('state-only did not produce an overview report.');
+        }
         if (config.debug) {
             main_core/* info */.pq(`Analysis took: ${Date.now() - analysisStartTime}ms`);
         }
@@ -42766,8 +43377,29 @@ async function run() {
             main_core/* info */.pq(`🌱 Carbon Intensity: ${carbonIntensity.toFixed(2)} gCO2e/USD`);
             main_core/* endGroup */.N4();
         }
+        let clusterReport;
+        if (config.includeClusterCosts) {
+            const kubernetesRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'kubernetes');
+            if (!kubernetesRequested) {
+                main_core/* warning */.$e('include-cluster-costs needs the kubernetes plugin and a kubeconfig on the runner. ' +
+                    'Add kubernetes to install-plugins if it is not already installed.');
+            }
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('☸️ Running cluster cost allocation');
+            clusterReport = await analyzer.runCluster(config);
+            main_core/* setOutput */.uH('cluster-total-cost', clusterReport.total.toString());
+            main_core/* info */.pq(`☸️ Cluster cost (${clusterReport.group_by}): ${clusterReport.total} ${clusterReport.currency}`);
+            main_core/* endGroup */.N4();
+        }
         let recommendationsReport;
-        if (config.includeRecommendations) {
+        if (config.dismissRecommendations || config.snoozeRecommendations) {
+            main_core/* info */.pq('');
+            main_core/* startGroup */.Oh('🙈 Applying recommendation dismissals');
+            const planForDismissal = planFileExists ? config.pulumiPlanJsonPath : undefined;
+            await analyzer.applyRecommendationLifecycle(planForDismissal, config);
+            main_core/* endGroup */.N4();
+        }
+        if (config.includeRecommendations && (planFileExists || !config.stateOnly)) {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💡 Running cost recommendations');
             const recommendationsStartTime = Date.now();
@@ -42779,6 +43411,9 @@ async function run() {
             main_core/* setOutput */.uH('recommendation-count', recommendationsReport.summary.total_count.toString());
             main_core/* info */.pq(`💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`);
             main_core/* endGroup */.N4();
+        }
+        else if (config.includeRecommendations && config.stateOnly && !planFileExists) {
+            main_core/* info */.pq('Skipping recommendations: state-only mode has no Pulumi plan, and cost recommendations requires --pulumi-json.');
         }
         let estimateReport;
         if (config.estimateSpec) {
@@ -42829,7 +43464,7 @@ async function run() {
             main_core/* info */.pq('');
             main_core/* startGroup */.Oh('💬 Posting PR comment');
             const commentStartTime = Date.now();
-            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport);
+            await commenter.upsertComment(report, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
             if (config.debug) {
                 main_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             }

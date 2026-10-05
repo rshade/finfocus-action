@@ -327,4 +327,31 @@ describe('ConfigManager', () => {
       expect(core.info).toHaveBeenCalledWith('  Period: monthly');
     });
   });
+
+  describe('writeScoringConfig', () => {
+    it('appends a jev scoring block without removing an existing budget', async () => {
+      const existing = 'cost:\n  budgets:\n    global:\n      amount: 5.00\n';
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue(existing);
+
+      await configManager.writeScoringConfig({ enableJevScoring: true } as ActionConfiguration);
+
+      const written = (fs.writeFileSync as jest.Mock).mock.calls[0][1] as string;
+      expect(written).toContain('cost:');
+      expect(written).toContain('scoring:');
+      expect(written).toContain('  enabled: true');
+      expect(written).toContain('  plugin: jev');
+      expect(written).toContain('  identifier_mode: pseudonymized');
+      expect(written).not.toContain('TYPESAFE_API_KEY');
+    });
+
+    it('leaves an existing scoring section unchanged', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue('scoring:\n  enabled: false\n');
+
+      await configManager.writeScoringConfig({ enableJevScoring: true } as ActionConfiguration);
+
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+  });
 });
