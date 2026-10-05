@@ -118,6 +118,7 @@ main.ts
 ## Important Notes
 
 - The `dist/` folder is committed and must be rebuilt with `npm run build` before committing changes. Use the `@vercel/ncc` version in the lockfile (0.45.0). A stale `node_modules` copy (for example 0.38.4) produces a bundle that fails the Check dist workflow.
+- The finfocus contract job must pass `GITHUB_TOKEN` into `scripts/contract.sh`. `plugin install` reads that variable. `GH_TOKEN` is only for the `gh` CLI download step. Without `GITHUB_TOKEN`, the unauthenticated rate limit fails the v0.4.0 aws-public install and the budget breach check exits 0.
 - PR comments use a marker (`<!-- finfocus-action-comment -->`) for upsert behavior
 - Sustainability metrics are calculated from resource-level `sustainability.carbon_footprint` data
   in the finfocus report
