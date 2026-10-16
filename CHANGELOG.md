@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/rshade/finfocus-action/compare/v2.0.0...v2.1.0) (2026-10-05)
+
+
+### Added
+
+* filter and group cost comments ([#106](https://github.com/rshade/finfocus-action/issues/106)) ([0dab1f4](https://github.com/rshade/finfocus-action/commit/0dab1f4bdc686ed130c3e417b6dd01620d2302c7)), closes [#20](https://github.com/rshade/finfocus-action/issues/20)
+
 ## [2.0.0](https://github.com/rshade/finfocus-action/compare/v1.2.2...v2.0.0) (2026-10-05)
 
 
