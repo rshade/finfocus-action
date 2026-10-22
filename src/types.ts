@@ -242,7 +242,6 @@ export interface IAnalyzer {
     config: ActionConfiguration,
     report: FinfocusReport,
   ): BudgetStatus | undefined;
-  extractBudgetStatus(stdout: string): BudgetStatus | undefined;
 }
 
 export interface RecommendationsSummary {
