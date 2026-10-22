@@ -173,7 +173,9 @@ main.ts
   `show-only-changes` change the comment only. The projected monthly total stays the CLI total.
 - `output-format: ndjson` with `generate-artifact: true` writes one JSON resource per
   line. The comment cap is `max-resources-displayed`. When that cap hides rows and an
-  artifact is generated, the comment names the artifact.
+  artifact is generated, the comment names the artifact. `include-forecast` projects the
+  current monthly total. With no historical series the growth rate is 0, so linear,
+  exponential, and average all hold that total.
 
 ## Active Technologies
 

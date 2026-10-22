@@ -16,6 +16,7 @@ import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
 import { writeReportJson, writeReportNdjson } from './report-output.js';
+import { projectMonthlyCost } from './forecast.js';
 import { calculateAchievableSavings } from './formatter.js';
 import { Commenter } from './comment.js';
 import { ConfigManager } from './config.js';
@@ -32,6 +33,24 @@ function parseBoolean(value: string, defaultValue: boolean): boolean {
   if (!value || value.trim() === '') return defaultValue;
   const normalized = value.toLowerCase().trim();
   return normalized === 'true' || normalized === 'yes' || normalized === '1';
+}
+
+function parseForecastMonths(value: string): number {
+  if (!value || value.trim() === '') return 3;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 12) {
+    core.warning(`forecast-months "${value}" is not an integer from 1 to 12. Using 3.`);
+    return 3;
+  }
+  return parsed;
+}
+
+function parseGrowthModel(value: string): 'linear' | 'exponential' | 'average' {
+  if (value === 'exponential' || value === 'average' || value === 'linear' || value === '') {
+    return value === '' ? 'linear' : value;
+  }
+  core.warning(`growth-model "${value}" is not linear, exponential, or average. Using linear.`);
+  return 'linear';
 }
 
 function logEnvironment(): void {
@@ -190,6 +209,9 @@ async function run(): Promise<void> {
     const artifactName = core.getInput('artifact_name') || 'cost-report';
     const outputFormatInput = core.getInput('output_format') || 'json';
     const outputFormat = outputFormatInput === 'ndjson' ? 'ndjson' : 'json';
+    const includeForecast = parseBoolean(core.getInput('include_forecast'), false);
+    const forecastMonths = parseForecastMonths(core.getInput('forecast_months'));
+    const growthModel = parseGrowthModel(core.getInput('growth_model'));
     if (outputFormatInput !== 'json' && outputFormatInput !== 'ndjson') {
       core.warning(`output-format "${outputFormatInput}" is not json or ndjson. Using json.`);
     }
@@ -241,6 +263,9 @@ async function run(): Promise<void> {
       generateArtifact,
       artifactName,
       outputFormat,
+      includeForecast,
+      forecastMonths,
+      growthModel,
     };
 
     if (config.debug) {
@@ -430,6 +455,17 @@ async function run(): Promise<void> {
 
     core.setOutput('total-monthly-cost', totalMonthlyCost.toString());
     core.setOutput('currency', currency);
+    if (config.includeForecast) {
+      const months = config.forecastMonths ?? 3;
+      const model = config.growthModel ?? 'linear';
+      const projected = projectMonthlyCost(totalMonthlyCost, 0, months, model);
+      config.forecast = { months, model, growthRate: 0, projected };
+      core.setOutput('monthly-growth-rate', '0');
+      core.setOutput('forecast-monthly', projected.toFixed(2));
+      core.info(
+        `Forecast holds ${projected.toFixed(2)} ${currency} for ${months} months. No cost history, so the growth rate is 0.`,
+      );
+    }
     const resourceCount = report.resources?.length ?? report.summary?.resources?.length ?? 0;
     core.setOutput('total-resources', resourceCount.toString());
     if (config.generateArtifact) {

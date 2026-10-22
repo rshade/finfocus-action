@@ -38279,6 +38279,23 @@ function ndjsonResource(resource) {
     };
 }
 
+;// CONCATENATED MODULE: ./src/forecast.ts
+/**
+ * Project a monthly cost.
+ * `monthlyGrowthRate` is a fraction (0.1 is 10% per month).
+ * With no history the caller passes 0, and every model holds the current total.
+ */
+function projectMonthlyCost(current, monthlyGrowthRate, months, model) {
+    const periods = Math.max(0, Math.floor(months));
+    if (model === 'exponential') {
+        return current * (1 + monthlyGrowthRate) ** periods;
+    }
+    if (model === 'average') {
+        return current * (1 + monthlyGrowthRate);
+    }
+    return current * (1 + monthlyGrowthRate * periods);
+}
+
 ;// CONCATENATED MODULE: ./src/formatter.ts
 
 
@@ -38672,6 +38689,22 @@ function extractPercentChange(diff) {
     }
     return 0;
 }
+function formatForecastSection(forecast, currency) {
+    if (!forecast) {
+        return '';
+    }
+    const symbol = getCurrencySymbol(currency);
+    return `
+
+### Cost forecast
+
+No historical cost series is available, so the growth rate is 0. The ${forecast.model} model holds the current monthly total for ${forecast.months} months.
+
+| Months ahead | Projected monthly |
+| :--- | ---: |
+| ${forecast.months} | ${symbol}${forecast.projected.toFixed(2)} ${currency} |
+`;
+}
 function formatRecommendationsSection(recommendationsReport) {
     if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
         return '';
@@ -38968,6 +39001,7 @@ ${actualRows}
     const sustainabilitySection = sustainabilityReport
         ? formatSustainabilitySection(sustainabilityReport, config, report)
         : '';
+    const forecastSection = formatForecastSection(config?.forecast, currency);
     const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
     const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
     const declineSection = formatDeclineSection(report);
@@ -38996,7 +39030,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${forecastSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
@@ -44359,11 +44393,29 @@ function objectField(parent, key) {
 
 
 
+
 function parseBoolean(value, defaultValue) {
     if (!value || value.trim() === '')
         return defaultValue;
     const normalized = value.toLowerCase().trim();
     return normalized === 'true' || normalized === 'yes' || normalized === '1';
+}
+function parseForecastMonths(value) {
+    if (!value || value.trim() === '')
+        return 3;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 12) {
+        lib_core/* warning */.$e(`forecast-months "${value}" is not an integer from 1 to 12. Using 3.`);
+        return 3;
+    }
+    return parsed;
+}
+function parseGrowthModel(value) {
+    if (value === 'exponential' || value === 'average' || value === 'linear' || value === '') {
+        return value === '' ? 'linear' : value;
+    }
+    lib_core/* warning */.$e(`growth-model "${value}" is not linear, exponential, or average. Using linear.`);
+    return 'linear';
 }
 function logEnvironment() {
     lib_core/* info */.pq('=== Environment Diagnostics ===');
@@ -44506,6 +44558,9 @@ async function run() {
         const artifactName = lib_core/* getInput */.V4('artifact_name') || 'cost-report';
         const outputFormatInput = lib_core/* getInput */.V4('output_format') || 'json';
         const outputFormat = outputFormatInput === 'ndjson' ? 'ndjson' : 'json';
+        const includeForecast = parseBoolean(lib_core/* getInput */.V4('include_forecast'), false);
+        const forecastMonths = parseForecastMonths(lib_core/* getInput */.V4('forecast_months'));
+        const growthModel = parseGrowthModel(lib_core/* getInput */.V4('growth_model'));
         if (outputFormatInput !== 'json' && outputFormatInput !== 'ndjson') {
             lib_core/* warning */.$e(`output-format "${outputFormatInput}" is not json or ndjson. Using json.`);
         }
@@ -44556,6 +44611,9 @@ async function run() {
             generateArtifact,
             artifactName,
             outputFormat,
+            includeForecast,
+            forecastMonths,
+            growthModel,
         };
         if (config.debug) {
             lib_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -44719,6 +44777,15 @@ async function run() {
         lib_core/* endGroup */.N4();
         lib_core/* setOutput */.uH('total-monthly-cost', totalMonthlyCost.toString());
         lib_core/* setOutput */.uH('currency', currency);
+        if (config.includeForecast) {
+            const months = config.forecastMonths ?? 3;
+            const model = config.growthModel ?? 'linear';
+            const projected = projectMonthlyCost(totalMonthlyCost, 0, months, model);
+            config.forecast = { months, model, growthRate: 0, projected };
+            lib_core/* setOutput */.uH('monthly-growth-rate', '0');
+            lib_core/* setOutput */.uH('forecast-monthly', projected.toFixed(2));
+            lib_core/* info */.pq(`Forecast holds ${projected.toFixed(2)} ${currency} for ${months} months. No cost history, so the growth rate is 0.`);
+        }
         const resourceCount = report.resources?.length ?? report.summary?.resources?.length ?? 0;
         lib_core/* setOutput */.uH('total-resources', resourceCount.toString());
         if (config.generateArtifact) {

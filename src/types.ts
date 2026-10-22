@@ -66,6 +66,16 @@ export interface ActionConfiguration {
   artifactName?: string;
   /** json writes one document. ndjson writes one resource per line. */
   outputFormat?: 'json' | 'ndjson';
+  includeForecast?: boolean;
+  forecastMonths?: number;
+  growthModel?: 'linear' | 'exponential' | 'average';
+  /** Filled after analysis. Absent growth history uses rate 0. */
+  forecast?: {
+    months: number;
+    model: 'linear' | 'exponential' | 'average';
+    growthRate: number;
+    projected: number;
+  };
 }
 
 export interface BudgetAlert {

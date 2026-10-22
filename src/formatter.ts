@@ -454,6 +454,26 @@ function extractPercentChange(diff?: any): number {
   return 0;
 }
 
+function formatForecastSection(
+  forecast: ActionConfiguration['forecast'],
+  currency: string,
+): string {
+  if (!forecast) {
+    return '';
+  }
+  const symbol = getCurrencySymbol(currency);
+  return `
+
+### Cost forecast
+
+No historical cost series is available, so the growth rate is 0. The ${forecast.model} model holds the current monthly total for ${forecast.months} months.
+
+| Months ahead | Projected monthly |
+| :--- | ---: |
+| ${forecast.months} | ${symbol}${forecast.projected.toFixed(2)} ${currency} |
+`;
+}
+
 function formatRecommendationsSection(recommendationsReport?: RecommendationsReport): string {
   if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
     return '';
@@ -789,6 +809,8 @@ ${actualRows}
     ? formatSustainabilitySection(sustainabilityReport, config, report)
     : '';
 
+  const forecastSection = formatForecastSection(config?.forecast, currency);
+
   const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
 
   const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
@@ -829,7 +851,7 @@ ${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
 | **% Change** | ${percent}% |
 
 </details>
-${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${forecastSection}${sustainabilitySection}${detailNote}
 
 ---
 <sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
