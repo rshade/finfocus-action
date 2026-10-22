@@ -96,6 +96,8 @@ run_action() {
       INPUT_INCLUDE_ACTUAL_COSTS="false" \
       INPUT_BUDGET_AMOUNT="100" \
       INPUT_BUDGET_CURRENCY="USD" \
+      INPUT_GENERATE_ARTIFACT="true" \
+      INPUT_ARTIFACT_NAME="cost-report" \
       "$node_bin" "$ROOT/dist/index.js"
   ); then
     fail "action: dist/index.js failed for finfocus $version"
@@ -122,6 +124,13 @@ run_action() {
     pass "action: wrote a PR comment body with a monthly cost"
   else
     fail "action: comment body missing marker or monthly cost"
+  fi
+  local report_json
+  report_json=$(output_value "$tmp/github-output" report-json-path)
+  if [ -n "$report_json" ] && jq -e '.summary.totalMonthly > 0' "$report_json" >/dev/null; then
+    pass "action: wrote report JSON at $report_json"
+  else
+    fail "action: report JSON missing or empty: '$report_json'"
   fi
   if grep -q 'Budget Status' "$tmp/comment.md" && grep -q '100.00' "$tmp/comment.md"; then
     pass "action: budget section is populated from budget-amount"

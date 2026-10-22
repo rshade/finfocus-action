@@ -61,6 +61,9 @@ export interface ActionConfiguration {
     showOnlyChanges?: boolean;
     /** Resource table sort: cost, name, type, or change. */
     sortBy?: 'cost' | 'name' | 'type' | 'change';
+    /** Write the full projected report as JSON for actions/upload-artifact. */
+    generateArtifact?: boolean;
+    artifactName?: string;
 }
 export interface BudgetAlert {
     threshold: number;
