@@ -338,9 +338,8 @@ ${equivalentsSection}${resourceTable}
 /**
  * Render the What-If Cost Estimate section as Markdown for the PR comment.
  *
- * Shows the estimated resource (type, provider, region), a Baseline vs Modified
- * monthly cost table, the total change, and the per-property deltas from
- * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
+ * Single-resource estimates show one estimated cost table. A report with a
+ * non-zero baseline keeps the before/after layout for a future `--modify` mode.
  *
  * @param report - Estimate report from `Analyzer.runEstimate`
  * @returns Markdown string for the estimate section
@@ -360,25 +359,51 @@ export function formatEstimateSection(report: EstimateReport): string {
       ? `+${currencySymbol}${report.totalChange.toFixed(2)}`
       : `${currencySymbol}${report.totalChange.toFixed(2)}`;
 
+  const singleResource =
+    report.baseline.monthly === 0 &&
+    report.baseline.hourly === 0 &&
+    report.deltas.every((delta) => delta.originalValue === '');
+
   let deltasTable = '';
   if (report.deltas.length > 0) {
     const deltaRows = report.deltas
-      .map((d) => {
-        const original = d.originalValue === '' ? '—' : d.originalValue;
-        const delta =
-          d.costChange > 0
-            ? `+${currencySymbol}${d.costChange.toFixed(2)}`
-            : `${currencySymbol}${d.costChange.toFixed(2)}`;
-        return `| ${d.property} | ${original} | ${d.newValue} | ${delta} |`;
+      .map((delta) => {
+        const cost =
+          delta.costChange > 0
+            ? `+${currencySymbol}${delta.costChange.toFixed(2)}`
+            : `${currencySymbol}${delta.costChange.toFixed(2)}`;
+        if (singleResource) {
+          return `| ${delta.property} | ${delta.newValue} | ${cost} |`;
+        }
+        const original = delta.originalValue === '' ? '—' : delta.originalValue;
+        return `| ${delta.property} | ${original} | ${delta.newValue} | ${cost} |`;
       })
       .join('\n');
 
-    deltasTable = `
+    deltasTable = singleResource
+      ? `
+| Property | Value | Monthly Cost |
+| :--- | :--- | ---: |
+${deltaRows}
+`
+      : `
 | Property | Original | New | Cost Change |
 | :--- | :--- | :--- | ---: |
 ${deltaRows}
 `;
   }
+
+  const costTable = singleResource
+    ? `| Metric | Estimated |
+| :--- | ---: |
+| **Monthly Cost** | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
+| **Hourly Cost** | ${currencySymbol}${report.modified.hourly.toFixed(4)} |`
+    : `| Metric | Baseline | Modified |
+| :--- | ---: | ---: |
+| **Monthly Cost** | ${currencySymbol}${report.baseline.monthly.toFixed(2)} | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
+| **Hourly Cost** | ${currencySymbol}${report.baseline.hourly.toFixed(4)} | ${currencySymbol}${report.modified.hourly.toFixed(4)} |
+
+**Total Change:** ${changeText} ${currency}/month`;
 
   return `
 
@@ -387,12 +412,7 @@ ${deltaRows}
 **Resource:** \`${report.resource.type}\`
 ${detailParts.join(' · ')}
 
-| Metric | Baseline | Modified |
-| :--- | ---: | ---: |
-| **Monthly Cost** | ${currencySymbol}${report.baseline.monthly.toFixed(2)} | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
-| **Hourly Cost** | ${currencySymbol}${report.baseline.hourly.toFixed(4)} | ${currencySymbol}${report.modified.hourly.toFixed(4)} |
-
-**Total Change:** ${changeText} ${currency}/month
+${costTable}
 ${deltasTable}`;
 }
 

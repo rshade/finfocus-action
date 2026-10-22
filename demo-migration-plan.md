@@ -4,16 +4,16 @@
 The `finfocus-demo` repo is a small satellite (~480 lines, 1 contributor) whose sole purpose is demoing the `finfocus-action` GitHub Action. Maintaining it separately adds friction (version syncing, discoverability, two repos to manage). The demo workflows must remain **live and runnable** — this is the primary value.
 
 ## Approach
-Move the demo's Pulumi project and workflows directly into `finfocus-action` as live CI workflows + example code. Create 4 workflows total covering both operational modes (standard + analyzer) × both action refs (`./` + `@v1`). Trigger on `examples/` changes + `workflow_dispatch`.
+Move the demo's Pulumi project and workflows directly into `finfocus-action` as live CI workflows + example code. Create 4 workflows total covering both operational modes (standard + analyzer) × both action refs (`./` + `@v2`). Trigger on `examples/` changes + `workflow_dispatch`.
 
 ## Workflow Matrix
 
 | Workflow File | Mode | Action Ref | Purpose |
 |---|---|---|---|
 | `demo-cost-estimate.yml` | Standard | `uses: ./` | Integration test — validates action from current branch |
-| `demo-cost-estimate-release.yml` | Standard | `uses: rshade/finfocus-action@v1` | Demo — validates published release |
+| `demo-cost-estimate-release.yml` | Standard | `uses: rshade/finfocus-action@v2` | Demo — validates published release |
 | `demo-analyzer-mode.yml` | Analyzer | `uses: ./` | Integration test — validates analyzer mode from current branch |
-| `demo-analyzer-mode-release.yml` | Analyzer | `uses: rshade/finfocus-action@v1` | Demo — validates published analyzer mode |
+| `demo-analyzer-mode-release.yml` | Analyzer | `uses: rshade/finfocus-action@v2` | Demo — validates published analyzer mode |
 
 ## Workplan
 
@@ -30,9 +30,9 @@ Move the demo's Pulumi project and workflows directly into `finfocus-action` as 
 
 ### Workflow creation
 - [ ] 8. Create `.github/workflows/demo-cost-estimate.yml` — standard mode, `uses: ./`, triggers on `examples/` changes + `workflow_dispatch`
-- [ ] 9. Create `.github/workflows/demo-cost-estimate-release.yml` — standard mode, `uses: rshade/finfocus-action@v1`, same triggers
+- [ ] 9. Create `.github/workflows/demo-cost-estimate-release.yml` — standard mode, `uses: rshade/finfocus-action@v2`, same triggers
 - [ ] 10. Create `.github/workflows/demo-analyzer-mode.yml` — analyzer mode, `uses: ./`, same triggers
-- [ ] 11. Create `.github/workflows/demo-analyzer-mode-release.yml` — analyzer mode, `uses: @v1`, same triggers
+- [ ] 11. Create `.github/workflows/demo-analyzer-mode-release.yml` — analyzer mode, `uses: @v2`, same triggers
 - [ ] 12. All workflows must set `work-dir` / `working-directory` to `examples/pulumi-aws-demo` for Pulumi commands
 
 ### Configuration updates
@@ -58,6 +58,6 @@ Move the demo's Pulumi project and workflows directly into `finfocus-action` as 
 ## Notes
 
 - The `uses: ./` workflows double as integration tests — if the action breaks, the demo PR will catch it
-- The `uses: @v1` workflows verify the published release still works with the demo infra
+- The `uses: @v2` workflows verify the published release still works with the demo infra
 - All 4 workflows share the same Pulumi setup steps (OIDC, Pulumi CLI, stack init) — consider using a reusable workflow or composite action if DRY becomes important later
 - Debug env vars (`ACTIONS_STEP_DEBUG`, `ACTIONS_RUNNER_DEBUG`) should be removed from migrated workflows unless intentionally kept for demo purposes
