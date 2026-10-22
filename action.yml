@@ -190,6 +190,18 @@ inputs:
     description: 'Report file format when generate-artifact is true: json or ndjson. ndjson is one resource per line.'
     required: false
     default: 'json'
+  include-forecast:
+    description: 'Add a cost forecast section. With no historical cost series the growth rate is 0 and the forecast holds the current monthly total.'
+    required: false
+    default: 'false'
+  forecast-months:
+    description: 'Months ahead for the forecast, from 1 to 12.'
+    required: false
+    default: '3'
+  growth-model:
+    description: 'Forecast model: linear, exponential, or average. Unused while the growth rate is 0.'
+    required: false
+    default: 'linear'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -209,6 +221,12 @@ outputs:
   total-resources:
     description: 'Resource count in the projected report, before the comment cap.'
     value: ${{ steps.run.outputs.total-resources }}
+  monthly-growth-rate:
+    description: 'Monthly growth rate used by the forecast. 0 when no cost history is available.'
+    value: ${{ steps.run.outputs.monthly-growth-rate }}
+  forecast-monthly:
+    description: 'Projected monthly cost at forecast-months. Equals the current total when the growth rate is 0.'
+    value: ${{ steps.run.outputs.forecast-monthly }}
   policy-pack-path:
     description: 'Path to the set up policy pack directory'
     value: ${{ steps.run.outputs.policy-pack-path }}
@@ -303,6 +321,9 @@ runs:
         INPUT_GENERATE_ARTIFACT: ${{ inputs.generate-artifact }}
         INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
         INPUT_OUTPUT_FORMAT: ${{ inputs.output-format }}
+        INPUT_INCLUDE_FORECAST: ${{ inputs.include-forecast }}
+        INPUT_FORECAST_MONTHS: ${{ inputs.forecast-months }}
+        INPUT_GROWTH_MODEL: ${{ inputs.growth-model }}
     - name: 'Upload cost report'
       if: inputs.generate-artifact == 'true'
       uses: actions/upload-artifact@v7
