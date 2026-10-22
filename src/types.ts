@@ -140,7 +140,8 @@ export interface EquivalencyMetrics {
 
 export interface SustainabilityReport {
   totalCO2e: number; // kgCO2e/month
-  totalCO2eDiff: number; // kgCO2e/month
+  /** Set only when finfocus provides a carbon diff. Absent is not a zero change. */
+  totalCO2eDiff?: number;
   carbonIntensity: number; // gCO2e/USD
   equivalents?: EquivalencyMetrics;
 }
@@ -234,7 +235,7 @@ export interface IAnalyzer {
   setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
   calculateSustainabilityMetrics(report: FinfocusReport): {
     totalCO2e: number;
-    totalCO2eDiff: number;
+    totalCO2eDiff?: number;
     carbonIntensity: number;
   };
   calculateBudgetStatus(

@@ -87,7 +87,7 @@ inputs:
     required: false
     default: 'true'
   fail-on-carbon-increase:
-    description: 'Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases'
+    description: 'Threshold (e.g., "10%", "10kg") to fail if the carbon footprint increases. Skipped when finfocus does not report a carbon diff. The comment omits Carbon Change in that case.'
     required: false
     default: ''
   budget-amount:
