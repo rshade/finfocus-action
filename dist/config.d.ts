@@ -7,21 +7,21 @@ export declare class ConfigManager implements IConfigManager {
     writeConfig(config: ActionConfiguration): Promise<void>;
     /**
      * Opt in to Jev recommendation scoring. finfocus reads `scoring.enabled` and
-     * `scoring.plugin` from ~/.finfocus/config.yaml. The action does not write
+     * `scoring.plugin` from config.hujson. The action does not write
      * TYPESAFE_API_KEY; the workflow must pass that secret in the environment.
      * An existing scoring section is left unchanged.
      */
     writeScoringConfig(config: ActionConfiguration): Promise<void>;
+    /**
+     * Directory finfocus reads, in the same order as ResolveConfigDir:
+     * FINFOCUS_HOME, then $PULUMI_HOME/finfocus, then ~/.finfocus.
+     */
+    private configDir;
+    private readDocument;
+    private parseDocument;
+    private mergeBudget;
+    private writeDocument;
     private parseBudgetConfig;
     private validatePeriod;
     private parseAlerts;
-    /**
-     * Generate the finfocus config.yaml content.
-     *
-     * finfocus v0.4.0 reads budgets from `cost.budgets` using the scoped schema;
-     * a top-level `budget:` key is ignored. The action writes a single `global`
-     * budget so `cost projected` prints the BUDGET STATUS block and honors
-     * `--exit-on-threshold`.
-     */
-    private generateYaml;
 }

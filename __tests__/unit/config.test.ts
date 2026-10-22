@@ -1,41 +1,56 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 import { ConfigManager } from '../../src/config.js';
 import { ActionConfiguration } from '../../src/types.js';
 
-// Mock fs.promises to avoid destructuring errors
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  readFileSync: jest.fn(),
-  statSync: jest.fn(),
-  readdirSync: jest.fn(),
-  promises: {
-    access: jest.fn(),
-    readFile: jest.fn(),
-    writeFile: jest.fn(),
-    mkdir: jest.fn(),
-  },
-}));
-
 jest.mock('@actions/core');
-jest.mock('os');
+jest.mock('os', () => {
+  const actual = jest.requireActual<typeof import('os')>('os');
+  return {
+    ...actual,
+    homedir: jest.fn(() => actual.homedir()),
+  };
+});
 
 describe('ConfigManager', () => {
   let configManager: ConfigManager;
-  let mockHomedir: string;
+  let home: string;
+  let savedEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    savedEnv = { ...process.env };
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'finfocus-config-'));
+    process.env.FINFOCUS_HOME = home;
+    delete process.env.PULUMI_HOME;
     configManager = new ConfigManager();
-    mockHomedir = '/mock/home';
-    (os.homedir as jest.Mock).mockReturnValue(mockHomedir);
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
   });
+
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) {
+      if (!(key in savedEnv)) {
+        delete process.env[key];
+      }
+    }
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  function configPath(): string {
+    return path.join(home, 'config.hujson');
+  }
+
+  function readConfig(): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(configPath(), 'utf8')) as Record<string, unknown>;
+  }
 
   describe('writeConfig', () => {
     it('should skip configuration if budget amount is not provided', async () => {
@@ -48,8 +63,7 @@ describe('ConfigManager', () => {
       expect(core.warning).toHaveBeenCalledWith(
         'Budget amount is not configured or invalid. Skipping budget configuration.',
       );
-      expect(fs.mkdirSync).not.toHaveBeenCalled();
-      expect(fs.writeFileSync).not.toHaveBeenCalled();
+      expect(fs.existsSync(configPath())).toBe(false);
     });
 
     it('should skip configuration if budget amount is zero or negative', async () => {
@@ -62,56 +76,39 @@ describe('ConfigManager', () => {
       expect(core.warning).toHaveBeenCalledWith(
         'Budget amount is not configured or invalid. Skipping budget configuration.',
       );
-      expect(fs.writeFileSync).not.toHaveBeenCalled();
+      expect(fs.existsSync(configPath())).toBe(false);
     });
 
-    it('should create config directory if it does not exist', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(false);
-
+    it('should create the config directory and write cost.budgets.global', async () => {
       const config: ActionConfiguration = {
         budgetAmount: 1000,
-        budgetCurrency: 'USD',
-        budgetPeriod: 'monthly',
         debug: true,
       } as ActionConfiguration;
 
       await configManager.writeConfig(config);
 
-      const expectedDir = path.join(mockHomedir, '.finfocus');
-      expect(fs.mkdirSync).toHaveBeenCalledWith(expectedDir, { recursive: true });
+      expect(fs.existsSync(home)).toBe(true);
+      expect(fs.existsSync(path.join(home, 'config.yaml'))).toBe(false);
+      expect(readConfig()).toEqual({
+        cost: {
+          budgets: {
+            global: {
+              amount: 1000,
+              currency: 'USD',
+              period: 'monthly',
+              alerts: [
+                { threshold: 80, type: 'actual' },
+                { threshold: 100, type: 'forecasted' },
+              ],
+            },
+          },
+        },
+      });
+      expect(core.info).toHaveBeenCalledWith('=== ConfigManager: Writing budget configuration ===');
+      expect(core.info).toHaveBeenCalledWith('  Budget amount: 1000');
     });
 
-    it('should write config.yaml with default values', async () => {
-      const config: ActionConfiguration = {
-        budgetAmount: 1000,
-      } as ActionConfiguration;
-
-      await configManager.writeConfig(config);
-
-      const expectedPath = path.join(mockHomedir, '.finfocus', 'config.yaml');
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expectedPath,
-        expect.stringContaining('budgets:'),
-        'utf8',
-      );
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expectedPath,
-        expect.stringContaining('amount: 1000.00'),
-        'utf8',
-      );
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expectedPath,
-        expect.stringContaining('currency: USD'),
-        'utf8',
-      );
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expectedPath,
-        expect.stringContaining('period: monthly'),
-        'utf8',
-      );
-    });
-
-    it('should write config.yaml with custom values', async () => {
+    it('should write custom currency, period, and alerts', async () => {
       const config: ActionConfiguration = {
         budgetAmount: 5000,
         budgetCurrency: 'EUR',
@@ -121,33 +118,17 @@ describe('ConfigManager', () => {
 
       await configManager.writeConfig(config);
 
-      const expectedPath = path.join(mockHomedir, '.finfocus', 'config.yaml');
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-
-      expect(yamlContent).toContain('amount: 5000.00');
-      expect(yamlContent).toContain('currency: EUR');
-      expect(yamlContent).toContain('period: quarterly');
-      expect(yamlContent).toContain('threshold: 75');
-      expect(yamlContent).toContain('type: actual');
-    });
-
-    it('should use default alerts when none provided', async () => {
-      const config: ActionConfiguration = {
-        budgetAmount: 1000,
-        budgetCurrency: 'USD',
-        budgetPeriod: 'monthly',
-      } as ActionConfiguration;
-
-      await configManager.writeConfig(config);
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-
-      expect(yamlContent).toContain('threshold: 80');
-      expect(yamlContent).toContain('type: actual');
-      expect(yamlContent).toContain('threshold: 100');
-      expect(yamlContent).toContain('type: forecasted');
+      const global = (
+        readConfig() as {
+          cost: { budgets: { global: Record<string, unknown> } };
+        }
+      ).cost.budgets.global;
+      expect(global).toEqual({
+        amount: 5000,
+        currency: 'EUR',
+        period: 'quarterly',
+        alerts: [{ threshold: 75, type: 'actual' }],
+      });
     });
 
     it('should handle invalid period and default to monthly', async () => {
@@ -161,10 +142,9 @@ describe('ConfigManager', () => {
       expect(core.warning).toHaveBeenCalledWith(
         expect.stringContaining('Invalid budget period "invalid-period"'),
       );
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-      expect(yamlContent).toContain('period: monthly');
+      const global = (readConfig() as { cost: { budgets: { global: { period: string } } } }).cost
+        .budgets.global;
+      expect(global.period).toBe('monthly');
     });
 
     it('should handle invalid JSON alerts and use defaults', async () => {
@@ -178,21 +158,22 @@ describe('ConfigManager', () => {
       expect(core.warning).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse budget alerts JSON'),
       );
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-      expect(yamlContent).toContain('threshold: 80');
-      expect(yamlContent).toContain('threshold: 100');
+      const alerts = (
+        readConfig() as {
+          cost: { budgets: { global: { alerts: { threshold: number }[] } } };
+        }
+      ).cost.budgets.global.alerts;
+      expect(alerts.map((alert) => alert.threshold)).toEqual([80, 100]);
     });
 
     it('should filter out invalid alert entries', async () => {
       const config: ActionConfiguration = {
         budgetAmount: 1000,
         budgetAlerts: JSON.stringify([
-          { threshold: 75, type: 'actual' }, // valid
-          { threshold: -10, type: 'actual' }, // invalid threshold
-          { threshold: 90, type: 'invalid-type' }, // invalid type
-          { threshold: 100, type: 'forecasted' }, // valid
+          { threshold: 75, type: 'actual' },
+          { threshold: -10, type: 'actual' },
+          { threshold: 90, type: 'invalid-type' },
+          { threshold: 100, type: 'forecasted' },
         ]),
       } as ActionConfiguration;
 
@@ -204,15 +185,12 @@ describe('ConfigManager', () => {
       expect(core.warning).toHaveBeenCalledWith(
         expect.stringContaining('Invalid alert type: invalid-type'),
       );
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-
-      // Should only contain valid alerts
-      expect(yamlContent).toContain('threshold: 75');
-      expect(yamlContent).toContain('threshold: 100');
-      expect(yamlContent.match(/threshold: 75/g)?.length).toBe(1);
-      expect(yamlContent.match(/threshold: 100/g)?.length).toBe(1);
+      const alerts = (
+        readConfig() as {
+          cost: { budgets: { global: { alerts: { threshold: number }[] } } };
+        }
+      ).cost.budgets.global.alerts;
+      expect(alerts.map((alert) => alert.threshold)).toEqual([75, 100]);
     });
 
     it('should use default alerts if all entries are invalid', async () => {
@@ -227,11 +205,12 @@ describe('ConfigManager', () => {
       await configManager.writeConfig(config);
 
       expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('No valid alerts found'));
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-      expect(yamlContent).toContain('threshold: 80');
-      expect(yamlContent).toContain('threshold: 100');
+      const alerts = (
+        readConfig() as {
+          cost: { budgets: { global: { alerts: { threshold: number }[] } } };
+        }
+      ).cost.budgets.global.alerts;
+      expect(alerts.map((alert) => alert.threshold)).toEqual([80, 100]);
     });
 
     it('should handle non-array JSON for alerts', async () => {
@@ -245,113 +224,230 @@ describe('ConfigManager', () => {
       expect(core.warning).toHaveBeenCalledWith(
         'Budget alerts must be an array. Using default alerts.',
       );
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-      expect(yamlContent).toContain('threshold: 80');
-      expect(yamlContent).toContain('threshold: 100');
+      const alerts = (
+        readConfig() as {
+          cost: { budgets: { global: { alerts: { threshold: number }[] } } };
+        }
+      ).cost.budgets.global.alerts;
+      expect(alerts.map((alert) => alert.threshold)).toEqual([80, 100]);
     });
 
     it('should support yearly and quarterly periods', async () => {
-      const quarterlyConfig: ActionConfiguration = {
+      await configManager.writeConfig({
         budgetAmount: 3000,
         budgetPeriod: 'quarterly',
-      } as ActionConfiguration;
+      } as ActionConfiguration);
+      expect(
+        (readConfig() as { cost: { budgets: { global: { period: string } } } }).cost.budgets.global
+          .period,
+      ).toBe('quarterly');
 
-      await configManager.writeConfig(quarterlyConfig);
-
-      let writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      let yamlContent = writeCall[1] as string;
-      expect(yamlContent).toContain('period: quarterly');
-
-      jest.clearAllMocks();
-
-      const yearlyConfig: ActionConfiguration = {
+      await configManager.writeConfig({
         budgetAmount: 12000,
         budgetPeriod: 'yearly',
-      } as ActionConfiguration;
-
-      await configManager.writeConfig(yearlyConfig);
-
-      writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      yamlContent = writeCall[1] as string;
-      expect(yamlContent).toContain('period: yearly');
-    });
-
-    it('should generate valid YAML with the cost.budgets.global schema', async () => {
-      const config: ActionConfiguration = {
-        budgetAmount: 1500,
-        budgetCurrency: 'GBP',
-        budgetPeriod: 'monthly',
-        budgetAlerts: JSON.stringify([{ threshold: 85, type: 'actual' }]),
-      } as ActionConfiguration;
-
-      await configManager.writeConfig(config);
-
-      const writeCall = (fs.writeFileSync as jest.Mock).mock.calls[0];
-      const yamlContent = writeCall[1] as string;
-
-      // finfocus v0.4.0 reads budgets from cost.budgets (scoped schema), not a
-      // top-level budget: key.
-      expect(yamlContent).toContain('# finfocus budget configuration');
-      expect(yamlContent).not.toContain('\nbudget:');
-      expect(yamlContent).toContain('cost:');
-      expect(yamlContent).toContain('  budgets:');
-      expect(yamlContent).toContain('    global:');
-      expect(yamlContent).toContain('      amount: 1500.00');
-      expect(yamlContent).toContain('      currency: GBP');
-      expect(yamlContent).toContain('      period: monthly');
-      expect(yamlContent).toContain('      alerts:');
-      expect(yamlContent).toContain('        - threshold: 85');
-      expect(yamlContent).toContain('          type: actual');
-
-      // Should have proper indentation
+      } as ActionConfiguration);
       expect(
-        yamlContent.split('\n').filter((line) => line.startsWith('  ')).length,
-      ).toBeGreaterThan(0);
+        (readConfig() as { cost: { budgets: { global: { period: string } } } }).cost.budgets.global
+          .period,
+      ).toBe('yearly');
     });
 
-    it('should log debug info when debug is enabled', async () => {
-      const config: ActionConfiguration = {
-        budgetAmount: 1000,
+    it('merges the budget into an existing hujson file and keeps other keys', async () => {
+      fs.writeFileSync(
+        configPath(),
+        `{
+          // recorded by plugin install
+          "output": {"default_format": "json",},
+          "installed_plugins": [
+            {"name": "aws-public", "version": "v0.2.0", "url": "https://example.com/aws"},
+          ],
+          "cost": {
+            "budgets": {
+              "providers": {"aws": {"amount": 3, "currency": "USD", "period": "monthly"}}
+            }
+          }
+        }`,
+        'utf8',
+      );
+
+      await configManager.writeConfig({
+        budgetAmount: 5,
         budgetCurrency: 'USD',
         budgetPeriod: 'monthly',
-        debug: true,
-      } as ActionConfiguration;
+      } as ActionConfiguration);
 
-      await configManager.writeConfig(config);
+      expect(readConfig()).toEqual({
+        output: { default_format: 'json' },
+        installed_plugins: [
+          { name: 'aws-public', version: 'v0.2.0', url: 'https://example.com/aws' },
+        ],
+        cost: {
+          budgets: {
+            providers: { aws: { amount: 3, currency: 'USD', period: 'monthly' } },
+            global: {
+              amount: 5,
+              currency: 'USD',
+              period: 'monthly',
+              alerts: [
+                { threshold: 80, type: 'actual' },
+                { threshold: 100, type: 'forecasted' },
+              ],
+            },
+          },
+        },
+      });
+    });
 
-      expect(core.info).toHaveBeenCalledWith('=== ConfigManager: Writing budget configuration ===');
-      expect(core.info).toHaveBeenCalledWith('  Budget amount: 1000');
-      expect(core.info).toHaveBeenCalledWith('  Currency: USD');
-      expect(core.info).toHaveBeenCalledWith('  Period: monthly');
+    it('writes config.hujson without copying a legacy config.yaml', async () => {
+      const yaml = 'output:\n  default_format: table\ninstalled_plugins:\n  - name: aws-public\n';
+      fs.writeFileSync(path.join(home, 'config.yaml'), yaml, 'utf8');
+
+      await configManager.writeConfig({ budgetAmount: 5 } as ActionConfiguration);
+
+      expect(readConfig().installed_plugins).toBeUndefined();
+      expect(readConfig().cost).toEqual({
+        budgets: {
+          global: {
+            amount: 5,
+            currency: 'USD',
+            period: 'monthly',
+            alerts: [
+              { threshold: 80, type: 'actual' },
+              { threshold: 100, type: 'forecasted' },
+            ],
+          },
+        },
+      });
+      expect(fs.readFileSync(path.join(home, 'config.yaml'), 'utf8')).toBe(yaml);
+    });
+
+    it('does not let a stale config.yaml replace keys already in config.hujson', async () => {
+      fs.writeFileSync(
+        configPath(),
+        JSON.stringify({ installed_plugins: [{ name: 'aws-public' }], from: 'hujson' }),
+        'utf8',
+      );
+      fs.writeFileSync(
+        path.join(home, 'config.yaml'),
+        'from: yaml\ninstalled_plugins:\n  - name: dropped\n',
+        'utf8',
+      );
+
+      await configManager.writeConfig({ budgetAmount: 5 } as ActionConfiguration);
+
+      const written = readConfig();
+      expect(written.from).toBe('hujson');
+      expect(written.installed_plugins).toEqual([{ name: 'aws-public' }]);
+    });
+
+    it('leaves an unreadable config.hujson unchanged', async () => {
+      const original = '{ not json';
+      fs.writeFileSync(configPath(), original, 'utf8');
+
+      await expect(
+        configManager.writeConfig({ budgetAmount: 5 } as ActionConfiguration),
+      ).rejects.toThrow(/Failed to parse/);
+      expect(fs.readFileSync(configPath(), 'utf8')).toBe(original);
+    });
+
+    it('uses ~/.finfocus when FINFOCUS_HOME is unset', async () => {
+      const userHome = fs.mkdtempSync(path.join(os.tmpdir(), 'finfocus-user-'));
+      delete process.env.FINFOCUS_HOME;
+      // The os mock replaces homedir for src/config.ts. Point it at a temp
+      // directory before writing so the real ~/.finfocus is never touched.
+      (os.homedir as jest.Mock).mockReturnValue(userHome);
+
+      try {
+        await configManager.writeConfig({ budgetAmount: 9 } as ActionConfiguration);
+        const written = path.join(userHome, '.finfocus', 'config.hujson');
+        expect(fs.existsSync(written)).toBe(true);
+        expect(written.startsWith(userHome)).toBe(true);
+      } finally {
+        (os.homedir as jest.Mock).mockReturnValue(
+          jest.requireActual<typeof import('os')>('os').homedir(),
+        );
+        fs.rmSync(userHome, { recursive: true, force: true });
+      }
+    });
+
+    it('prefers FINFOCUS_HOME over PULUMI_HOME', async () => {
+      const pulumiHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pulumi-home-'));
+      process.env.PULUMI_HOME = pulumiHome;
+
+      await configManager.writeConfig({ budgetAmount: 9 } as ActionConfiguration);
+
+      expect(fs.existsSync(configPath())).toBe(true);
+      expect(fs.existsSync(path.join(pulumiHome, 'finfocus', 'config.hujson'))).toBe(false);
+      fs.rmSync(pulumiHome, { recursive: true, force: true });
+    });
+
+    it('uses $PULUMI_HOME/finfocus when FINFOCUS_HOME is unset', async () => {
+      const pulumiHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pulumi-home-'));
+      delete process.env.FINFOCUS_HOME;
+      process.env.PULUMI_HOME = pulumiHome;
+
+      await configManager.writeConfig({ budgetAmount: 9 } as ActionConfiguration);
+
+      expect(fs.existsSync(path.join(pulumiHome, 'finfocus', 'config.hujson'))).toBe(true);
+      fs.rmSync(pulumiHome, { recursive: true, force: true });
     });
   });
 
   describe('writeScoringConfig', () => {
-    it('appends a jev scoring block without removing an existing budget', async () => {
-      const existing = 'cost:\n  budgets:\n    global:\n      amount: 5.00\n';
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue(existing);
+    it('adds jev scoring without removing an existing budget or plugins', async () => {
+      await configManager.writeConfig({ budgetAmount: 5 } as ActionConfiguration);
+      fs.writeFileSync(
+        configPath(),
+        JSON.stringify({
+          ...readConfig(),
+          installed_plugins: [{ name: 'aws-public' }],
+        }),
+        'utf8',
+      );
 
       await configManager.writeScoringConfig({ enableJevScoring: true } as ActionConfiguration);
 
-      const written = (fs.writeFileSync as jest.Mock).mock.calls[0][1] as string;
-      expect(written).toContain('cost:');
-      expect(written).toContain('scoring:');
-      expect(written).toContain('  enabled: true');
-      expect(written).toContain('  plugin: jev');
-      expect(written).toContain('  identifier_mode: pseudonymized');
-      expect(written).not.toContain('TYPESAFE_API_KEY');
+      const written = readConfig();
+      expect(written.installed_plugins).toEqual([{ name: 'aws-public' }]);
+      expect(written.cost).toEqual({
+        budgets: {
+          global: {
+            amount: 5,
+            currency: 'USD',
+            period: 'monthly',
+            alerts: [
+              { threshold: 80, type: 'actual' },
+              { threshold: 100, type: 'forecasted' },
+            ],
+          },
+        },
+      });
+      expect(written.scoring).toEqual({
+        enabled: true,
+        plugin: 'jev',
+        identifier_mode: 'pseudonymized',
+      });
+      expect(JSON.stringify(written)).not.toContain('TYPESAFE_API_KEY');
     });
 
     it('leaves an existing scoring section unchanged', async () => {
-      (fs.existsSync as jest.Mock).mockReturnValue(true);
-      (fs.readFileSync as jest.Mock).mockReturnValue('scoring:\n  enabled: false\n');
+      const original = {
+        scoring: { enabled: false, plugin: 'other' },
+        installed_plugins: [{ name: 'jev' }],
+      };
+      fs.writeFileSync(configPath(), JSON.stringify(original), 'utf8');
 
       await configManager.writeScoringConfig({ enableJevScoring: true } as ActionConfiguration);
 
-      expect(fs.writeFileSync).not.toHaveBeenCalled();
+      expect(readConfig()).toEqual(original);
+      expect(core.info).toHaveBeenCalledWith(
+        'scoring section already present in config.hujson; leaving it unchanged',
+      );
+    });
+
+    it('does nothing when Jev scoring is disabled', async () => {
+      await configManager.writeScoringConfig({ enableJevScoring: false } as ActionConfiguration);
+      expect(fs.existsSync(configPath())).toBe(false);
     });
   });
 });

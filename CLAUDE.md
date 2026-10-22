@@ -40,7 +40,7 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 | `plugins.ts` | `PluginManager` | Installs finfocus plugins via CLI. Names are checked against `plugin list --available`; `kubernetes` and `jev` are registry names |
 | `plugin-specs.ts` | — | Parses registry and `github.com/owner/repo` plugin specifiers |
 | `v04.ts` | — | `cost cluster`, Jev scoring flags, dismiss/snooze, `overview --state-only`, Supports() decline notes |
-| `config.ts` | `ConfigManager` | Creates `~/.finfocus/config.yaml` with budget configuration |
+| `config.ts` | `ConfigManager` | Merges the budget and Jev scoring into `config.hujson` (`$FINFOCUS_HOME`, else `$PULUMI_HOME/finfocus`, else `~/.finfocus`) |
 | `analyze.ts` | `Analyzer` | Runs `finfocus cost projected` (with `--pulumi-json` or `--terraform-state`), `recommendations`, `actual`, `estimate`, `cost cluster`, and `overview --state-only`; calculates sustainability metrics and budget status |
 | `comment.ts` | `Commenter` | Upserts PR comments with marker `<!-- finfocus-action-comment -->` |
 | `display.ts` | — | Resource filters (`--filter`), comment grouping, min cost, display cap, change-only rows |
@@ -54,8 +54,8 @@ The action is a TypeScript ES module project using the GitHub Actions toolkit. I
 main.ts
   └─> Installer.install()           # Download/cache finfocus binary
   └─> PluginManager.installPlugins() # Optional plugin installation
-  └─> ConfigManager.writeConfig()   # Optional: create budget config.yaml
-  └─> ConfigManager.writeScoringConfig() # Optional: scoring.plugin jev
+  └─> ConfigManager.writeConfig()   # Optional: merge cost.budgets.global into config.hujson
+  └─> ConfigManager.writeScoringConfig() # Optional: scoring.plugin jev in config.hujson
   └─> [Analyzer Mode Branch]
   │     └─> Analyzer.setupAnalyzerMode()  # Creates policy pack, sets PULUMI_POLICY_PACK
   └─> [Standard Mode Branch]
@@ -126,8 +126,13 @@ main.ts
   in the finfocus report
 - The analyzer mode creates a Pulumi policy pack at `~/.finfocus/analyzer/` with a binary named `pulumi-analyzer-policy-finfocus`
 - Budget tracking is opt-in: ConfigManager only runs when `budget-amount` is provided
-- Budget configuration is written as `cost.budgets.global` in `~/.finfocus/config.yaml` (the
-  scoped schema finfocus v0.4.0 reads; a top-level `budget:` key is ignored)
+- Budget configuration is merged as `cost.budgets.global` into `config.hujson` (the file finfocus
+  v0.4 and v0.5 read). `$FINFOCUS_HOME` wins, then `$PULUMI_HOME/finfocus`, then `~/.finfocus`. A
+  top-level `budget:` key is ignored. `config.yaml` is ignored once `config.hujson` exists, which
+  `plugin install` creates, so writing only the yaml file never arms `--exit-on-threshold`. An
+  existing `config.hujson` is parsed as HuJSON (comments and trailing commas) and other keys,
+  including `installed_plugins`, are preserved. Jev scoring is the same file: `scoring.enabled`
+  and `scoring.plugin`.
 - finfocus v0.4.0 has no `budget status` command; budget health and scoped-budget features were
   removed. Budget enforcement works via `--exit-on-threshold --exit-code 10` (action-owned)
 - Budget status extraction returns undefined when using `--output json` (forward compatible for
@@ -140,11 +145,13 @@ main.ts
   exits 1 (`internal_error`) or 2 (`validation_error`) on failures, and the action surfaces the
   error envelope `message` for those. The action auto-detects version and falls back to JSON parsing
   for versions < 0.2.5.
-- **finfocus v0.4.3** is the latest GitHub release checked for issue #89 (published
-  2026-10-05). `scripts/contract.sh` passes against the official v0.4.0 and v0.4.3 release
-  binaries. Do not verify flags against the sibling finfocus checkout when that tree is a
-  dirty feature branch. v0.4.3 `cost projected` JSON adds `diff` and `errors` under
-  `.finfocus`; those keys are additive. `--state-only` exists on `finfocus overview` only.
+- **finfocus v0.5.1** is the latest stable GitHub release (published 2026-10-21). v0.5.0 was
+  published 2026-10-19. v0.4.3 was the release checked for issue #89. `scripts/contract.sh`
+  passes against the official v0.4.0, v0.4.3, and v0.5.1 binaries. The contract job's `latest`
+  matrix entry resolves to v0.5.1. Do not verify flags against the sibling finfocus checkout
+  when that tree is a dirty feature branch. v0.4.3 `cost projected` JSON adds `diff` and
+  `errors` under `.finfocus`. v0.5.1 adds `diff` and `profile` there. Those keys are additive.
+  `--state-only` exists on `finfocus overview` only.
   It is not a `cost projected` flag. `cost cluster --group-by` accepts `namespace`,
   `controller`, `pod`, `node`, `pulumi-stack`, and `label:<key>`.
 - Jev scoring is opt-in. When `enable-jev-scoring` is false, `cost recommendations` runs

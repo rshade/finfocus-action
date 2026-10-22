@@ -44082,15 +44082,104 @@ ${formatCommentBody(report, config, recommendationsReport, actualCostReport, sus
     }
 }
 
+;// CONCATENATED MODULE: ./src/hujson.ts
+/**
+ * Parse a finfocus config document.
+ *
+ * finfocus writes plain JSON and reads HuJSON: `//` and block comments, plus
+ * trailing commas. Strings are left intact, including comment-like text.
+ */
+function parseHujson(text) {
+    return JSON.parse(stripHuJson(text));
+}
+function stripHuJson(input) {
+    let out = '';
+    let i = 0;
+    const length = input.length;
+    while (i < length) {
+        const char = input[i];
+        const next = input[i + 1];
+        if (char === '"') {
+            out += char;
+            i += 1;
+            while (i < length) {
+                const stringChar = input[i];
+                out += stringChar;
+                if (stringChar === '\\' && i + 1 < length) {
+                    out += input[i + 1];
+                    i += 2;
+                    continue;
+                }
+                i += 1;
+                if (stringChar === '"') {
+                    break;
+                }
+            }
+            continue;
+        }
+        if (char === '/' && next === '/') {
+            i += 2;
+            while (i < length && input[i] !== '\n') {
+                i += 1;
+            }
+            continue;
+        }
+        if (char === '/' && next === '*') {
+            i += 2;
+            while (i < length && !(input[i] === '*' && input[i + 1] === '/')) {
+                i += 1;
+            }
+            i = Math.min(length, i + 2);
+            continue;
+        }
+        if (char === ',' && isTrailingComma(input, i + 1)) {
+            i += 1;
+            continue;
+        }
+        out += char;
+        i += 1;
+    }
+    return out;
+}
+function isTrailingComma(input, start) {
+    let index = start;
+    while (index < input.length) {
+        const char = input[index];
+        const next = input[index + 1];
+        if (char === ' ' || char === '\t' || char === '\n' || char === '\r') {
+            index += 1;
+            continue;
+        }
+        if (char === '/' && next === '/') {
+            index += 2;
+            while (index < input.length && input[index] !== '\n') {
+                index += 1;
+            }
+            continue;
+        }
+        if (char === '/' && next === '*') {
+            index += 2;
+            while (index < input.length && !(input[index] === '*' && input[index + 1] === '/')) {
+                index += 1;
+            }
+            index = Math.min(input.length, index + 2);
+            continue;
+        }
+        return char === '}' || char === ']';
+    }
+    return true;
+}
+
 ;// CONCATENATED MODULE: ./src/config.ts
 
 
 
 
+
+const CONFIG_FILE = 'config.hujson';
 class ConfigManager {
     async writeConfig(config) {
         const debug = config?.debug === true;
-        // Validate budget amount
         if (!config.budgetAmount || config.budgetAmount <= 0) {
             main_core/* warning */.$e('Budget amount is not configured or invalid. Skipping budget configuration.');
             return;
@@ -44101,27 +44190,9 @@ class ConfigManager {
             main_core/* info */.pq(`  Currency: ${config.budgetCurrency || 'USD'}`);
             main_core/* info */.pq(`  Period: ${config.budgetPeriod || 'monthly'}`);
         }
-        // Parse and validate inputs
         const budgetConfig = this.parseBudgetConfig(config);
-        // Define config directory
-        const configDir = external_path_.join(external_os_.homedir(), '.finfocus');
-        if (debug)
-            main_core/* info */.pq(`  Config directory: ${configDir}`);
-        // Create directory if it doesn't exist
-        if (!external_fs_.existsSync(configDir)) {
-            if (debug)
-                main_core/* info */.pq('  Creating config directory...');
-            external_fs_.mkdirSync(configDir, { recursive: true });
-        }
-        // Generate YAML content
-        const yamlContent = this.generateYaml(budgetConfig);
-        // Write config file
-        const configPath = external_path_.join(configDir, 'config.yaml');
-        if (debug) {
-            main_core/* info */.pq(`  Writing config to: ${configPath}`);
-            main_core/* info */.pq(`  Config content:\n${yamlContent}`);
-        }
-        external_fs_.writeFileSync(configPath, yamlContent, 'utf8');
+        const document = this.mergeBudget(this.readDocument(), budgetConfig);
+        this.writeDocument(document);
         if (debug)
             main_core/* info */.pq('  Budget configuration written successfully');
         else
@@ -44129,7 +44200,7 @@ class ConfigManager {
     }
     /**
      * Opt in to Jev recommendation scoring. finfocus reads `scoring.enabled` and
-     * `scoring.plugin` from ~/.finfocus/config.yaml. The action does not write
+     * `scoring.plugin` from config.hujson. The action does not write
      * TYPESAFE_API_KEY; the workflow must pass that secret in the environment.
      * An existing scoring section is left unchanged.
      */
@@ -44137,33 +44208,101 @@ class ConfigManager {
         if (!config.enableJevScoring) {
             return;
         }
-        const configDir = external_path_.join(external_os_.homedir(), '.finfocus');
-        const configPath = external_path_.join(configDir, 'config.yaml');
-        const block = [
-            '# finfocus recommendation scoring',
-            '# Generated by finfocus-action',
-            'scoring:',
-            '  enabled: true',
-            '  plugin: jev',
-            '  identifier_mode: pseudonymized',
-            '',
-        ].join('\n');
-        if (!external_fs_.existsSync(configDir)) {
-            external_fs_.mkdirSync(configDir, { recursive: true });
-        }
-        if (!external_fs_.existsSync(configPath)) {
-            external_fs_.writeFileSync(configPath, block, 'utf8');
-            main_core/* info */.pq('Jev scoring configuration created (scoring.plugin: jev)');
+        const document = this.readDocument();
+        if ('scoring' in document) {
+            main_core/* info */.pq(`scoring section already present in ${CONFIG_FILE}; leaving it unchanged`);
             return;
         }
-        const existing = external_fs_.readFileSync(configPath, 'utf8');
-        if (/^scoring:/m.test(existing)) {
-            main_core/* info */.pq('scoring section already present in config.yaml; leaving it unchanged');
-            return;
+        document.scoring = {
+            enabled: true,
+            plugin: 'jev',
+            identifier_mode: 'pseudonymized',
+        };
+        this.writeDocument(document);
+        main_core/* info */.pq('Jev scoring configuration written (scoring.plugin: jev)');
+    }
+    /**
+     * Directory finfocus reads, in the same order as ResolveConfigDir:
+     * FINFOCUS_HOME, then $PULUMI_HOME/finfocus, then ~/.finfocus.
+     */
+    configDir() {
+        const explicit = process.env.FINFOCUS_HOME?.trim();
+        if (explicit) {
+            return explicit;
         }
-        const separator = existing.endsWith('\n') ? '\n' : '\n\n';
-        external_fs_.writeFileSync(configPath, `${existing}${separator}${block}`, 'utf8');
-        main_core/* info */.pq('Jev scoring configuration appended (scoring.plugin: jev)');
+        const pulumiHome = process.env.PULUMI_HOME?.trim();
+        if (pulumiHome) {
+            return external_path_.join(pulumiHome, 'finfocus');
+        }
+        try {
+            const home = external_os_.homedir();
+            if (home) {
+                return external_path_.join(home, '.finfocus');
+            }
+        }
+        catch (error) {
+            main_core/* debug */.Yz(`os.homedir() failed: ${error instanceof Error ? error.message : String(error)}. Using ./.finfocus.`);
+        }
+        return external_path_.join(process.cwd(), '.finfocus');
+    }
+    readDocument() {
+        const directory = this.configDir();
+        const hujsonPath = external_path_.join(directory, CONFIG_FILE);
+        if (!external_fs_.existsSync(hujsonPath)) {
+            return {};
+        }
+        return this.parseDocument(external_fs_.readFileSync(hujsonPath, 'utf8'), hujsonPath);
+    }
+    parseDocument(text, filePath) {
+        if (text.trim() === '') {
+            return {};
+        }
+        try {
+            const parsed = parseHujson(text);
+            if (!isJsonObject(parsed)) {
+                throw new Error('document is not a JSON object');
+            }
+            return parsed;
+        }
+        catch (error) {
+            throw new Error(`Failed to parse ${filePath}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+        }
+    }
+    mergeBudget(document, budget) {
+        const cost = objectField(document, 'cost');
+        const budgets = objectField(cost, 'budgets');
+        budgets.global = {
+            amount: budget.amount,
+            currency: budget.currency,
+            period: budget.period,
+            alerts: (budget.alerts ?? []).map((alert) => ({
+                threshold: alert.threshold,
+                type: alert.type,
+            })),
+        };
+        cost.budgets = budgets;
+        document.cost = cost;
+        return document;
+    }
+    writeDocument(document) {
+        const directory = this.configDir();
+        external_fs_.mkdirSync(directory, { recursive: true });
+        const target = external_path_.join(directory, CONFIG_FILE);
+        const temporary = external_path_.join(directory, `.${CONFIG_FILE}.${process.pid}.tmp`);
+        const body = `${JSON.stringify(document, null, 2)}\n`;
+        try {
+            external_fs_.writeFileSync(temporary, body, { encoding: 'utf8', mode: 0o600 });
+            external_fs_.renameSync(temporary, target);
+        }
+        catch (error) {
+            try {
+                external_fs_.unlinkSync(temporary);
+            }
+            catch (unlinkError) {
+                main_core/* debug */.Yz(`Failed to remove temporary config file: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
+            }
+            throw new Error(`Failed to write ${target}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+        }
     }
     parseBudgetConfig(config) {
         const amount = config.budgetAmount || 0;
@@ -44186,7 +44325,6 @@ class ConfigManager {
         return period;
     }
     parseAlerts(alertsInput) {
-        // Default alerts if none provided
         const defaultAlerts = [
             { threshold: 80, type: 'actual' },
             { threshold: 100, type: 'forecasted' },
@@ -44196,7 +44334,6 @@ class ConfigManager {
         }
         try {
             const parsed = JSON.parse(alertsInput);
-            // Validate parsed alerts
             if (!Array.isArray(parsed)) {
                 main_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
                 return defaultAlerts;
@@ -44223,35 +44360,19 @@ class ConfigManager {
             return defaultAlerts;
         }
     }
-    /**
-     * Generate the finfocus config.yaml content.
-     *
-     * finfocus v0.4.0 reads budgets from `cost.budgets` using the scoped schema;
-     * a top-level `budget:` key is ignored. The action writes a single `global`
-     * budget so `cost projected` prints the BUDGET STATUS block and honors
-     * `--exit-on-threshold`.
-     */
-    generateYaml(config) {
-        const lines = [];
-        lines.push('# finfocus budget configuration');
-        lines.push('# Generated by finfocus-action');
-        lines.push('');
-        lines.push('cost:');
-        lines.push('  budgets:');
-        lines.push('    global:');
-        lines.push(`      amount: ${config.amount.toFixed(2)}`);
-        lines.push(`      currency: ${config.currency}`);
-        lines.push(`      period: ${config.period}`);
-        if (config.alerts && config.alerts.length > 0) {
-            lines.push('      alerts:');
-            for (const alert of config.alerts) {
-                lines.push(`        - threshold: ${alert.threshold}`);
-                lines.push(`          type: ${alert.type}`);
-            }
-        }
-        lines.push('');
-        return lines.join('\n');
+}
+function isJsonObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+function objectField(parent, key) {
+    const value = parent[key];
+    if (isJsonObject(value)) {
+        return { ...value };
     }
+    if (value !== undefined) {
+        main_core/* warning */.$e(`${key} in the finfocus config is not an object. Replacing it so the budget can be saved.`);
+    }
+    return {};
 }
 
 ;// CONCATENATED MODULE: ./src/main.ts
