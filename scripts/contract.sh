@@ -94,6 +94,8 @@ run_action() {
       INPUT_INCLUDE_RECOMMENDATIONS="true" \
       INPUT_INCLUDE_SUSTAINABILITY="true" \
       INPUT_INCLUDE_ACTUAL_COSTS="false" \
+      INPUT_BUDGET_AMOUNT="100" \
+      INPUT_BUDGET_CURRENCY="USD" \
       "$node_bin" "$ROOT/dist/index.js"
   ); then
     fail "action: dist/index.js failed for finfocus $version"
@@ -120,6 +122,16 @@ run_action() {
     pass "action: wrote a PR comment body with a monthly cost"
   else
     fail "action: comment body missing marker or monthly cost"
+  fi
+  if grep -q 'Budget Status' "$tmp/comment.md" && grep -q '100.00' "$tmp/comment.md"; then
+    pass "action: budget section is populated from budget-amount"
+  else
+    fail "action: budget section missing from the comment"
+  fi
+  if grep -R -n -E "budget status --|finfocus budget" "$ROOT/src" --include='*.ts' >/dev/null; then
+    fail "action: src still invokes finfocus budget status"
+  else
+    pass "action: src does not call finfocus budget status"
   fi
 }
 

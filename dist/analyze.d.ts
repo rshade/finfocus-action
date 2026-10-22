@@ -24,6 +24,5 @@ export declare class Analyzer implements IAnalyzer {
     setupAnalyzerMode(config?: ActionConfiguration): Promise<void>;
     calculateBudgetStatus(config: ActionConfiguration, report: FinfocusReport): BudgetStatus | undefined;
     private parseAlerts;
-    extractBudgetStatus(stdout: string): BudgetStatus | undefined;
     private findBinary;
 }
