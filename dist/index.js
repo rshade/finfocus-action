@@ -35129,6 +35129,8 @@ var __webpack_exports__ = {};
 var lib_core = __nccwpck_require__(2398);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
+// EXTERNAL MODULE: external "os"
+var external_os_ = __nccwpck_require__(857);
 // EXTERNAL MODULE: ./src/types.ts
 var types = __nccwpck_require__(6141);
 // EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js + 2 modules
@@ -35444,8 +35446,6 @@ function optionalNote(item, index, inputName) {
     return item.note;
 }
 
-// EXTERNAL MODULE: external "os"
-var external_os_ = __nccwpck_require__(857);
 // EXTERNAL MODULE: external "path"
 var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: ./node_modules/@actions/io/lib/io.js
@@ -38240,6 +38240,18 @@ class Analyzer {
         }
         return output.stdout.trim();
     }
+}
+
+;// CONCATENATED MODULE: ./src/report-output.ts
+
+
+/** Write the projected report as pretty JSON. Returns the file path. */
+function writeReportJson(report, directory, name) {
+    const safe = name.replace(/[^a-zA-Z0-9._-]/g, '').replace(/^\.+/, '') || 'cost-report';
+    external_fs_.mkdirSync(directory, { recursive: true });
+    const file = external_path_.join(directory, `${safe}.json`);
+    external_fs_.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+    return file;
 }
 
 ;// CONCATENATED MODULE: ./src/formatter.ts
@@ -44320,6 +44332,8 @@ function objectField(parent, key) {
 
 
 
+
+
 function parseBoolean(value, defaultValue) {
     if (!value || value.trim() === '')
         return defaultValue;
@@ -44463,6 +44477,8 @@ async function run() {
         const maxResourcesDisplayed = (0,display/* parseMaxResourcesDisplayed */.qr)(lib_core/* getInput */.V4('max_resources_displayed'));
         const showOnlyChanges = parseBoolean(lib_core/* getInput */.V4('show_only_changes'), false);
         const sortBy = (0,display/* parseSortBy */.Lh)(lib_core/* getInput */.V4('sort_by'));
+        const generateArtifact = parseBoolean(lib_core/* getInput */.V4('generate_artifact'), false);
+        const artifactName = lib_core/* getInput */.V4('artifact_name') || 'cost-report';
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -44507,6 +44523,8 @@ async function run() {
             maxResourcesDisplayed,
             showOnlyChanges,
             sortBy,
+            generateArtifact,
+            artifactName,
         };
         if (config.debug) {
             lib_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -44670,6 +44688,12 @@ async function run() {
         lib_core/* endGroup */.N4();
         lib_core/* setOutput */.uH('total-monthly-cost', totalMonthlyCost.toString());
         lib_core/* setOutput */.uH('currency', currency);
+        if (config.generateArtifact) {
+            const directory = process.env.RUNNER_TEMP || external_os_.tmpdir();
+            const reportPath = writeReportJson(report, directory, config.artifactName || 'cost-report');
+            lib_core/* setOutput */.uH('report-json-path', reportPath);
+            lib_core/* info */.pq(`Wrote cost report JSON to ${reportPath}`);
+        }
         lib_core/* info */.pq(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
         // Set unpriced resource count (v0.4.1)
         const unpricedCount = report.errors?.length ?? 0;

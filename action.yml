@@ -174,6 +174,18 @@ inputs:
     description: 'Sort resource rows by cost, name, type, or change. Default cost.'
     required: false
     default: 'cost'
+  generate-artifact:
+    description: 'Write the full projected report as JSON and upload it as a workflow artifact.'
+    required: false
+    default: 'false'
+  artifact-name:
+    description: 'Artifact name for the JSON report.'
+    required: false
+    default: 'cost-report'
+  artifact-retention-days:
+    description: 'Days to keep the cost report artifact.'
+    required: false
+    default: '30'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -278,6 +290,16 @@ runs:
         INPUT_MAX_RESOURCES_DISPLAYED: ${{ inputs.max-resources-displayed }}
         INPUT_SHOW_ONLY_CHANGES: ${{ inputs.show-only-changes }}
         INPUT_SORT_BY: ${{ inputs.sort-by }}
+        INPUT_GENERATE_ARTIFACT: ${{ inputs.generate-artifact }}
+        INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+    - name: 'Upload cost report'
+      if: inputs.generate-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.run.outputs.report-json-path }}
+        retention-days: ${{ inputs.artifact-retention-days }}
+        if-no-files-found: error
 branding:
   icon: 'dollar-sign'
   color: 'blue'

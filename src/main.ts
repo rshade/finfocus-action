@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
+import * as os from 'os';
 import {
   ActionConfiguration,
   RecommendationsReport,
@@ -14,6 +15,7 @@ import { reportFromStateOnly } from './v04.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
+import { writeReportJson } from './report-output.js';
 import { calculateAchievableSavings } from './formatter.js';
 import { Commenter } from './comment.js';
 import { ConfigManager } from './config.js';
@@ -184,6 +186,8 @@ async function run(): Promise<void> {
     );
     const showOnlyChanges = parseBoolean(core.getInput('show_only_changes'), false);
     const sortBy = parseSortBy(core.getInput('sort_by'));
+    const generateArtifact = parseBoolean(core.getInput('generate_artifact'), false);
+    const artifactName = core.getInput('artifact_name') || 'cost-report';
 
     config = {
       pulumiPlanJsonPath,
@@ -229,6 +233,8 @@ async function run(): Promise<void> {
       maxResourcesDisplayed,
       showOnlyChanges,
       sortBy,
+      generateArtifact,
+      artifactName,
     };
 
     if (config.debug) {
@@ -418,6 +424,12 @@ async function run(): Promise<void> {
 
     core.setOutput('total-monthly-cost', totalMonthlyCost.toString());
     core.setOutput('currency', currency);
+    if (config.generateArtifact) {
+      const directory = process.env.RUNNER_TEMP || os.tmpdir();
+      const reportPath = writeReportJson(report, directory, config.artifactName || 'cost-report');
+      core.setOutput('report-json-path', reportPath);
+      core.info(`Wrote cost report JSON to ${reportPath}`);
+    }
     core.info(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
 
     // Set unpriced resource count (v0.4.1)
