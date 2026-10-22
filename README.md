@@ -28,7 +28,7 @@ posts a comment to the PR.
   env:
     PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
 
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     pulumi-plan-json: plan.json
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -59,7 +59,7 @@ Track your cloud spending against monthly, quarterly, or yearly budgets with aut
 thresholds are exceeded.
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     pulumi-plan-json: plan.json
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -148,7 +148,7 @@ Pulumi plan. The action passes it to `finfocus cost projected
 --terraform-state`, which is mutually exclusive with `--pulumi-json`:
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     terraform-state: terraform.tfstate
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -160,12 +160,13 @@ action warns and uses the Terraform state.
 ### What-If Cost Estimates
 
 Estimate the cost of a single resource with specific properties — without changing any Pulumi
-code — by setting the `estimate-spec` input. The action runs `finfocus cost estimate` in its
-single-resource mode and adds a "What-If Cost Estimate" section to the PR comment showing the
-baseline vs modified monthly cost and the per-property deltas.
+code — by setting the `estimate-spec` input. The action runs `finfocus cost estimate` in
+single-resource mode. That prices the resource on its own. It does not compare the price with a
+resource in the plan, so the comment shows one estimated monthly and hourly cost. For "what would
+migrating this resource save", use the recommendations section.
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     pulumi-plan-json: plan.json
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -191,7 +192,7 @@ PR comment. The runner needs a kubeconfig and the `kubernetes` plugin. Group wit
 or `label:<key>`.
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     pulumi-plan-json: plan.json
     install-plugins: aws-public,kubernetes
@@ -227,7 +228,7 @@ review. They do not dismiss a recommendation. An existing `scoring:` section in
 the config file is left as it is.
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   env:
     TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
   with:
@@ -245,7 +246,7 @@ repeat them.
 To record a dismissal or snooze on the runner before the comment is built:
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     pulumi-plan-json: plan.json
     dismiss-recommendations: >
@@ -269,7 +270,7 @@ also the comment total. Recommendations are skipped in that case because
 `cost recommendations` requires `--pulumi-json`.
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     state-only: true
     pulumi-state-json: state.json
@@ -313,7 +314,7 @@ computed before that cap. `sort-by` is `cost`, `name`, `type`, or `change`.
 replace, or import, and prints the plan diff as the net change.
 
 ```yaml
-- uses: rshade/finfocus-action@v1
+- uses: rshade/finfocus-action@v2
   with:
     pulumi-plan-json: plan.json
     install-plugins: aws-public

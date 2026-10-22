@@ -34,9 +34,8 @@ export declare function calculateEquivalents(totalCO2e: number): EquivalencyMetr
 /**
  * Render the What-If Cost Estimate section as Markdown for the PR comment.
  *
- * Shows the estimated resource (type, provider, region), a Baseline vs Modified
- * monthly cost table, the total change, and the per-property deltas from
- * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
+ * Single-resource estimates show one estimated cost table. A report with a
+ * non-zero baseline keeps the before/after layout for a future `--modify` mode.
  *
  * @param report - Estimate report from `Analyzer.runEstimate`
  * @returns Markdown string for the estimate section

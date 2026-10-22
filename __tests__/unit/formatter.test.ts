@@ -832,17 +832,41 @@ describe('formatEstimateSection', () => {
     expect(result).toContain('aws:ec2/instance:Instance');
     expect(result).toContain('**Provider:** `aws`');
     expect(result).toContain('**Region:** `us-east-1`');
-    expect(result).toContain('| Metric | Baseline | Modified |');
-    expect(result).toContain('$0.00');
+    expect(result).toContain('| Metric | Estimated |');
+    expect(result).not.toContain('Baseline');
+    expect(result).not.toContain('$0.00');
     expect(result).toContain('$70.08');
-    expect(result).toContain('**Total Change:** +$70.08 USD/month');
+    expect(result).not.toContain('Total Change');
   });
 
-  it('should render the deltas table with property changes', () => {
+  it('should render the deltas table without an original column', () => {
     const result = formatEstimateSection(estimateReport);
 
-    expect(result).toContain('| Property | Original | New | Cost Change |');
-    expect(result).toContain('| instanceType | — | m5.large | +$70.08 |');
+    expect(result).toContain('| Property | Value | Monthly Cost |');
+    expect(result).toContain('| instanceType | m5.large | +$70.08 |');
+    expect(result).not.toContain('Original');
+  });
+
+  it('keeps the baseline layout when the estimate has an original resource', () => {
+    const compared: EstimateReport = {
+      ...estimateReport,
+      baseline: { ...estimateReport.baseline, monthly: 60, hourly: 0.0822 },
+      totalChange: 10.08,
+      deltas: [
+        {
+          property: 'instanceType',
+          originalValue: 'm5.large',
+          newValue: 'm5.xlarge',
+          costChange: 10.08,
+        },
+      ],
+    };
+
+    const result = formatEstimateSection(compared);
+
+    expect(result).toContain('| Metric | Baseline | Modified |');
+    expect(result).toContain('**Total Change:** +$10.08 USD/month');
+    expect(result).toContain('| instanceType | m5.large | m5.xlarge | +$10.08 |');
   });
 
   it('should omit the deltas table when there are no deltas', () => {
@@ -850,8 +874,9 @@ describe('formatEstimateSection', () => {
 
     const result = formatEstimateSection(noDeltas);
 
-    expect(result).not.toContain('| Property | Original | New | Cost Change |');
-    expect(result).toContain('**Total Change:** $0.00 USD/month');
+    expect(result).not.toContain('| Property |');
+    expect(result).not.toContain('Total Change');
+    expect(result).toContain('| Metric | Estimated |');
   });
 });
 
