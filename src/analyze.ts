@@ -27,6 +27,29 @@ import {
 } from './v04.js';
 import { filterArgs } from './display.js';
 
+const CARBON_UNIT_TO_KG: Record<string, number> = {
+  g: 0.001,
+  gco2e: 0.001,
+  kg: 1,
+  kgco2e: 1,
+  t: 1000,
+  tco2e: 1000,
+  lb: 0.453592,
+  lbco2e: 0.453592,
+};
+
+/**
+ * Converts a carbon value to kilograms, mirroring finfocus core's NormalizeToKg.
+ * Returns undefined for unrecognized units and for negative or non-finite values.
+ */
+export function normalizeCarbonToKg(value: number, unit: string | undefined): number | undefined {
+  if (!Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  const factor = CARBON_UNIT_TO_KG[(unit ?? '').toLowerCase()];
+  return factor === undefined ? undefined : value * factor;
+}
+
 export class Analyzer implements IAnalyzer {
   async runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport> {
     const debug = config?.debug === true;
@@ -212,19 +235,20 @@ export class Analyzer implements IAnalyzer {
   } {
     let totalCO2e = 0;
 
-    // Sum up carbon footprint from all resources
-    if (report.resources) {
-      for (const resource of report.resources) {
-        if (resource.sustainability?.carbon_footprint?.value) {
-          totalCO2e += resource.sustainability.carbon_footprint.value;
-        }
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    for (const resource of resources) {
+      const footprint = resource.sustainability?.carbon_footprint;
+      if (!footprint?.value) {
+        continue;
       }
-    } else if (report.summary?.resources) {
-      for (const resource of report.summary.resources) {
-        if (resource.sustainability?.carbon_footprint?.value) {
-          totalCO2e += resource.sustainability.carbon_footprint.value;
-        }
+      const kg = normalizeCarbonToKg(footprint.value, footprint.unit);
+      if (kg === undefined) {
+        core.warning(
+          `Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: unrecognized unit "${footprint.unit}" (value ${footprint.value})`,
+        );
+        continue;
       }
+      totalCO2e += kg;
     }
 
     // Since finfocus currently might not provide total diff for sustainability,
@@ -235,7 +259,7 @@ export class Analyzer implements IAnalyzer {
     const totalCO2eDiff = 0;
 
     const totalCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
-    const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0; // gCO2e/USD
+    const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0;
 
     return {
       totalCO2e,

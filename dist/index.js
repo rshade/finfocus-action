@@ -37549,6 +37549,27 @@ var display = __nccwpck_require__(4857);
 
 
 
+const CARBON_UNIT_TO_KG = {
+    g: 0.001,
+    gco2e: 0.001,
+    kg: 1,
+    kgco2e: 1,
+    t: 1000,
+    tco2e: 1000,
+    lb: 0.453592,
+    lbco2e: 0.453592,
+};
+/**
+ * Converts a carbon value to kilograms, mirroring finfocus core's NormalizeToKg.
+ * Returns undefined for unrecognized units and for negative or non-finite values.
+ */
+function normalizeCarbonToKg(value, unit) {
+    if (!Number.isFinite(value) || value < 0) {
+        return undefined;
+    }
+    const factor = CARBON_UNIT_TO_KG[(unit ?? '').toLowerCase()];
+    return factor === undefined ? undefined : value * factor;
+}
 class Analyzer {
     async runAnalysis(planPath, config) {
         const debug = config?.debug === true;
@@ -37701,20 +37722,18 @@ class Analyzer {
     }
     calculateSustainabilityMetrics(report) {
         let totalCO2e = 0;
-        // Sum up carbon footprint from all resources
-        if (report.resources) {
-            for (const resource of report.resources) {
-                if (resource.sustainability?.carbon_footprint?.value) {
-                    totalCO2e += resource.sustainability.carbon_footprint.value;
-                }
+        const resources = report.resources ?? report.summary?.resources ?? [];
+        for (const resource of resources) {
+            const footprint = resource.sustainability?.carbon_footprint;
+            if (!footprint?.value) {
+                continue;
             }
-        }
-        else if (report.summary?.resources) {
-            for (const resource of report.summary.resources) {
-                if (resource.sustainability?.carbon_footprint?.value) {
-                    totalCO2e += resource.sustainability.carbon_footprint.value;
-                }
+            const kg = normalizeCarbonToKg(footprint.value, footprint.unit);
+            if (kg === undefined) {
+                main_core/* warning */.$e(`Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: unrecognized unit "${footprint.unit}" (value ${footprint.value})`);
+                continue;
             }
+            totalCO2e += kg;
         }
         // Since finfocus currently might not provide total diff for sustainability,
         // we default to 0 for now unless we can calculate it from base state.
@@ -37723,7 +37742,7 @@ class Analyzer {
         // We will just return the absolute total for now.
         const totalCO2eDiff = 0;
         const totalCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
-        const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0; // gCO2e/USD
+        const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0;
         return {
             totalCO2e,
             totalCO2eDiff,
@@ -38321,6 +38340,706 @@ class Analyzer {
         }
         return output.stdout.trim();
     }
+}
+
+;// CONCATENATED MODULE: ./src/formatter.ts
+
+
+
+/**
+ * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
+ *
+ * finfocus CLI returns multiple options per resource_id + action_type to give users choices
+ * (e.g., resize to medium vs resize to small). Since users can only pick ONE option per
+ * resource/action, summing all options inflates the total. This function groups by
+ * resource_id + action_type and takes the max savings per group for an accurate total.
+ *
+ * This is a heuristic: the finfocus CLI JSON does not expose the spec's modification_type, so
+ * two independent recommendations of the same action type on one resource cannot be told apart
+ * from alternatives and are undercounted (only the larger one is counted).
+ *
+ * @param recommendations - Array of recommendations from finfocus, or undefined
+ * @returns Total achievable savings (max per resource+action_type group)
+ */
+function calculateAchievableSavings(recommendations) {
+    if (!recommendations || recommendations.length === 0) {
+        return 0;
+    }
+    const groups = new Map();
+    for (const rec of recommendations) {
+        const key = `${rec.resource_id}::${rec.action_type}`;
+        const current = groups.get(key) ?? 0;
+        groups.set(key, Math.max(current, rec.estimated_savings));
+    }
+    return Array.from(groups.values()).reduce((sum, val) => sum + val, 0);
+}
+/**
+ * Get currency symbol for display formatting.
+ * @param currency - Currency code (e.g., 'USD', 'EUR')
+ * @returns Currency symbol (e.g., '$', '€') or the code itself if unknown
+ */
+function getCurrencySymbol(currency = 'USD') {
+    const symbols = {
+        USD: '$',
+        EUR: '€',
+        GBP: '£',
+        JPY: '¥',
+        CNY: '¥',
+    };
+    return symbols[currency.toUpperCase()] || currency;
+}
+/**
+ * Converts a total CO2e amount into illustrative environmental equivalents.
+ *
+ * @param totalCO2e - Total greenhouse gas emissions in kilograms of CO2e
+ * @returns An object with:
+ *  - `trees`: estimated number of trees required to sequester the given CO2e (approximate, based on ~22 kg CO2/year per tree),
+ *  - `milesDriven`: estimated miles driven equivalent (approximate, based on ~0.4 kg CO2 per mile),
+ *  - `homeElectricityDays`: estimated number of average home electricity days equivalent (approximate, using ~30 kWh/day and ~0.42 kg CO2/kWh)
+ */
+function calculateEquivalents(totalCO2e) {
+    // Source: EPA Greenhouse Gas Equivalencies Calculator
+    // Note: These are approximations for illustrative purposes.
+    // Trees: 1 tree absorbs ~22 kg CO₂/year (Illustrative; varies by species/age/location)
+    const trees = (totalCO2e * 12) / 22;
+    // Miles driven: ~0.4 kg CO₂/mile (Approx. based on average passenger vehicle)
+    const milesDriven = totalCO2e / 0.4;
+    // Home electricity: ~0.42 kg CO₂/kWh (Approx; EPA US avg is 0.394 kg/kWh), avg home uses ~30 kWh/day
+    const homeElectricityDays = totalCO2e / (30 * 0.42);
+    return {
+        trees,
+        milesDriven,
+        homeElectricityDays,
+    };
+}
+/**
+ * Generate a simple text-based progress bar using Unicode blocks
+ * @param percent - Percentage value (0-100+, can exceed 100%)
+ * @param width - Width of the progress bar in characters (default: 10)
+ * @returns Progress bar string with filled (▓) and empty (░) blocks
+ */
+function generateProgressBar(percent, width = 10) {
+    const capped = Math.min(100, percent);
+    const filled = Math.floor((capped / 100) * width);
+    const empty = width - filled;
+    return '▓'.repeat(filled) + '░'.repeat(empty);
+}
+/**
+ * Get status icon for the dashboard based on budget percentage
+ * @param percentUsed - Budget usage percentage
+ * @returns Status icon emoji
+ */
+function getDashboardStatusIcon(percentUsed) {
+    if (percentUsed === undefined)
+        return '—';
+    if (percentUsed >= 100)
+        return '⛔';
+    if (percentUsed >= 80)
+        return '🔴';
+    if (percentUsed >= 50)
+        return '🟡';
+    return '🟢';
+}
+/**
+ * Formats the dashboard summary row - a 3-column at-a-glance status table
+ * Shows: Monthly Cost | Budget Status | Potential Savings
+ *
+ * @param totalMonthly - Projected monthly cost
+ * @param currency - Currency code
+ * @param percentUsed - Budget usage percentage (optional)
+ * @param totalSavings - Total potential savings from recommendations (optional)
+ * @returns Markdown table string
+ */
+function formatDashboardSummary(totalMonthly, currency, percentUsed, totalSavings) {
+    const currencySymbol = getCurrencySymbol(currency);
+    // Monthly cost column
+    const costDisplay = `**${currencySymbol}${totalMonthly.toFixed(2)}** ${currency}`;
+    // Budget status column
+    let budgetDisplay = '—';
+    if (percentUsed !== undefined) {
+        const icon = getDashboardStatusIcon(percentUsed);
+        budgetDisplay = `${icon} **${percentUsed.toFixed(0)}%** used`;
+    }
+    // Savings column
+    let savingsDisplay = '—';
+    if (totalSavings !== undefined && totalSavings > 0) {
+        savingsDisplay = `**${currencySymbol}${totalSavings.toFixed(2)}**/mo`;
+    }
+    return `| 💰 Monthly Cost | 📊 Budget Status | 💡 Potential Savings |
+|:---------------:|:----------------:|:--------------------:|
+| ${costDisplay} | ${budgetDisplay} | ${savingsDisplay} |
+`;
+}
+/**
+ * Get GitHub alert type based on budget health status
+ * Uses GitHub's blockquote alert syntax: [!NOTE], [!WARNING], [!CAUTION]
+ * @param status - Health status or percentage
+ * @returns GitHub alert type string
+ */
+function getAlertType(status) {
+    if (typeof status === 'number') {
+        if (status >= 100)
+            return 'CAUTION';
+        if (status >= 80)
+            return 'WARNING';
+        return 'NOTE';
+    }
+    switch (status) {
+        case 'exceeded':
+        case 'critical':
+            return 'CAUTION';
+        case 'warning':
+            return 'WARNING';
+        default:
+            return 'NOTE';
+    }
+}
+/**
+ * Renders budget status using GitHub's native alert syntax for better visual impact.
+ *
+ * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning state, [!NOTE] otherwise.
+ * Displays budget amount, current spend, progress bar, and any triggered alerts.
+ *
+ * @param budgetStatus - Budget status data; returns empty string if not configured
+ * @returns Markdown string with GitHub alert syntax, or empty string when budget not configured
+ */
+function formatBudgetSection(budgetStatus) {
+    if (!budgetStatus || !budgetStatus.configured) {
+        return '';
+    }
+    const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
+    const currencySymbol = getCurrencySymbol(currency);
+    const alertType = getAlertType(percentUsed ?? 0);
+    // Build status title
+    let statusTitle = 'Budget Status';
+    if (percentUsed !== undefined) {
+        if (percentUsed >= 100) {
+            statusTitle = 'Budget Exceeded';
+        }
+        else if (percentUsed >= 80) {
+            statusTitle = 'Budget Warning';
+        }
+    }
+    // Build content lines
+    const lines = [];
+    lines.push(`> [!${alertType}]`);
+    lines.push(`> **${statusTitle}**`);
+    lines.push(`>`);
+    const budgetLine = `> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`;
+    lines.push(budgetLine);
+    if (spent !== undefined && percentUsed !== undefined) {
+        const progressBar = generateProgressBar(percentUsed);
+        lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
+    }
+    // Add triggered alerts
+    if (alerts && alerts.length > 0) {
+        const triggeredAlerts = alerts.filter((a) => a.triggered);
+        if (triggeredAlerts.length > 0) {
+            lines.push(`>`);
+            triggeredAlerts.forEach((a) => {
+                lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
+            });
+        }
+    }
+    return '\n' + lines.join('\n') + '\n';
+}
+/**
+ * Render the Sustainability section as a Markdown string for inclusion in the comment body.
+ *
+ * Builds a "Sustainability Impact" block showing total carbon, month-over-month change, and carbon intensity.
+ * When enabled via config, includes environmental equivalents (trees, miles driven, home electricity days).
+ * When a finfocusReport with resource data is provided, includes a top-10 resources-by-carbon table.
+ *
+ * @param report - Sustainability metrics (must include `totalCO2e`, `totalCO2eDiff`, and `carbonIntensity`)
+ * @param config - Optional action configuration; honors `includeSustainability` and `sustainabilityEquivalents` flags
+ * @param finfocusReport - Optional finfocus report used to generate a Resources by Carbon Impact table when present
+ * @returns A Markdown string containing the formatted Sustainability section, or an empty string if sustainability is not enabled
+ */
+function formatSustainabilitySection(report, config, finfocusReport) {
+    if (!config?.includeSustainability)
+        return '';
+    const { totalCO2e, totalCO2eDiff, carbonIntensity } = report;
+    const equivalents = config.sustainabilityEquivalents
+        ? calculateEquivalents(totalCO2e)
+        : undefined;
+    let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
+    if (totalCO2eDiff > 0)
+        diffText = `+${diffText}`;
+    let equivalentsSection = '';
+    if (equivalents) {
+        equivalentsSection = `
+<details>
+<summary>Environmental Equivalents</summary>
+
+- 🌲 Equivalent to planting **${equivalents.trees.toFixed(2)} trees** annually to offset
+- 🚗 Equivalent to driving **${equivalents.milesDriven.toFixed(2)} miles** per month
+- 💡 Equivalent to **${equivalents.homeElectricityDays.toFixed(2)} days** of home electricity use
+</details>
+`;
+    }
+    // Build Resource Breakdown by Carbon Impact
+    let resourceTable = '';
+    const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
+    if (resources.length > 0) {
+        const resourcesWithCarbon = resources
+            .filter((r) => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
+            .sort((a, b) => b.sustainability.carbon_footprint.value - a.sustainability.carbon_footprint.value);
+        if (resourcesWithCarbon.length > 0) {
+            const resourceRows = resourcesWithCarbon
+                .slice(0, 10) // Top 10 by carbon
+                .map((r) => {
+                const name = r.resourceId.split('::').pop() || r.resourceId;
+                const carbon = r.sustainability.carbon_footprint.value.toFixed(2);
+                const unit = r.sustainability.carbon_footprint.unit;
+                return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
+            })
+                .join('\n');
+            if (resourceRows) {
+                resourceTable = `
+### Resources by Carbon Impact
+
+| Resource | Type | CO₂/month |
+| :--- | :--- | ---: |
+${resourceRows}
+`;
+            }
+        }
+    }
+    return `
+
+<details>
+<summary><strong>🌱 Sustainability</strong> — ${totalCO2e.toFixed(2)} kgCO₂e/month</summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
+| **Carbon Change** | ${diffText} |
+| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
+${equivalentsSection}${resourceTable}
+</details>
+`;
+}
+/**
+ * Render the What-If Cost Estimate section as Markdown for the PR comment.
+ *
+ * Shows the estimated resource (type, provider, region), a Baseline vs Modified
+ * monthly cost table, the total change, and the per-property deltas from
+ * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
+ *
+ * @param report - Estimate report from `Analyzer.runEstimate`
+ * @returns Markdown string for the estimate section
+ */
+function formatEstimateSection(report) {
+    const currency = report.modified.currency || 'USD';
+    const currencySymbol = getCurrencySymbol(currency);
+    const region = report.resource.properties?.region;
+    const detailParts = [`**Provider:** \`${report.resource.provider}\``];
+    if (typeof region === 'string' && region !== '') {
+        detailParts.push(`**Region:** \`${region}\``);
+    }
+    const changeText = report.totalChange > 0
+        ? `+${currencySymbol}${report.totalChange.toFixed(2)}`
+        : `${currencySymbol}${report.totalChange.toFixed(2)}`;
+    let deltasTable = '';
+    if (report.deltas.length > 0) {
+        const deltaRows = report.deltas
+            .map((d) => {
+            const original = d.originalValue === '' ? '—' : d.originalValue;
+            const delta = d.costChange > 0
+                ? `+${currencySymbol}${d.costChange.toFixed(2)}`
+                : `${currencySymbol}${d.costChange.toFixed(2)}`;
+            return `| ${d.property} | ${original} | ${d.newValue} | ${delta} |`;
+        })
+            .join('\n');
+        deltasTable = `
+| Property | Original | New | Cost Change |
+| :--- | :--- | :--- | ---: |
+${deltaRows}
+`;
+    }
+    return `
+
+## 🔮 What-If Cost Estimate
+
+**Resource:** \`${report.resource.type}\`
+${detailParts.join(' · ')}
+
+| Metric | Baseline | Modified |
+| :--- | ---: | ---: |
+| **Monthly Cost** | ${currencySymbol}${report.baseline.monthly.toFixed(2)} | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
+| **Hourly Cost** | ${currencySymbol}${report.baseline.hourly.toFixed(4)} | ${currencySymbol}${report.modified.hourly.toFixed(4)} |
+
+**Total Change:** ${changeText} ${currency}/month
+${deltasTable}`;
+}
+/**
+ * Extract monthly cost change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * Uses type guard to safely access the correct format.
+ * @param diff - The diff object from the report
+ * @returns The monthly cost change, or 0 if not available
+ */
+function extractMonthlyCostChange(diff) {
+    if (!diff)
+        return 0;
+    if ((0,types/* isV041Diff */.k)(diff)) {
+        return diff.totalDelta;
+    }
+    // v0.4.0 format: monthly_cost_change
+    if ('monthly_cost_change' in diff) {
+        return diff.monthly_cost_change;
+    }
+    return 0;
+}
+/**
+ * Extract percent change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
+ * Uses type guard to safely access the correct format.
+ * @param diff - The diff object from the report
+ * @returns The percent change, or 0 if not available
+ */
+function extractPercentChange(diff) {
+    if (!diff)
+        return 0;
+    if ((0,types/* isV041Diff */.k)(diff)) {
+        // v0.4.1: calculate from totalBefore/totalAfter
+        if (diff.totalBefore === 0)
+            return diff.totalAfter > 0 ? 100 : 0;
+        return ((diff.totalAfter - diff.totalBefore) / diff.totalBefore) * 100;
+    }
+    // v0.4.0 format: percent_change
+    if ('percent_change' in diff) {
+        return diff.percent_change;
+    }
+    return 0;
+}
+function formatRecommendationsSection(recommendationsReport) {
+    if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
+        return '';
+    }
+    const totalSavings = calculateAchievableSavings(recommendationsReport.recommendations);
+    const savingsCurrency = recommendationsReport.summary.currency;
+    const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
+    const recRows = recommendationsReport.recommendations
+        .map((rec) => {
+        const name = rec.resource_id.split('::').pop() || rec.resource_id;
+        const savings = `${rec.estimated_savings.toFixed(2)} ${rec.currency}`;
+        if (!scored) {
+            return `| ${name} | ${rec.description} | ${savings} |`;
+        }
+        const risk = formatScore(rec.scores?.risk);
+        const review = rec.scores?.needs_review ? ' review' : '';
+        const worth = formatScore(rec.scores?.worth_acting);
+        return `| ${name} | ${rec.description} | ${savings} | ${risk}${review} | ${worth} |`;
+    })
+        .join('\n');
+    const header = scored
+        ? `| Resource | Recommendation | Savings | Risk | Worth acting |
+| :--- | :--- | ---: | ---: | ---: |`
+        : `| Resource | Recommendation | Savings |
+| :--- | :--- | ---: |`;
+    const scoring = recommendationsReport.scoring;
+    const scoringNote = scoring
+        ? `\n\nScoring${scoring.scorer ? ` (${scoring.scorer})` : ''}: scored ${scoring.scored} of ${scoring.requested}. Scores rank work for review; they do not dismiss a recommendation.` +
+            (scoring.warnings && scoring.warnings.length > 0
+                ? ` Warnings: ${scoring.warnings.join('; ')}.`
+                : '')
+        : '';
+    return `
+
+<details open>
+<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+
+${header}
+${recRows}
+${scoringNote}
+
+</details>
+`;
+}
+function formatScore(value) {
+    return typeof value === 'number' ? value.toFixed(2) : '—';
+}
+function formatDeclineSection(report) {
+    const declines = collectDeclineNotes(report);
+    if (declines.length === 0) {
+        return '';
+    }
+    const rows = declines
+        .slice(0, 20)
+        .map((decline) => {
+        const resourceId = decline.resourceId.split('::').pop() || decline.resourceId;
+        return `| ${decline.resourceType} | ${resourceId} | ${decline.note} |`;
+    })
+        .join('\n');
+    const more = declines.length > 20 ? `\n\nand ${declines.length - 20} more` : '';
+    return `
+
+<details>
+<summary><strong>Plugin declines</strong> (${declines.length})</summary>
+
+| Type | Resource | Reason |
+| :--- | :--- | :--- |
+${rows}${more}
+
+*A plugin Supports() call declined the resource. The note is why it was not priced.*
+
+</details>
+`;
+}
+function formatClusterSection(report) {
+    const currency = report.currency || 'USD';
+    const rows = report.groups
+        .map((group) => {
+        const notes = group.notes && group.notes.length > 0 ? group.notes.join('; ') : '';
+        return `| ${group.key} | ${group.cpu_cost.toFixed(2)} | ${group.mem_cost.toFixed(2)} | ${group.total_cost.toFixed(2)} ${currency} | ${notes} |`;
+    })
+        .join('\n');
+    const idle = typeof report.idle === 'number'
+        ? `\n\nIdle: ${report.idle.toFixed(2)} ${currency}`
+        : '\n\nIdle omitted (namespace scoped).';
+    const incomplete = report.incomplete ? '\n\nSome cluster resources could not be priced.' : '';
+    const warnings = report.warnings && report.warnings.length > 0
+        ? `\n\nWarnings: ${report.warnings.join('; ')}`
+        : '';
+    return `
+
+<details>
+<summary><strong>Cluster costs</strong> — ${report.total.toFixed(2)} ${currency}/mo by ${report.group_by}</summary>
+
+| Group | CPU | Memory | Total | Notes |
+| :--- | ---: | ---: | ---: | :--- |
+${rows}${idle}${incomplete}${warnings}
+
+</details>
+`;
+}
+function formatStateOnlySection(report) {
+    const summary = report.summary;
+    const currency = summary.currency || 'USD';
+    return `
+
+<details>
+<summary><strong>State-only overview</strong> — pulumi preview was not run</summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Projected monthly** | ${summary.projectedMonthly.toFixed(2)} ${currency} |
+| **Actual month-to-date** | ${summary.totalActualMTD.toFixed(2)} ${currency} |
+| **Projected delta** | ${summary.projectedDelta.toFixed(2)} ${currency} |
+| **Potential savings** | ${summary.potentialSavings.toFixed(2)} ${currency} |
+
+*From \`finfocus overview --state-only\`. Pending changes are not included.*
+
+</details>
+`;
+}
+/**
+ * Format the unpriced resources section when resources could not be priced.
+ * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
+ * Includes a note that these resources are NOT included in the total cost.
+ *
+ * @param errors - Array of FinfocusReportError entries, or null/empty
+ * @returns Markdown string with the unpriced resources section, or empty string if no errors
+ */
+function formatUnpricedResourcesSection(errors) {
+    if (!errors || errors.length === 0) {
+        return '';
+    }
+    const displayErrors = errors.slice(0, 20);
+    const truncated = errors.length > 20 ? errors.length - 20 : 0;
+    const errorRows = displayErrors
+        .map((err) => {
+        const resourceIdShort = err.resourceId.split('::').pop() || err.resourceId;
+        return `| ${err.resourceType} | ${resourceIdShort} | ${err.pluginName} | ${err.message} |`;
+    })
+        .join('\n');
+    const truncatedNote = truncated > 0 ? `\nand ${truncated} more` : '';
+    return `
+<details>
+<summary><strong>⚠️ Resources Not Priced</strong> (${errors.length} ${errors.length === 1 ? 'resource' : 'resources'})</summary>
+
+| Type | Resource | Plugin | Reason |
+| :--- | :--- | :--- | :--- |
+${errorRows}${truncatedNote}
+
+*These resources could not be priced and are not included in the cost total above.*
+
+</details>`;
+}
+/**
+ * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
+ *
+ * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
+ * @param config - Optional action configuration that controls formatting and which sections to show
+ * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
+ * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
+ * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
+ * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
+ * @param estimateReport - Optional what-if estimate report to include
+ * @param clusterReport - Optional Kubernetes cluster allocation from `finfocus cost cluster`
+ * @param stateOnlyReport - Optional `finfocus overview --state-only` summary
+ * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
+ */
+function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
+    // Handle both new and legacy report formats
+    const currency = report.summary?.currency ?? report.currency ?? 'USD';
+    const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
+    const total = totalMonthly.toFixed(2);
+    const monthlyCostChange = extractMonthlyCostChange(report.diff);
+    const percentChange = extractPercentChange(report.diff);
+    const diff = monthlyCostChange.toFixed(2);
+    const percent = percentChange.toFixed(2);
+    let diffText = `${diff} ${currency}`;
+    if (report.diff) {
+        if (monthlyCostChange > 0) {
+            diffText = `📈 +${diffText}`;
+        }
+        else if (monthlyCostChange < 0) {
+            diffText = `📉 ${diffText}`;
+        }
+    }
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    let resourceTable = '';
+    let providerBreakdown = '';
+    const isDetailed = config?.detailedComment === true;
+    if (config && (0,display/* usesDisplayControls */.js)(config)) {
+        const displayed = (0,display/* formatDisplaySections */.Wk)(report, config, currency);
+        resourceTable = displayed.resourceTable;
+        providerBreakdown = displayed.groupTable;
+    }
+    else {
+        if (resources.length > 0) {
+            const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
+            if (isDetailed) {
+                // Detailed view: All resources with notes and breakdown
+                const resourceRows = sortedResources
+                    .map((r) => {
+                    const name = r.resourceId.split('::').pop() || r.resourceId;
+                    const notes = r.notes ? `<br/>*${r.notes}*` : '';
+                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
+                })
+                    .join('\n');
+                resourceTable = `
+
+<details>
+<summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
+
+| Resource | Type | Monthly Cost | Notes |
+| :--- | :--- | ---: | :--- |
+${resourceRows}
+
+</details>
+`;
+            }
+            else if (resources.length <= 20) {
+                // Standard view: Top resources in collapsible section
+                const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
+                const resourceRows = topResources
+                    .map((r) => {
+                    const name = r.resourceId.split('::').pop() || r.resourceId;
+                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
+                })
+                    .join('\n');
+                if (resourceRows) {
+                    resourceTable = `
+
+<details>
+<summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
+
+| Resource | Type | Monthly Cost |
+| :--- | :--- | ---: |
+${resourceRows}
+
+</details>
+`;
+                }
+            }
+        }
+        // Build provider breakdown only if multiple providers
+        if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
+            const providerRows = Object.entries(report.summary.byProvider)
+                .filter(([, cost]) => cost > 0)
+                .sort(([, a], [, b]) => b - a)
+                .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
+                .join('\n');
+            if (providerRows) {
+                providerBreakdown = `
+
+<details>
+<summary><strong>☁️ Cost by Provider</strong></summary>
+
+| Provider | Monthly Cost |
+| :--- | ---: |
+${providerRows}
+
+</details>
+`;
+            }
+        }
+    }
+    // Build Actual Cost Section
+    let actualCostSection = '';
+    let actualCostRow = '';
+    if (actualCostReport && actualCostReport.total > 0) {
+        const actualTotal = actualCostReport.total.toFixed(2);
+        actualCostRow = `| **Actual (${config?.actualCostsPeriod || '7d'})** | ${actualTotal} ${actualCostReport.currency} |`;
+        // Actual Costs Breakdown Table (collapsible)
+        if (actualCostReport.items.length > 0) {
+            const actualRows = actualCostReport.items
+                .sort((a, b) => b.cost - a.cost)
+                .map((item) => `| ${item.name} | ${item.cost.toFixed(2)} ${item.currency} |`)
+                .join('\n');
+            actualCostSection = `
+
+<details>
+<summary><strong>💵 Actual Costs</strong> (${actualCostReport.startDate} to ${actualCostReport.endDate})</summary>
+
+| ${config?.actualCostsGroupBy || 'Provider'} | Cost |
+| :--- | ---: |
+| **Total** | **${actualTotal} ${actualCostReport.currency}** |
+${actualRows}
+
+</details>
+`;
+        }
+    }
+    const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
+    const recommendationsSection = formatRecommendationsSection(recommendationsReport);
+    const sustainabilitySection = sustainabilityReport
+        ? formatSustainabilitySection(sustainabilityReport, config, report)
+        : '';
+    const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
+    const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
+    const declineSection = formatDeclineSection(report);
+    const clusterSection = clusterReport ? formatClusterSection(clusterReport) : '';
+    const stateOnlySection = stateOnlyReport ? formatStateOnlySection(stateOnlyReport) : '';
+    // Basic budget status section (local math; finfocus has no budget status command)
+    const budgetSection = formatBudgetSection(budgetStatus);
+    // Calculate percent used for dashboard from budget status
+    const percentUsed = budgetStatus?.percentUsed;
+    // Calculate achievable savings for dashboard (max per resource+action_type group)
+    // This avoids inflating the total by summing mutually exclusive options
+    const achievableSavings = calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
+    // Build dashboard summary row
+    const dashboardSummary = formatDashboardSummary(totalMonthly, currency, percentUsed, achievableSavings);
+    return `## Cloud Cost Estimate
+
+${dashboardSummary}
+${budgetSection}
+<details>
+<summary><strong>📈 Cost Details</strong></summary>
+
+| Metric | Value |
+| :--- | ---: |
+| **Projected Monthly** | ${total} ${currency} |
+${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
+| **% Change** | ${percent}% |
+
+</details>
+${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
+
+---
+<sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
+`;
 }
 
 ;// CONCATENATED MODULE: ./node_modules/@actions/github/lib/context.js
@@ -43323,702 +44042,6 @@ function getOctokit(token, options, ...additionalPlugins) {
     return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 //# sourceMappingURL=github.js.map
-;// CONCATENATED MODULE: ./src/formatter.ts
-
-
-
-/**
- * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
- *
- * finfocus CLI returns multiple options per resource_id + action_type to give users choices
- * (e.g., resize to medium vs resize to small). Since users can only pick ONE option per
- * resource/action, summing all options inflates the total. This function groups by
- * resource_id + action_type and takes the max savings per group for an accurate total.
- *
- * @param recommendations - Array of recommendations from finfocus, or undefined
- * @returns Total achievable savings (max per resource+action_type group)
- */
-function calculateAchievableSavings(recommendations) {
-    if (!recommendations || recommendations.length === 0) {
-        return 0;
-    }
-    const groups = new Map();
-    for (const rec of recommendations) {
-        const key = `${rec.resource_id}::${rec.action_type}`;
-        const current = groups.get(key) ?? 0;
-        groups.set(key, Math.max(current, rec.estimated_savings));
-    }
-    return Array.from(groups.values()).reduce((sum, val) => sum + val, 0);
-}
-/**
- * Get currency symbol for display formatting.
- * @param currency - Currency code (e.g., 'USD', 'EUR')
- * @returns Currency symbol (e.g., '$', '€') or the code itself if unknown
- */
-function getCurrencySymbol(currency = 'USD') {
-    const symbols = {
-        USD: '$',
-        EUR: '€',
-        GBP: '£',
-        JPY: '¥',
-        CNY: '¥',
-    };
-    return symbols[currency.toUpperCase()] || currency;
-}
-/**
- * Converts a total CO2e amount into illustrative environmental equivalents.
- *
- * @param totalCO2e - Total greenhouse gas emissions in kilograms of CO2e
- * @returns An object with:
- *  - `trees`: estimated number of trees required to sequester the given CO2e (approximate, based on ~22 kg CO2/year per tree),
- *  - `milesDriven`: estimated miles driven equivalent (approximate, based on ~0.4 kg CO2 per mile),
- *  - `homeElectricityDays`: estimated number of average home electricity days equivalent (approximate, using ~30 kWh/day and ~0.42 kg CO2/kWh)
- */
-function calculateEquivalents(totalCO2e) {
-    // Source: EPA Greenhouse Gas Equivalencies Calculator
-    // Note: These are approximations for illustrative purposes.
-    // Trees: 1 tree absorbs ~22 kg CO₂/year (Illustrative; varies by species/age/location)
-    const trees = (totalCO2e * 12) / 22;
-    // Miles driven: ~0.4 kg CO₂/mile (Approx. based on average passenger vehicle)
-    const milesDriven = totalCO2e / 0.4;
-    // Home electricity: ~0.42 kg CO₂/kWh (Approx; EPA US avg is 0.394 kg/kWh), avg home uses ~30 kWh/day
-    const homeElectricityDays = totalCO2e / (30 * 0.42);
-    return {
-        trees,
-        milesDriven,
-        homeElectricityDays,
-    };
-}
-/**
- * Generate a simple text-based progress bar using Unicode blocks
- * @param percent - Percentage value (0-100+, can exceed 100%)
- * @param width - Width of the progress bar in characters (default: 10)
- * @returns Progress bar string with filled (▓) and empty (░) blocks
- */
-function generateProgressBar(percent, width = 10) {
-    const capped = Math.min(100, percent);
-    const filled = Math.floor((capped / 100) * width);
-    const empty = width - filled;
-    return '▓'.repeat(filled) + '░'.repeat(empty);
-}
-/**
- * Get status icon for the dashboard based on budget percentage
- * @param percentUsed - Budget usage percentage
- * @returns Status icon emoji
- */
-function getDashboardStatusIcon(percentUsed) {
-    if (percentUsed === undefined)
-        return '—';
-    if (percentUsed >= 100)
-        return '⛔';
-    if (percentUsed >= 80)
-        return '🔴';
-    if (percentUsed >= 50)
-        return '🟡';
-    return '🟢';
-}
-/**
- * Formats the dashboard summary row - a 3-column at-a-glance status table
- * Shows: Monthly Cost | Budget Status | Potential Savings
- *
- * @param totalMonthly - Projected monthly cost
- * @param currency - Currency code
- * @param percentUsed - Budget usage percentage (optional)
- * @param totalSavings - Total potential savings from recommendations (optional)
- * @returns Markdown table string
- */
-function formatDashboardSummary(totalMonthly, currency, percentUsed, totalSavings) {
-    const currencySymbol = getCurrencySymbol(currency);
-    // Monthly cost column
-    const costDisplay = `**${currencySymbol}${totalMonthly.toFixed(2)}** ${currency}`;
-    // Budget status column
-    let budgetDisplay = '—';
-    if (percentUsed !== undefined) {
-        const icon = getDashboardStatusIcon(percentUsed);
-        budgetDisplay = `${icon} **${percentUsed.toFixed(0)}%** used`;
-    }
-    // Savings column
-    let savingsDisplay = '—';
-    if (totalSavings !== undefined && totalSavings > 0) {
-        savingsDisplay = `**${currencySymbol}${totalSavings.toFixed(2)}**/mo`;
-    }
-    return `| 💰 Monthly Cost | 📊 Budget Status | 💡 Potential Savings |
-|:---------------:|:----------------:|:--------------------:|
-| ${costDisplay} | ${budgetDisplay} | ${savingsDisplay} |
-`;
-}
-/**
- * Get GitHub alert type based on budget health status
- * Uses GitHub's blockquote alert syntax: [!NOTE], [!WARNING], [!CAUTION]
- * @param status - Health status or percentage
- * @returns GitHub alert type string
- */
-function getAlertType(status) {
-    if (typeof status === 'number') {
-        if (status >= 100)
-            return 'CAUTION';
-        if (status >= 80)
-            return 'WARNING';
-        return 'NOTE';
-    }
-    switch (status) {
-        case 'exceeded':
-        case 'critical':
-            return 'CAUTION';
-        case 'warning':
-            return 'WARNING';
-        default:
-            return 'NOTE';
-    }
-}
-/**
- * Renders budget status using GitHub's native alert syntax for better visual impact.
- *
- * Uses [!CAUTION] for exceeded/critical, [!WARNING] for warning state, [!NOTE] otherwise.
- * Displays budget amount, current spend, progress bar, and any triggered alerts.
- *
- * @param budgetStatus - Budget status data; returns empty string if not configured
- * @returns Markdown string with GitHub alert syntax, or empty string when budget not configured
- */
-function formatBudgetSection(budgetStatus) {
-    if (!budgetStatus || !budgetStatus.configured) {
-        return '';
-    }
-    const { amount, period, spent, percentUsed, alerts, currency } = budgetStatus;
-    const currencySymbol = getCurrencySymbol(currency);
-    const alertType = getAlertType(percentUsed ?? 0);
-    // Build status title
-    let statusTitle = 'Budget Status';
-    if (percentUsed !== undefined) {
-        if (percentUsed >= 100) {
-            statusTitle = 'Budget Exceeded';
-        }
-        else if (percentUsed >= 80) {
-            statusTitle = 'Budget Warning';
-        }
-    }
-    // Build content lines
-    const lines = [];
-    lines.push(`> [!${alertType}]`);
-    lines.push(`> **${statusTitle}**`);
-    lines.push(`>`);
-    const budgetLine = `> **Budget:** ${currencySymbol}${amount?.toFixed(2) ?? 'N/A'}/${period ?? 'monthly'}`;
-    lines.push(budgetLine);
-    if (spent !== undefined && percentUsed !== undefined) {
-        const progressBar = generateProgressBar(percentUsed);
-        lines.push(`> **Spent:** ${currencySymbol}${spent.toFixed(2)} (${percentUsed.toFixed(0)}%) ${progressBar}`);
-    }
-    // Add triggered alerts
-    if (alerts && alerts.length > 0) {
-        const triggeredAlerts = alerts.filter((a) => a.triggered);
-        if (triggeredAlerts.length > 0) {
-            lines.push(`>`);
-            triggeredAlerts.forEach((a) => {
-                lines.push(`> - ${a.threshold}% ${a.type} threshold exceeded`);
-            });
-        }
-    }
-    return '\n' + lines.join('\n') + '\n';
-}
-/**
- * Render the Sustainability section as a Markdown string for inclusion in the comment body.
- *
- * Builds a "Sustainability Impact" block showing total carbon, month-over-month change, and carbon intensity.
- * When enabled via config, includes environmental equivalents (trees, miles driven, home electricity days).
- * When a finfocusReport with resource data is provided, includes a top-10 resources-by-carbon table.
- *
- * @param report - Sustainability metrics (must include `totalCO2e`, `totalCO2eDiff`, and `carbonIntensity`)
- * @param config - Optional action configuration; honors `includeSustainability` and `sustainabilityEquivalents` flags
- * @param finfocusReport - Optional finfocus report used to generate a Resources by Carbon Impact table when present
- * @returns A Markdown string containing the formatted Sustainability section, or an empty string if sustainability is not enabled
- */
-function formatSustainabilitySection(report, config, finfocusReport) {
-    if (!config?.includeSustainability)
-        return '';
-    const { totalCO2e, totalCO2eDiff, carbonIntensity } = report;
-    const equivalents = config.sustainabilityEquivalents
-        ? calculateEquivalents(totalCO2e)
-        : undefined;
-    let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
-    if (totalCO2eDiff > 0)
-        diffText = `+${diffText}`;
-    let equivalentsSection = '';
-    if (equivalents) {
-        equivalentsSection = `
-<details>
-<summary>Environmental Equivalents</summary>
-
-- 🌲 Equivalent to planting **${equivalents.trees.toFixed(2)} trees** annually to offset
-- 🚗 Equivalent to driving **${equivalents.milesDriven.toFixed(2)} miles** per month
-- 💡 Equivalent to **${equivalents.homeElectricityDays.toFixed(2)} days** of home electricity use
-</details>
-`;
-    }
-    // Build Resource Breakdown by Carbon Impact
-    let resourceTable = '';
-    const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
-    if (resources.length > 0) {
-        const resourcesWithCarbon = resources
-            .filter((r) => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
-            .sort((a, b) => b.sustainability.carbon_footprint.value - a.sustainability.carbon_footprint.value);
-        if (resourcesWithCarbon.length > 0) {
-            const resourceRows = resourcesWithCarbon
-                .slice(0, 10) // Top 10 by carbon
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                const carbon = r.sustainability.carbon_footprint.value.toFixed(2);
-                const unit = r.sustainability.carbon_footprint.unit;
-                return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
-            })
-                .join('\n');
-            if (resourceRows) {
-                resourceTable = `
-### Resources by Carbon Impact
-
-| Resource | Type | CO₂/month |
-| :--- | :--- | ---: |
-${resourceRows}
-`;
-            }
-        }
-    }
-    return `
-
-<details>
-<summary><strong>🌱 Sustainability</strong> — ${totalCO2e.toFixed(2)} kgCO₂e/month</summary>
-
-| Metric | Value |
-| :--- | ---: |
-| **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
-| **Carbon Change** | ${diffText} |
-| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
-${equivalentsSection}${resourceTable}
-</details>
-`;
-}
-/**
- * Render the What-If Cost Estimate section as Markdown for the PR comment.
- *
- * Shows the estimated resource (type, provider, region), a Baseline vs Modified
- * monthly cost table, the total change, and the per-property deltas from
- * `finfocus cost estimate` (single-resource mode, finfocus v0.4.0).
- *
- * @param report - Estimate report from `Analyzer.runEstimate`
- * @returns Markdown string for the estimate section
- */
-function formatEstimateSection(report) {
-    const currency = report.modified.currency || 'USD';
-    const currencySymbol = getCurrencySymbol(currency);
-    const region = report.resource.properties?.region;
-    const detailParts = [`**Provider:** \`${report.resource.provider}\``];
-    if (typeof region === 'string' && region !== '') {
-        detailParts.push(`**Region:** \`${region}\``);
-    }
-    const changeText = report.totalChange > 0
-        ? `+${currencySymbol}${report.totalChange.toFixed(2)}`
-        : `${currencySymbol}${report.totalChange.toFixed(2)}`;
-    let deltasTable = '';
-    if (report.deltas.length > 0) {
-        const deltaRows = report.deltas
-            .map((d) => {
-            const original = d.originalValue === '' ? '—' : d.originalValue;
-            const delta = d.costChange > 0
-                ? `+${currencySymbol}${d.costChange.toFixed(2)}`
-                : `${currencySymbol}${d.costChange.toFixed(2)}`;
-            return `| ${d.property} | ${original} | ${d.newValue} | ${delta} |`;
-        })
-            .join('\n');
-        deltasTable = `
-| Property | Original | New | Cost Change |
-| :--- | :--- | :--- | ---: |
-${deltaRows}
-`;
-    }
-    return `
-
-## 🔮 What-If Cost Estimate
-
-**Resource:** \`${report.resource.type}\`
-${detailParts.join(' · ')}
-
-| Metric | Baseline | Modified |
-| :--- | ---: | ---: |
-| **Monthly Cost** | ${currencySymbol}${report.baseline.monthly.toFixed(2)} | ${currencySymbol}${report.modified.monthly.toFixed(2)} |
-| **Hourly Cost** | ${currencySymbol}${report.baseline.hourly.toFixed(4)} | ${currencySymbol}${report.modified.hourly.toFixed(4)} |
-
-**Total Change:** ${changeText} ${currency}/month
-${deltasTable}`;
-}
-/**
- * Extract monthly cost change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
- * Uses type guard to safely access the correct format.
- * @param diff - The diff object from the report
- * @returns The monthly cost change, or 0 if not available
- */
-function extractMonthlyCostChange(diff) {
-    if (!diff)
-        return 0;
-    if ((0,types/* isV041Diff */.k)(diff)) {
-        return diff.totalDelta;
-    }
-    // v0.4.0 format: monthly_cost_change
-    if ('monthly_cost_change' in diff) {
-        return diff.monthly_cost_change;
-    }
-    return 0;
-}
-/**
- * Extract percent change from diff, handling both v0.4.0 (legacy) and v0.4.1 formats.
- * Uses type guard to safely access the correct format.
- * @param diff - The diff object from the report
- * @returns The percent change, or 0 if not available
- */
-function extractPercentChange(diff) {
-    if (!diff)
-        return 0;
-    if ((0,types/* isV041Diff */.k)(diff)) {
-        // v0.4.1: calculate from totalBefore/totalAfter
-        if (diff.totalBefore === 0)
-            return diff.totalAfter > 0 ? 100 : 0;
-        return ((diff.totalAfter - diff.totalBefore) / diff.totalBefore) * 100;
-    }
-    // v0.4.0 format: percent_change
-    if ('percent_change' in diff) {
-        return diff.percent_change;
-    }
-    return 0;
-}
-function formatRecommendationsSection(recommendationsReport) {
-    if (!recommendationsReport || recommendationsReport.recommendations.length === 0) {
-        return '';
-    }
-    const totalSavings = recommendationsReport.summary.total_savings;
-    const savingsCurrency = recommendationsReport.summary.currency;
-    const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
-    const recRows = recommendationsReport.recommendations
-        .map((rec) => {
-        const name = rec.resource_id.split('::').pop() || rec.resource_id;
-        const savings = `${rec.estimated_savings.toFixed(2)} ${rec.currency}`;
-        if (!scored) {
-            return `| ${name} | ${rec.description} | ${savings} |`;
-        }
-        const risk = formatScore(rec.scores?.risk);
-        const review = rec.scores?.needs_review ? ' review' : '';
-        const worth = formatScore(rec.scores?.worth_acting);
-        return `| ${name} | ${rec.description} | ${savings} | ${risk}${review} | ${worth} |`;
-    })
-        .join('\n');
-    const header = scored
-        ? `| Resource | Recommendation | Savings | Risk | Worth acting |
-| :--- | :--- | ---: | ---: | ---: |`
-        : `| Resource | Recommendation | Savings |
-| :--- | :--- | ---: |`;
-    const scoring = recommendationsReport.scoring;
-    const scoringNote = scoring
-        ? `\n\nScoring${scoring.scorer ? ` (${scoring.scorer})` : ''}: scored ${scoring.scored} of ${scoring.requested}. Scores rank work for review; they do not dismiss a recommendation.` +
-            (scoring.warnings && scoring.warnings.length > 0
-                ? ` Warnings: ${scoring.warnings.join('; ')}.`
-                : '')
-        : '';
-    return `
-
-<details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
-
-${header}
-${recRows}
-${scoringNote}
-
-</details>
-`;
-}
-function formatScore(value) {
-    return typeof value === 'number' ? value.toFixed(2) : '—';
-}
-function formatDeclineSection(report) {
-    const declines = collectDeclineNotes(report);
-    if (declines.length === 0) {
-        return '';
-    }
-    const rows = declines
-        .slice(0, 20)
-        .map((decline) => {
-        const resourceId = decline.resourceId.split('::').pop() || decline.resourceId;
-        return `| ${decline.resourceType} | ${resourceId} | ${decline.note} |`;
-    })
-        .join('\n');
-    const more = declines.length > 20 ? `\n\nand ${declines.length - 20} more` : '';
-    return `
-
-<details>
-<summary><strong>Plugin declines</strong> (${declines.length})</summary>
-
-| Type | Resource | Reason |
-| :--- | :--- | :--- |
-${rows}${more}
-
-*A plugin Supports() call declined the resource. The note is why it was not priced.*
-
-</details>
-`;
-}
-function formatClusterSection(report) {
-    const currency = report.currency || 'USD';
-    const rows = report.groups
-        .map((group) => {
-        const notes = group.notes && group.notes.length > 0 ? group.notes.join('; ') : '';
-        return `| ${group.key} | ${group.cpu_cost.toFixed(2)} | ${group.mem_cost.toFixed(2)} | ${group.total_cost.toFixed(2)} ${currency} | ${notes} |`;
-    })
-        .join('\n');
-    const idle = typeof report.idle === 'number'
-        ? `\n\nIdle: ${report.idle.toFixed(2)} ${currency}`
-        : '\n\nIdle omitted (namespace scoped).';
-    const incomplete = report.incomplete ? '\n\nSome cluster resources could not be priced.' : '';
-    const warnings = report.warnings && report.warnings.length > 0
-        ? `\n\nWarnings: ${report.warnings.join('; ')}`
-        : '';
-    return `
-
-<details>
-<summary><strong>Cluster costs</strong> — ${report.total.toFixed(2)} ${currency}/mo by ${report.group_by}</summary>
-
-| Group | CPU | Memory | Total | Notes |
-| :--- | ---: | ---: | ---: | :--- |
-${rows}${idle}${incomplete}${warnings}
-
-</details>
-`;
-}
-function formatStateOnlySection(report) {
-    const summary = report.summary;
-    const currency = summary.currency || 'USD';
-    return `
-
-<details>
-<summary><strong>State-only overview</strong> — pulumi preview was not run</summary>
-
-| Metric | Value |
-| :--- | ---: |
-| **Projected monthly** | ${summary.projectedMonthly.toFixed(2)} ${currency} |
-| **Actual month-to-date** | ${summary.totalActualMTD.toFixed(2)} ${currency} |
-| **Projected delta** | ${summary.projectedDelta.toFixed(2)} ${currency} |
-| **Potential savings** | ${summary.potentialSavings.toFixed(2)} ${currency} |
-
-*From \`finfocus overview --state-only\`. Pending changes are not included.*
-
-</details>
-`;
-}
-/**
- * Format the unpriced resources section when resources could not be priced.
- * Renders a table showing resource type, resource ID (short form), plugin name, and error message.
- * Includes a note that these resources are NOT included in the total cost.
- *
- * @param errors - Array of FinfocusReportError entries, or null/empty
- * @returns Markdown string with the unpriced resources section, or empty string if no errors
- */
-function formatUnpricedResourcesSection(errors) {
-    if (!errors || errors.length === 0) {
-        return '';
-    }
-    const displayErrors = errors.slice(0, 20);
-    const truncated = errors.length > 20 ? errors.length - 20 : 0;
-    const errorRows = displayErrors
-        .map((err) => {
-        const resourceIdShort = err.resourceId.split('::').pop() || err.resourceId;
-        return `| ${err.resourceType} | ${resourceIdShort} | ${err.pluginName} | ${err.message} |`;
-    })
-        .join('\n');
-    const truncatedNote = truncated > 0 ? `\nand ${truncated} more` : '';
-    return `
-<details>
-<summary><strong>⚠️ Resources Not Priced</strong> (${errors.length} ${errors.length === 1 ? 'resource' : 'resources'})</summary>
-
-| Type | Resource | Plugin | Reason |
-| :--- | :--- | :--- | :--- |
-${errorRows}${truncatedNote}
-
-*These resources could not be priced and are not included in the cost total above.*
-
-</details>`;
-}
-/**
- * Assembles a markdown-formatted cloud cost comment combining cost, resource, budget, recommendation, actuals, and sustainability data.
- *
- * @param report - Primary finfocus report containing summary, resources, diffs, and provider breakdown
- * @param config - Optional action configuration that controls formatting and which sections to show
- * @param recommendationsReport - Optional recommendations with estimated savings to include in the comment
- * @param actualCostReport - Optional actual cost data (time window, items, totals) to include alongside estimates
- * @param sustainabilityReport - Optional sustainability metrics (CO2e and related details) to include
- * @param budgetStatus - Optional budget status rendered via GitHub alert syntax
- * @param estimateReport - Optional what-if estimate report to include
- * @param clusterReport - Optional Kubernetes cluster allocation from `finfocus cost cluster`
- * @param stateOnlyReport - Optional `finfocus overview --state-only` summary
- * @returns A markdown string containing the assembled comment body with sections for projected monthly cost, cost diff and percent change, budget status, resource and provider breakdowns, actual costs, recommendations, what-if estimate, sustainability, and an optional detailed note.
- */
-function formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
-    // Handle both new and legacy report formats
-    const currency = report.summary?.currency ?? report.currency ?? 'USD';
-    const totalMonthly = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
-    const total = totalMonthly.toFixed(2);
-    const monthlyCostChange = extractMonthlyCostChange(report.diff);
-    const percentChange = extractPercentChange(report.diff);
-    const diff = monthlyCostChange.toFixed(2);
-    const percent = percentChange.toFixed(2);
-    let diffText = `${diff} ${currency}`;
-    if (report.diff) {
-        if (monthlyCostChange > 0) {
-            diffText = `📈 +${diffText}`;
-        }
-        else if (monthlyCostChange < 0) {
-            diffText = `📉 ${diffText}`;
-        }
-    }
-    const resources = report.resources ?? report.summary?.resources ?? [];
-    let resourceTable = '';
-    let providerBreakdown = '';
-    const isDetailed = config?.detailedComment === true;
-    if (config && (0,display/* usesDisplayControls */.js)(config)) {
-        const displayed = (0,display/* formatDisplaySections */.Wk)(report, config, currency);
-        resourceTable = displayed.resourceTable;
-        providerBreakdown = displayed.groupTable;
-    }
-    else {
-        if (resources.length > 0) {
-            const sortedResources = [...resources].sort((a, b) => b.monthly - a.monthly);
-            if (isDetailed) {
-                // Detailed view: All resources with notes and breakdown
-                const resourceRows = sortedResources
-                    .map((r) => {
-                    const name = r.resourceId.split('::').pop() || r.resourceId;
-                    const notes = r.notes ? `<br/>*${r.notes}*` : '';
-                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} | ${notes} |`;
-                })
-                    .join('\n');
-                resourceTable = `
-
-<details>
-<summary><strong>📋 Full Resource Breakdown</strong> (${sortedResources.length} resources)</summary>
-
-| Resource | Type | Monthly Cost | Notes |
-| :--- | :--- | ---: | :--- |
-${resourceRows}
-
-</details>
-`;
-            }
-            else if (resources.length <= 20) {
-                // Standard view: Top resources in collapsible section
-                const topResources = sortedResources.filter((r) => r.monthly > 0).slice(0, 10);
-                const resourceRows = topResources
-                    .map((r) => {
-                    const name = r.resourceId.split('::').pop() || r.resourceId;
-                    return `| ${name} | ${r.resourceType} | ${r.monthly.toFixed(2)} ${currency} |`;
-                })
-                    .join('\n');
-                if (resourceRows) {
-                    resourceTable = `
-
-<details>
-<summary><strong>📊 Top Resources</strong> (${topResources.length} of ${resources.length})</summary>
-
-| Resource | Type | Monthly Cost |
-| :--- | :--- | ---: |
-${resourceRows}
-
-</details>
-`;
-                }
-            }
-        }
-        // Build provider breakdown only if multiple providers
-        if (report.summary?.byProvider && Object.keys(report.summary.byProvider).length > 1) {
-            const providerRows = Object.entries(report.summary.byProvider)
-                .filter(([, cost]) => cost > 0)
-                .sort(([, a], [, b]) => b - a)
-                .map(([provider, cost]) => `| ${provider} | ${cost.toFixed(2)} ${currency} |`)
-                .join('\n');
-            if (providerRows) {
-                providerBreakdown = `
-
-<details>
-<summary><strong>☁️ Cost by Provider</strong></summary>
-
-| Provider | Monthly Cost |
-| :--- | ---: |
-${providerRows}
-
-</details>
-`;
-            }
-        }
-    }
-    // Build Actual Cost Section
-    let actualCostSection = '';
-    let actualCostRow = '';
-    if (actualCostReport && actualCostReport.total > 0) {
-        const actualTotal = actualCostReport.total.toFixed(2);
-        actualCostRow = `| **Actual (${config?.actualCostsPeriod || '7d'})** | ${actualTotal} ${actualCostReport.currency} |`;
-        // Actual Costs Breakdown Table (collapsible)
-        if (actualCostReport.items.length > 0) {
-            const actualRows = actualCostReport.items
-                .sort((a, b) => b.cost - a.cost)
-                .map((item) => `| ${item.name} | ${item.cost.toFixed(2)} ${item.currency} |`)
-                .join('\n');
-            actualCostSection = `
-
-<details>
-<summary><strong>💵 Actual Costs</strong> (${actualCostReport.startDate} to ${actualCostReport.endDate})</summary>
-
-| ${config?.actualCostsGroupBy || 'Provider'} | Cost |
-| :--- | ---: |
-| **Total** | **${actualTotal} ${actualCostReport.currency}** |
-${actualRows}
-
-</details>
-`;
-        }
-    }
-    const detailNote = isDetailed ? '\n*Detailed breakdown enabled*' : '';
-    const recommendationsSection = formatRecommendationsSection(recommendationsReport);
-    const sustainabilitySection = sustainabilityReport
-        ? formatSustainabilitySection(sustainabilityReport, config, report)
-        : '';
-    const estimateSection = estimateReport ? formatEstimateSection(estimateReport) : '';
-    const unpricedResourcesSection = formatUnpricedResourcesSection(report.errors);
-    const declineSection = formatDeclineSection(report);
-    const clusterSection = clusterReport ? formatClusterSection(clusterReport) : '';
-    const stateOnlySection = stateOnlyReport ? formatStateOnlySection(stateOnlyReport) : '';
-    // Basic budget status section (local math; finfocus has no budget status command)
-    const budgetSection = formatBudgetSection(budgetStatus);
-    // Calculate percent used for dashboard from budget status
-    const percentUsed = budgetStatus?.percentUsed;
-    // Calculate achievable savings for dashboard (max per resource+action_type group)
-    // This avoids inflating the total by summing mutually exclusive options
-    const achievableSavings = calculateAchievableSavings(recommendationsReport?.recommendations) || undefined;
-    // Build dashboard summary row
-    const dashboardSummary = formatDashboardSummary(totalMonthly, currency, percentUsed, achievableSavings);
-    return `## Cloud Cost Estimate
-
-${dashboardSummary}
-${budgetSection}
-<details>
-<summary><strong>📈 Cost Details</strong></summary>
-
-| Metric | Value |
-| :--- | ---: |
-| **Projected Monthly** | ${total} ${currency} |
-${actualCostRow ? actualCostRow + '\n' : ''}| **Cost Diff** | ${diffText} |
-| **% Change** | ${percent}% |
-
-</details>
-${resourceTable}${providerBreakdown}${actualCostSection}${unpricedResourcesSection}${declineSection}${clusterSection}${stateOnlySection}${recommendationsSection}${estimateSection}${sustainabilitySection}${detailNote}
-
----
-<sub>Estimates by [finfocus](https://github.com/rshade/finfocus)</sub>
-`;
-}
-
 ;// CONCATENATED MODULE: ./src/comment.ts
 
 
@@ -44232,6 +44255,7 @@ class ConfigManager {
 }
 
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -44654,9 +44678,10 @@ async function run() {
             if (config.debug) {
                 main_core/* info */.pq(`Recommendations took: ${Date.now() - recommendationsStartTime}ms`);
             }
-            main_core/* setOutput */.uH('total-savings', recommendationsReport.summary.total_savings.toString());
+            const achievableSavings = calculateAchievableSavings(recommendationsReport.recommendations);
+            main_core/* setOutput */.uH('total-savings', achievableSavings.toString());
             main_core/* setOutput */.uH('recommendation-count', recommendationsReport.summary.total_count.toString());
-            main_core/* info */.pq(`💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`);
+            main_core/* info */.pq(`💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`);
             main_core/* endGroup */.N4();
         }
         else if (config.includeRecommendations && config.stateOnly && !planFileExists) {

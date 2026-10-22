@@ -7,6 +7,10 @@ import { FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostR
  * resource/action, summing all options inflates the total. This function groups by
  * resource_id + action_type and takes the max savings per group for an accurate total.
  *
+ * This is a heuristic: the finfocus CLI JSON does not expose the spec's modification_type, so
+ * two independent recommendations of the same action type on one resource cannot be told apart
+ * from alternatives and are undercounted (only the larger one is counted).
+ *
  * @param recommendations - Array of recommendations from finfocus, or undefined
  * @returns Total achievable savings (max per resource+action_type group)
  */

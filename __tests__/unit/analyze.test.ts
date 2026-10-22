@@ -630,3 +630,51 @@ describe('Analyzer', () => {
     });
   });
 });
+
+describe('calculateSustainabilityMetrics units', () => {
+  const analyzer = new Analyzer();
+  const resource = (value: number, unit: string, id = 'r') => ({
+    resourceType: 'aws:ec2/instance:Instance',
+    resourceId: id,
+    sustainability: { carbon_footprint: { value, unit } },
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('normalizes gram values from aws-public to kg', () => {
+    const report: any = {
+      summary: { totalMonthly: 137.67, currency: 'USD' },
+      resources: [
+        resource(3507.61, 'gCO2e', 'a'),
+        resource(3507.61, 'gCO2e', 'b'),
+        resource(2757.1, 'gCO2e', 'c'),
+        resource(14.72, 'gCO2e', 'd'),
+      ],
+    };
+    const { totalCO2e, carbonIntensity } = analyzer.calculateSustainabilityMetrics(report);
+    expect(totalCO2e).toBeCloseTo(9.78704, 5);
+    expect(carbonIntensity).toBeCloseTo(71.09, 2);
+  });
+
+  it.each([
+    ['g', 1000, 1],
+    ['GCO2E', 1000, 1],
+    ['kg', 2, 2],
+    ['kgCO2e', 2, 2],
+    ['t', 1, 1000],
+    ['tCO2e', 1, 1000],
+    ['lb', 10, 4.53592],
+    ['lbCO2e', 10, 4.53592],
+  ])('converts %s to kg', (unit, value, expectedKg) => {
+    const report: any = { resources: [resource(value, unit)] };
+    expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBeCloseTo(expectedKg, 5);
+  });
+
+  it('skips resources with an unknown unit and warns', () => {
+    const report: any = { resources: [resource(5, 'kgCO2e', 'a'), resource(999, 'stone', 'b')] };
+    expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBe(5);
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('"stone"'));
+  });
+});

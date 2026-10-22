@@ -14,6 +14,7 @@ import { reportFromStateOnly } from './v04.js';
 import { Installer } from './install.js';
 import { PluginManager } from './plugins.js';
 import { Analyzer } from './analyze.js';
+import { calculateAchievableSavings } from './formatter.js';
 import { Commenter } from './comment.js';
 import { ConfigManager } from './config.js';
 import {
@@ -494,10 +495,11 @@ async function run(): Promise<void> {
         core.info(`Recommendations took: ${Date.now() - recommendationsStartTime}ms`);
       }
 
-      core.setOutput('total-savings', recommendationsReport.summary.total_savings.toString());
+      const achievableSavings = calculateAchievableSavings(recommendationsReport.recommendations);
+      core.setOutput('total-savings', achievableSavings.toString());
       core.setOutput('recommendation-count', recommendationsReport.summary.total_count.toString());
       core.info(
-        `💰 Potential monthly savings: ${recommendationsReport.summary.total_savings} ${recommendationsReport.summary.currency}`,
+        `💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`,
       );
       core.endGroup();
     } else if (config.includeRecommendations && config.stateOnly && !planFileExists) {
