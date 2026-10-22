@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.1.0](https://github.com/rshade/finfocus-action/compare/v2.0.0...v2.1.0) (2026-10-22)
+
+
+### Added
+
+* filter and group cost comments ([#106](https://github.com/rshade/finfocus-action/issues/106)) ([0dab1f4](https://github.com/rshade/finfocus-action/commit/0dab1f4bdc686ed130c3e417b6dd01620d2302c7)), closes [#20](https://github.com/rshade/finfocus-action/issues/20)
+* **forecast:** hold the current monthly total when there is no history ([#133](https://github.com/rshade/finfocus-action/issues/133)) ([74fc107](https://github.com/rshade/finfocus-action/commit/74fc107053b15a8a53b33572200992a8ee7f4f41))
+* **output:** add NDJSON reports and name the artifact when rows are capped ([#132](https://github.com/rshade/finfocus-action/issues/132)) ([ea77c2b](https://github.com/rshade/finfocus-action/commit/ea77c2ba72c0464205bf889004f9e756dc3a5911))
+* **output:** write the projected report as a JSON artifact ([#131](https://github.com/rshade/finfocus-action/issues/131)) ([89fe9af](https://github.com/rshade/finfocus-action/commit/89fe9af84071c4d436601dfc2d1b2409c975bdd9))
+
+
+### Fixed
+
+* **budget:** drop the unused budget status parser ([#130](https://github.com/rshade/finfocus-action/issues/130)) ([e0a6e40](https://github.com/rshade/finfocus-action/commit/e0a6e401501af0a15a66b69bb8cfe61fa549f1d8))
+* **budget:** merge cost.budgets into config.hujson ([#122](https://github.com/rshade/finfocus-action/issues/122)) ([c6360d5](https://github.com/rshade/finfocus-action/commit/c6360d5d6ac14431f8b4de3dfe5e1ef0a041378f))
+* **comment:** normalize carbon units and use one savings figure ([#121](https://github.com/rshade/finfocus-action/issues/121)) ([5e8e2c5](https://github.com/rshade/finfocus-action/commit/5e8e2c5a789d28a59e3e8939c9af1013f477a66d))
+* **comment:** reject inherited carbon units and mixed-currency savings totals ([#127](https://github.com/rshade/finfocus-action/issues/127)) ([073ac4f](https://github.com/rshade/finfocus-action/commit/073ac4fd9a2bfb0f74fb1d903408fd4bda0b536a))
+* **deps:** update dependency typescript to v6 ([#108](https://github.com/rshade/finfocus-action/issues/108)) ([8e25b6f](https://github.com/rshade/finfocus-action/commit/8e25b6f68169b9289d0d804aa5281238fd92b90d))
+* **guardrails:** compare fail-on-cost-increase to the cost diff ([#123](https://github.com/rshade/finfocus-action/issues/123)) ([904949b](https://github.com/rshade/finfocus-action/commit/904949bebb462715da2197854c9f07f4658e9c30))
+* **sustainability:** omit a carbon diff finfocus does not report ([#124](https://github.com/rshade/finfocus-action/issues/124)) ([82668da](https://github.com/rshade/finfocus-action/commit/82668dae3e4775206c5542a9bf8e4f8bad5c267d))
+
+
+### Documentation
+
+* pin README examples at v2 and drop the zero estimate baseline ([#125](https://github.com/rshade/finfocus-action/issues/125)) ([591c60a](https://github.com/rshade/finfocus-action/commit/591c60a7bcbdd380beca0d95d7e940ad2efdad45))
+
 ## [2.0.0](https://github.com/rshade/finfocus-action/compare/v1.2.2...v2.0.0) (2026-10-05)
 
 
