@@ -98,6 +98,7 @@ run_action() {
       INPUT_BUDGET_CURRENCY="USD" \
       INPUT_GENERATE_ARTIFACT="true" \
       INPUT_ARTIFACT_NAME="cost-report" \
+      INPUT_OUTPUT_FORMAT="ndjson" \
       "$node_bin" "$ROOT/dist/index.js"
   ); then
     fail "action: dist/index.js failed for finfocus $version"
@@ -131,6 +132,15 @@ run_action() {
     pass "action: wrote report JSON at $report_json"
   else
     fail "action: report JSON missing or empty: '$report_json'"
+  fi
+  local ndjson resources
+  ndjson=$(output_value "$tmp/github-output" report-ndjson)
+  resources=$(output_value "$tmp/github-output" total-resources)
+  if [ -n "$ndjson" ] && printf '%s\n' "$ndjson" | head -n1 | jq -e '.resourceType' >/dev/null \
+    && awk -v n="$resources" 'BEGIN { exit !(n+0 > 0) }'; then
+    pass "action: ndjson report has $resources resources"
+  else
+    fail "action: ndjson output missing: resources='$resources'"
   fi
   if grep -q 'Budget Status' "$tmp/comment.md" && grep -q '100.00' "$tmp/comment.md"; then
     pass "action: budget section is populated from budget-amount"

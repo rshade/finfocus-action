@@ -171,8 +171,9 @@ main.ts
   (`resource`, `type`, `provider`, `service`, `tag:<key>`) is action-side. `cost projected`
   has no `--group-by`. `min-cost-threshold`, `max-resources-displayed`, `sort-by`, and
   `show-only-changes` change the comment only. The projected monthly total stays the CLI total.
-- Do not implement pagination, NDJSON, or cost forecasting while issues #49, #21, and #19
-  are still open for re-evaluation. Those overlap #89 and were left out on purpose.
+- `output-format: ndjson` with `generate-artifact: true` writes one JSON resource per
+  line. The comment cap is `max-resources-displayed`. When that cap hides rows and an
+  artifact is generated, the comment names the artifact.
 
 ## Active Technologies
 

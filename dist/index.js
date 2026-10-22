@@ -31391,7 +31391,12 @@ function displayNotes(selection, config, currency) {
         notes.push(`${selection.hiddenByCost} resources under ${(config.minCostThreshold ?? 0).toFixed(2)} ${currency} hidden.`);
     }
     if (selection.hiddenByCap > 0) {
-        notes.push(`Showing ${selection.shown.length} of ${selection.shown.length + selection.hiddenByCap} resources.`);
+        const shown = selection.shown.length;
+        const total = shown + selection.hiddenByCap;
+        const artifact = config.generateArtifact === true
+            ? ` Full report is in the ${config.artifactName || 'cost-report'} artifact.`
+            : '';
+        notes.push(`Showing ${shown} of ${total} resources.${artifact}`);
     }
     if (selection.hiddenByChange > 0 || selection.hiddenByCost > 0 || selection.hiddenByCap > 0) {
         notes.push('The projected monthly total above still includes hidden resources.');
@@ -38245,13 +38250,33 @@ class Analyzer {
 ;// CONCATENATED MODULE: ./src/report-output.ts
 
 
+function safeName(name) {
+    return name.replace(/[^a-zA-Z0-9._-]/g, '').replace(/^\.+/, '') || 'cost-report';
+}
 /** Write the projected report as pretty JSON. Returns the file path. */
 function writeReportJson(report, directory, name) {
-    const safe = name.replace(/[^a-zA-Z0-9._-]/g, '').replace(/^\.+/, '') || 'cost-report';
     external_fs_.mkdirSync(directory, { recursive: true });
-    const file = external_path_.join(directory, `${safe}.json`);
+    const file = external_path_.join(directory, `${safeName(name)}.json`);
     external_fs_.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     return file;
+}
+/** One JSON object per resource, for log aggregators. Returns the file path. */
+function writeReportNdjson(report, directory, name) {
+    const resources = report.resources ?? report.summary?.resources ?? [];
+    const body = resources.map((resource) => JSON.stringify(ndjsonResource(resource))).join('\n');
+    external_fs_.mkdirSync(directory, { recursive: true });
+    const file = external_path_.join(directory, `${safeName(name)}.ndjson`);
+    external_fs_.writeFileSync(file, body.length > 0 ? `${body}\n` : '', 'utf8');
+    return file;
+}
+function ndjsonResource(resource) {
+    return {
+        resourceId: resource.resourceId,
+        resourceType: resource.resourceType,
+        monthly: resource.monthly,
+        hourly: resource.hourly,
+        currency: resource.currency,
+    };
 }
 
 ;// CONCATENATED MODULE: ./src/formatter.ts
@@ -44479,6 +44504,11 @@ async function run() {
         const sortBy = (0,display/* parseSortBy */.Lh)(lib_core/* getInput */.V4('sort_by'));
         const generateArtifact = parseBoolean(lib_core/* getInput */.V4('generate_artifact'), false);
         const artifactName = lib_core/* getInput */.V4('artifact_name') || 'cost-report';
+        const outputFormatInput = lib_core/* getInput */.V4('output_format') || 'json';
+        const outputFormat = outputFormatInput === 'ndjson' ? 'ndjson' : 'json';
+        if (outputFormatInput !== 'json' && outputFormatInput !== 'ndjson') {
+            lib_core/* warning */.$e(`output-format "${outputFormatInput}" is not json or ndjson. Using json.`);
+        }
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -44525,6 +44555,7 @@ async function run() {
             sortBy,
             generateArtifact,
             artifactName,
+            outputFormat,
         };
         if (config.debug) {
             lib_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
@@ -44688,11 +44719,20 @@ async function run() {
         lib_core/* endGroup */.N4();
         lib_core/* setOutput */.uH('total-monthly-cost', totalMonthlyCost.toString());
         lib_core/* setOutput */.uH('currency', currency);
+        const resourceCount = report.resources?.length ?? report.summary?.resources?.length ?? 0;
+        lib_core/* setOutput */.uH('total-resources', resourceCount.toString());
         if (config.generateArtifact) {
             const directory = process.env.RUNNER_TEMP || external_os_.tmpdir();
-            const reportPath = writeReportJson(report, directory, config.artifactName || 'cost-report');
+            const artifact = config.artifactName || 'cost-report';
+            const reportPath = writeReportJson(report, directory, artifact);
             lib_core/* setOutput */.uH('report-json-path', reportPath);
             lib_core/* info */.pq(`Wrote cost report JSON to ${reportPath}`);
+            if (config.outputFormat === 'ndjson') {
+                const ndjsonPath = writeReportNdjson(report, directory, artifact);
+                const ndjson = external_fs_.readFileSync(ndjsonPath, 'utf8');
+                lib_core/* setOutput */.uH('report-ndjson', ndjson.length > 50000 ? ndjsonPath : ndjson);
+                lib_core/* info */.pq(`Wrote cost report NDJSON to ${ndjsonPath}`);
+            }
         }
         lib_core/* info */.pq(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
         // Set unpriced resource count (v0.4.1)

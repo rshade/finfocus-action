@@ -64,6 +64,8 @@ export interface ActionConfiguration {
     /** Write the full projected report as JSON for actions/upload-artifact. */
     generateArtifact?: boolean;
     artifactName?: string;
+    /** json writes one document. ndjson writes one resource per line. */
+    outputFormat?: 'json' | 'ndjson';
 }
 export interface BudgetAlert {
     threshold: number;

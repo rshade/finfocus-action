@@ -351,9 +351,13 @@ function displayNotes(
     );
   }
   if (selection.hiddenByCap > 0) {
-    notes.push(
-      `Showing ${selection.shown.length} of ${selection.shown.length + selection.hiddenByCap} resources.`,
-    );
+    const shown = selection.shown.length;
+    const total = shown + selection.hiddenByCap;
+    const artifact =
+      config.generateArtifact === true
+        ? ` Full report is in the ${config.artifactName || 'cost-report'} artifact.`
+        : '';
+    notes.push(`Showing ${shown} of ${total} resources.${artifact}`);
   }
   if (selection.hiddenByChange > 0 || selection.hiddenByCost > 0 || selection.hiddenByCap > 0) {
     notes.push('The projected monthly total above still includes hidden resources.');
