@@ -6,10 +6,9 @@ export const modules = {
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   checkBudgetThreshold: () => (/* binding */ checkBudgetThreshold),
-/* harmony export */   checkCarbonThreshold: () => (/* binding */ checkCarbonThreshold)
+/* harmony export */   checkBudgetThreshold: () => (/* binding */ checkBudgetThreshold)
 /* harmony export */ });
-/* unused harmony exports BudgetThresholdMessages, checkBudgetThresholdWithExitCodes, checkBudgetThresholdWithJson, checkThreshold */
+/* unused harmony exports BudgetThresholdMessages, checkBudgetThresholdWithExitCodes, checkBudgetThresholdWithJson, checkThreshold, checkCarbonThreshold */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2398);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(5260);
 /* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6141);
@@ -218,7 +217,7 @@ function checkCarbonThreshold(threshold, diff, baseTotal) {
         const currentPct = (diff / baseTotal) * 100;
         return currentPct > limitPct;
     }
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e(`Malformed carbon threshold input: "${threshold}". Expected format like "10kg" or "10%". Skipping guardrail.`);
+    core.warning(`Malformed carbon threshold input: "${threshold}". Expected format like "10kg" or "10%". Skipping guardrail.`);
     return false;
 }
 
