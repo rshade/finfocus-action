@@ -305,7 +305,7 @@ runs:
         INPUT_OUTPUT_FORMAT: ${{ inputs.output-format }}
     - name: 'Upload cost report'
       if: inputs.generate-artifact == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ steps.run.outputs.report-json-path }}
