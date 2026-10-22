@@ -186,6 +186,10 @@ inputs:
     description: 'Days to keep the cost report artifact.'
     required: false
     default: '30'
+  output-format:
+    description: 'Report file format when generate-artifact is true: json or ndjson. ndjson is one resource per line.'
+    required: false
+    default: 'json'
 outputs:
   total-monthly-cost:
     description: 'The absolute projected monthly cost'
@@ -199,6 +203,12 @@ outputs:
   report-json-path:
     description: 'Path to the generated full JSON report'
     value: ${{ steps.run.outputs.report-json-path }}
+  report-ndjson:
+    description: 'NDJSON report body when output-format is ndjson and the body is under 50 KB. Otherwise the NDJSON file path.'
+    value: ${{ steps.run.outputs.report-ndjson }}
+  total-resources:
+    description: 'Resource count in the projected report, before the comment cap.'
+    value: ${{ steps.run.outputs.total-resources }}
   policy-pack-path:
     description: 'Path to the set up policy pack directory'
     value: ${{ steps.run.outputs.policy-pack-path }}
@@ -292,6 +302,7 @@ runs:
         INPUT_SORT_BY: ${{ inputs.sort-by }}
         INPUT_GENERATE_ARTIFACT: ${{ inputs.generate-artifact }}
         INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        INPUT_OUTPUT_FORMAT: ${{ inputs.output-format }}
     - name: 'Upload cost report'
       if: inputs.generate-artifact == 'true'
       uses: actions/upload-artifact@v4

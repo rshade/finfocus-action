@@ -222,6 +222,23 @@ describe('formatDisplaySections', () => {
     expect(body.resourceTable).toContain('Net change');
     expect(body.resourceTable).toContain('+12.50 USD');
   });
+
+  it('names the artifact when the comment cap hides resources', () => {
+    const report: FinfocusReport = {
+      summary: { totalMonthly: 30, totalHourly: 0, currency: 'USD' },
+      resources: [
+        resource({ resourceId: 'urn::a', monthly: 20 }),
+        resource({ resourceId: 'urn::b', monthly: 10 }),
+      ],
+    };
+    const body = formatDisplaySections(
+      report,
+      config({ maxResourcesDisplayed: 1, generateArtifact: true, artifactName: 'cost-report' }),
+      'USD',
+    );
+    expect(body.resourceTable).toContain('Showing 1 of 2 resources.');
+    expect(body.resourceTable).toContain('Full report is in the cost-report artifact.');
+  });
 });
 
 describe('plan annotations', () => {
