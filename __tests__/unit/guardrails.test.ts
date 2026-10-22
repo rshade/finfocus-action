@@ -9,14 +9,11 @@ import {
 import { BudgetExitCode, FinfocusReport } from '../../src/types.js';
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
-import * as install from '../../src/install.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
 jest.mock('@actions/core');
 jest.mock('@actions/exec');
-jest.mock('../../src/install.js');
-
 describe('Guardrails', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -457,50 +454,30 @@ describe('Guardrails', () => {
       jest.clearAllMocks();
     });
 
-    it('should use exit codes for version >= 0.2.5', async () => {
-      (install.getFinfocusVersion as jest.Mock).mockResolvedValue('0.2.5');
-      (install.supportsExitCodes as jest.Mock).mockReturnValue(true);
-      (exec.getExecOutput as jest.Mock).mockResolvedValue({
-        exitCode: BudgetExitCode.PASS,
-        stdout: '',
-        stderr: '',
-      });
-
-      const result = await checkBudgetThreshold(mockConfig, mockReport);
-
-      expect(result.passed).toBe(true);
-      expect(exec.getExecOutput).toHaveBeenCalled();
-    });
-
-    it('should use JSON fallback for version < 0.2.5', async () => {
-      (install.getFinfocusVersion as jest.Mock).mockResolvedValue('0.2.4');
-      (install.supportsExitCodes as jest.Mock).mockReturnValue(false);
-
-      const result = await checkBudgetThreshold(mockConfig, mockReport);
+    it('compares the diff locally and does not call finfocus', () => {
+      const result = checkBudgetThreshold(mockConfig, mockReport);
 
       expect(result.passed).toBe(true);
       expect(result.severity).toBe('none');
-      expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('falling back to JSON parsing'),
-      );
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
     });
 
-    it('should use JSON fallback when version detection fails', async () => {
-      // getFinfocusVersion returns '0.0.0' sentinel on failure instead of throwing
-      (install.getFinfocusVersion as jest.Mock).mockResolvedValue('0.0.0');
+    it('fails a +137 USD diff against 100USD and passes a +50 USD diff', () => {
+      const over: FinfocusReport = {
+        summary: { totalMonthly: 200, totalHourly: 0.27, currency: 'USD' },
+        diff: { totalDelta: 137, hourlyDelta: 0, percentChange: 0 },
+      };
+      const under: FinfocusReport = {
+        summary: { totalMonthly: 100, totalHourly: 0.14, currency: 'USD' },
+        diff: { totalDelta: 50, hourlyDelta: 0, percentChange: 0 },
+      };
 
-      const result = await checkBudgetThreshold(mockConfig, mockReport);
-
-      expect(result.passed).toBe(true);
-      expect(core.warning).toHaveBeenCalledWith(
-        expect.stringContaining('Could not detect finfocus version'),
-      );
+      expect(checkBudgetThreshold(mockConfig, over).passed).toBe(false);
+      expect(checkBudgetThreshold(mockConfig, under).passed).toBe(true);
+      expect(exec.getExecOutput).not.toHaveBeenCalled();
     });
 
-    it('should preserve existing fail-on-cost-increase behavior', async () => {
-      (install.getFinfocusVersion as jest.Mock).mockResolvedValue('0.2.4');
-      (install.supportsExitCodes as jest.Mock).mockReturnValue(false);
-
+    it('still fails a legacy monthly_cost_change above the threshold', () => {
       const exceedingReport: FinfocusReport = {
         ...mockReport,
         diff: {
@@ -509,7 +486,7 @@ describe('Guardrails', () => {
         },
       };
 
-      const result = await checkBudgetThreshold(mockConfig, exceedingReport);
+      const result = checkBudgetThreshold(mockConfig, exceedingReport);
 
       expect(result.passed).toBe(false);
       expect(result.severity).toBe('exceeded');

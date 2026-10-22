@@ -33,14 +33,13 @@ export declare function checkBudgetThresholdWithExitCodes(config: ActionConfigur
  */
 export declare function checkBudgetThresholdWithJson(config: ActionConfiguration, report: FinfocusReport): BudgetThresholdResult;
 /**
- * Main budget threshold check orchestrator.
- * Detects finfocus version and uses exit codes (v0.2.5+) or JSON parsing (older versions).
+ * Compare `fail-on-cost-increase` with the projected cost diff.
  *
- * @param config - Action configuration
- * @param report - Finfocus report with cost data (used for JSON fallback)
- * @returns BudgetThresholdResult with pass/fail status and severity
+ * This does not call finfocus. Budget enforcement is
+ * `checkBudgetThresholdWithExitCodes`, and only when `fail-on-budget-breach`
+ * is set.
  */
-export declare function checkBudgetThreshold(config: ActionConfiguration, report: FinfocusReport): Promise<BudgetThresholdResult>;
+export declare function checkBudgetThreshold(config: ActionConfiguration, report: FinfocusReport): BudgetThresholdResult;
 export declare function checkThreshold(threshold: string | null, diff: number, currency: string): boolean;
 /**
  * Determines whether a carbon threshold is exceeded.

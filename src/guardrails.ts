@@ -7,7 +7,6 @@ import {
   FinfocusReport,
   isV041Diff,
 } from './types.js';
-import { getFinfocusVersion, supportsExitCodes } from './install.js';
 import { parseErrorEnvelope, formatEnvelopeError } from './errors.js';
 import { filterArgs } from './display.js';
 
@@ -158,40 +157,16 @@ export function checkBudgetThresholdWithJson(
 }
 
 /**
- * Main budget threshold check orchestrator.
- * Detects finfocus version and uses exit codes (v0.2.5+) or JSON parsing (older versions).
+ * Compare `fail-on-cost-increase` with the projected cost diff.
  *
- * @param config - Action configuration
- * @param report - Finfocus report with cost data (used for JSON fallback)
- * @returns BudgetThresholdResult with pass/fail status and severity
+ * This does not call finfocus. Budget enforcement is
+ * `checkBudgetThresholdWithExitCodes`, and only when `fail-on-budget-breach`
+ * is set.
  */
-export async function checkBudgetThreshold(
+export function checkBudgetThreshold(
   config: ActionConfiguration,
   report: FinfocusReport,
-): Promise<BudgetThresholdResult> {
-  const version = await getFinfocusVersion();
-
-  // Handle version detection failure (getFinfocusVersion returns '0.0.0' on failure)
-  if (version === '0.0.0') {
-    core.warning('Could not detect finfocus version, falling back to JSON parsing');
-    return checkBudgetThresholdWithJson(config, report);
-  }
-
-  if (config.debug) {
-    core.debug(`Detected finfocus version: ${version}`);
-  }
-
-  const useExitCodes = supportsExitCodes(version);
-
-  if (config.debug) {
-    core.debug(`Using exit codes: ${useExitCodes}`);
-  }
-
-  if (useExitCodes) {
-    return checkBudgetThresholdWithExitCodes(config);
-  }
-
-  core.warning('finfocus version < 0.2.5, falling back to JSON parsing for threshold check');
+): BudgetThresholdResult {
   return checkBudgetThresholdWithJson(config, report);
 }
 
