@@ -44041,8 +44041,16 @@ function getOctokit(token, options, ...additionalPlugins) {
 
 
 
+
 class Commenter {
     marker = '<!-- finfocus-action-comment -->';
+    /**
+     * Write the PR comment body without calling GitHub.
+     * The contract job sets FINFOCUS_COMMENT_PATH so CI can assert the comment.
+     */
+    writeCommentFile(filePath, report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
+        external_fs_.writeFileSync(filePath, this.commentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport), 'utf8');
+    }
     async upsertComment(report, token, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
         const octokit = getOctokit(token);
         const context = github_context;
@@ -44051,8 +44059,7 @@ class Commenter {
             return;
         }
         const prNumber = context.payload.pull_request.number;
-        const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport)}`;
+        const body = this.commentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
         const { data: comments } = await octokit.rest.issues.listComments({
             ...context.repo,
             issue_number: prNumber,
@@ -44074,6 +44081,10 @@ ${formatCommentBody(report, config, recommendationsReport, actualCostReport, sus
                 body,
             });
         }
+    }
+    commentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport) {
+        return `${this.marker}
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport)}`;
     }
 }
 
@@ -44851,16 +44862,30 @@ async function run() {
             }
             lib_core/* endGroup */.N4();
         }
-        if (config.postComment && config.githubToken) {
-            lib_core/* info */.pq('');
-            lib_core/* startGroup */.Oh('💬 Posting PR comment');
-            const commentStartTime = Date.now();
+        const commentPath = process.env.FINFOCUS_COMMENT_PATH?.trim();
+        const shouldPost = config.postComment && Boolean(config.githubToken);
+        if (commentPath || shouldPost) {
             const commentReport = (0,display/* annotateReportFromPlan */.MH)(report, config.pulumiPlanJsonPath, config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'));
-            await commenter.upsertComment(commentReport, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
-            if (config.debug) {
-                lib_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
+            if (commentPath) {
+                lib_core/* info */.pq('');
+                lib_core/* startGroup */.Oh('💬 Writing PR comment body');
+                commenter.writeCommentFile(commentPath, commentReport, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
+                lib_core/* info */.pq(`Wrote PR comment body to ${commentPath}`);
+                lib_core/* endGroup */.N4();
             }
-            lib_core/* endGroup */.N4();
+            if (shouldPost) {
+                lib_core/* info */.pq('');
+                lib_core/* startGroup */.Oh('💬 Posting PR comment');
+                const commentStartTime = Date.now();
+                await commenter.upsertComment(commentReport, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
+                if (config.debug) {
+                    lib_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
+                }
+                lib_core/* endGroup */.N4();
+            }
+            else if (config.postComment) {
+                lib_core/* info */.pq('post-comment is set but github-token is empty. Skipping the GitHub comment.');
+            }
         }
         if (config.threshold) {
             lib_core/* info */.pq('');

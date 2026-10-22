@@ -27,7 +27,7 @@ jobs:
       - run: |
           npm run build
 
-  contract: # Real-binary contract test (AC-1.1/AC-1.2, issue #88)
+  contract: # Real finfocus release: CLI contract plus dist/index.js (issue #88)
     name: 'finfocus contract (${{ matrix.finfocus-version }})'
     runs-on: ubuntu-latest
     strategy:

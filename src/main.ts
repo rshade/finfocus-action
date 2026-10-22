@@ -568,31 +568,55 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
-    if (config.postComment && config.githubToken) {
-      core.info('');
-      core.startGroup('💬 Posting PR comment');
-      const commentStartTime = Date.now();
+    const commentPath = process.env.FINFOCUS_COMMENT_PATH?.trim();
+    const shouldPost = config.postComment && Boolean(config.githubToken);
+    if (commentPath || shouldPost) {
       const commentReport = annotateReportFromPlan(
         report,
         config.pulumiPlanJsonPath,
         config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'),
       );
-      await commenter.upsertComment(
-        commentReport,
-        config.githubToken,
-        config,
-        recommendationsReport,
-        actualCostReport,
-        sustainabilityReport,
-        budgetStatus,
-        estimateReport,
-        clusterReport,
-        stateOnlyReport,
-      );
-      if (config.debug) {
-        core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
+      if (commentPath) {
+        core.info('');
+        core.startGroup('💬 Writing PR comment body');
+        commenter.writeCommentFile(
+          commentPath,
+          commentReport,
+          config,
+          recommendationsReport,
+          actualCostReport,
+          sustainabilityReport,
+          budgetStatus,
+          estimateReport,
+          clusterReport,
+          stateOnlyReport,
+        );
+        core.info(`Wrote PR comment body to ${commentPath}`);
+        core.endGroup();
       }
-      core.endGroup();
+      if (shouldPost) {
+        core.info('');
+        core.startGroup('💬 Posting PR comment');
+        const commentStartTime = Date.now();
+        await commenter.upsertComment(
+          commentReport,
+          config.githubToken,
+          config,
+          recommendationsReport,
+          actualCostReport,
+          sustainabilityReport,
+          budgetStatus,
+          estimateReport,
+          clusterReport,
+          stateOnlyReport,
+        );
+        if (config.debug) {
+          core.info(`Comment posting took: ${Date.now() - commentStartTime}ms`);
+        }
+        core.endGroup();
+      } else if (config.postComment) {
+        core.info('post-comment is set but github-token is empty. Skipping the GitHub comment.');
+      }
     }
 
     if (config.threshold) {

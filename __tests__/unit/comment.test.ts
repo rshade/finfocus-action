@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as github from '@actions/github';
 import { Commenter } from '../../src/comment.js';
 
@@ -127,5 +130,18 @@ describe('Commenter', () => {
         body: expect.stringContaining('What-If Cost Estimate'),
       }),
     );
+  });
+
+  it('writes the comment body to a file without calling GitHub', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'finfocus-comment-'));
+    const file = path.join(dir, 'comment.md');
+
+    commenter.writeCommentFile(file, { projected_monthly_cost: 12.5, currency: 'USD' });
+
+    const body = fs.readFileSync(file, 'utf8');
+    expect(body).toContain('<!-- finfocus-action-comment -->');
+    expect(body).toContain('12.50');
+    expect(mockedGithub.getOctokit).not.toHaveBeenCalled();
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

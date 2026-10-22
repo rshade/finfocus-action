@@ -46,6 +46,103 @@ check_prereqs() {
   done
 }
 
+# Run dist/index.js with the release named by FINFOCUS_BIN.
+run_action() {
+  local tmp="$1"
+  local version node_bin
+  if [ ! -f "$ROOT/dist/index.js" ]; then
+    fail "action: dist/index.js is missing. Commit the ncc build."
+    return
+  fi
+  if ! node_bin=$(command -v node); then
+    fail "action: node is required to run dist/index.js"
+    return
+  fi
+  version=$("$BIN" --version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+  if [ -z "$version" ]; then
+    fail "action: could not parse a version from $BIN --version"
+    return
+  fi
+
+  local home="$tmp/action-home"
+  local tool_cache="$tmp/tool-cache"
+  local runner_temp="$tmp/runner-temp"
+  mkdir -p "$home" "$tool_cache" "$runner_temp"
+  : >"$tmp/github-output"
+  : >"$tmp/github-path"
+  : >"$tmp/github-state"
+
+  # Do not set FINFOCUS_HOME. finfocus v0.4.0 plugin install writes plugins
+  # under $HOME/.finfocus and ignores FINFOCUS_HOME, so a separate home would
+  # price the plan at $0.
+  if ! (
+    cd "$ROOT" || exit 1
+    env -u PULUMI_HOME -u FINFOCUS_HOME \
+      HOME="$home" \
+      RUNNER_TOOL_CACHE="$tool_cache" \
+      RUNNER_TEMP="$runner_temp" \
+      GITHUB_OUTPUT="$tmp/github-output" \
+      GITHUB_PATH="$tmp/github-path" \
+      GITHUB_STATE="$tmp/github-state" \
+      FINFOCUS_COMMENT_PATH="$tmp/comment.md" \
+      GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
+      INPUT_PULUMI_PLAN_JSON="$PLAN" \
+      INPUT_FINFOCUS_VERSION="$version" \
+      INPUT_INSTALL_PLUGINS="aws-public" \
+      INPUT_POST_COMMENT="false" \
+      INPUT_GITHUB_TOKEN="" \
+      INPUT_INCLUDE_RECOMMENDATIONS="true" \
+      INPUT_INCLUDE_SUSTAINABILITY="true" \
+      INPUT_INCLUDE_ACTUAL_COSTS="false" \
+      "$node_bin" "$ROOT/dist/index.js"
+  ); then
+    fail "action: dist/index.js failed for finfocus $version"
+    return
+  fi
+
+  local cost currency carbon
+  cost=$(output_value "$tmp/github-output" total-monthly-cost)
+  currency=$(output_value "$tmp/github-output" currency)
+  carbon=$(output_value "$tmp/github-output" total-carbon-footprint)
+  if awk -v c="$cost" 'BEGIN { exit !(c+0 > 0) }' && [ -n "$currency" ]; then
+    pass "action: total-monthly-cost=$cost $currency"
+  else
+    fail "action: expected a non-zero total-monthly-cost, got cost='$cost' currency='$currency'"
+  fi
+  if awk -v c="$carbon" 'BEGIN { exit !(c+0 > 0) }'; then
+    pass "action: total-carbon-footprint=$carbon kg"
+  else
+    fail "action: total-carbon-footprint is not a positive number: '$carbon'"
+  fi
+  if [ -s "$tmp/comment.md" ] \
+    && grep -q 'finfocus-action-comment' "$tmp/comment.md" \
+    && grep -q 'Monthly Cost' "$tmp/comment.md"; then
+    pass "action: wrote a PR comment body with a monthly cost"
+  else
+    fail "action: comment body missing marker or monthly cost"
+  fi
+}
+
+# Read one GITHUB_OUTPUT value. @actions/core writes name=value, or
+# name<<DELIM / value / DELIM when the toolkit uses a delimiter.
+output_value() {
+  local file="$1" name="$2"
+  awk -v name="$name" '
+    index($0, name "=") == 1 {
+      print substr($0, length(name) + 2)
+      exit
+    }
+    index($0, name "<<") == 1 {
+      delim = substr($0, length(name) + 3)
+      while ((getline line) > 0) {
+        if (line == delim) exit
+        print line
+      }
+      exit
+    }
+  ' "$file"
+}
+
 # run_cmd <outfile> <errfile> <cmd...> — captures exit code in EXIT
 run_cmd() {
   local out="$1" err="$2"
@@ -408,7 +505,16 @@ EOF
     fail "plugin list --available missing kubernetes or jev (exit=$EXIT)"
   fi
 
-  # 14. resource filter (issue #20): --filter is a cost projected flag.
+  # 14. break check: an unknown flag must fail. A finfocus release that starts
+  # accepting every flag, or a wrapper that ignores exit codes, fails this.
+  run_cmd "$tmp/out" "$tmp/err" "$BIN" cost projected --not-a-real-flag
+  if [ "$EXIT" -ne 0 ]; then
+    pass "break check: cost projected --not-a-real-flag exits $EXIT"
+  else
+    fail "break check: unknown flag exited 0"
+  fi
+
+  # 15. resource filter (issue #20): --filter is a cost projected flag.
   # type= matches a case-insensitive substring. The aws-simple plan has one EC2
   # instance, so type=ec2 keeps exactly that resource.
   run_cmd "$tmp/out" "$tmp/err" "$BIN" cost projected --help
@@ -428,6 +534,11 @@ EOF
   else
     fail "cost projected --filter type=ec2: exit=$EXIT err=$(tail -n1 "$tmp/err")"
   fi
+
+  # 16. Run the built action against this finfocus release. The action downloads
+  # that release, installs aws-public, and writes the PR comment body to
+  # FINFOCUS_COMMENT_PATH instead of calling GitHub.
+  run_action "$tmp"
 
   echo
   if [ "$failures" -gt 0 ]; then
