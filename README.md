@@ -93,8 +93,9 @@ remaining budget, usage percentage with a visual progress bar, and triggered ale
 
 > **Note:** The budget health and scoped-budget features were removed because finfocus has no
 > `budget status` command in v0.4.0. Budget enforcement works via `--exit-on-threshold` with the
-> action-owned exit code 10, and the action writes the budget as `cost.budgets.global` to
-> `~/.finfocus/config.yaml`.
+> action-owned exit code 10. The action merges the budget as `cost.budgets.global` into
+> `config.hujson` in `$FINFOCUS_HOME`, or `~/.finfocus` when that variable is unset. finfocus v0.4
+> ignores `config.yaml` once `config.hujson` exists, which plugin install creates.
 
 **Removed inputs and outputs (breaking):**
 
@@ -203,14 +204,17 @@ is the monthly total.
 
 ### Jev recommendation scoring (finfocus v0.4.0+)
 
-`enable-jev-scoring` writes this block to `~/.finfocus/config.yaml` and leaves
+`enable-jev-scoring` merges this block into `config.hujson` and leaves
 `--no-scoring` off the recommendations command:
 
-```yaml
-scoring:
-  enabled: true
-  plugin: jev
-  identifier_mode: pseudonymized
+```json
+{
+  "scoring": {
+    "enabled": true,
+    "plugin": "jev",
+    "identifier_mode": "pseudonymized"
+  }
+}
 ```
 
 Install the `jev` plugin and pass `TYPESAFE_API_KEY` as an environment variable.

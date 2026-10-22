@@ -87,7 +87,7 @@ inputs:
     required: false
     default: ''
   budget-amount:
-    description: 'Budget amount for cost tracking (e.g., 1000). Written as cost.budgets.global in ~/.finfocus/config.yaml so finfocus enforces it via --exit-on-threshold'
+    description: 'Budget amount for cost tracking (e.g., 1000). Merged as cost.budgets.global into ~/.finfocus/config.hujson (or $FINFOCUS_HOME) so finfocus enforces it via --exit-on-threshold'
     required: false
     default: ''
   budget-currency:

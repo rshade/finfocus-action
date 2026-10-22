@@ -81,7 +81,7 @@ main() {
   check_prereqs
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  cd "$tmp"
+  cd "$tmp" || exit 1
 
   echo "contract: binary=$BIN fixtures=$FIXTURE_DIR"
 
@@ -185,15 +185,24 @@ main() {
     fail "guardrail call shape: exit=$EXIT err=$(tail -n1 "$tmp/err")"
   fi
 
-  # 8. budget breach exit path (AC-2.3): with cost.budgets.global below the
-  # projected total, --exit-on-threshold --exit-code 10 must exit 10 and the
-  # table output must show the BUDGET STATUS block. Uses an isolated
-  # FINFOCUS_HOME with the installed plugins copied in.
+  # 8. budget breach after plugin install has created config.hujson.
+  # finfocus migrates config.yaml only when config.hujson does not exist yet.
+  # A yaml budget written afterwards is ignored, so --exit-on-threshold never
+  # fires. ConfigManager must merge cost.budgets.global into the hujson file
+  # and leave installed_plugins in place.
   local home="$tmp/finfocus-home"
   mkdir -p "$home"
   if [ -d "$HOME/.finfocus/plugins" ]; then
     cp -r "$HOME/.finfocus/plugins" "$home/plugins"
   fi
+  cat > "$home/config.hujson" <<'EOF'
+{
+  // plugin install records this before the action writes the budget
+  "installed_plugins": [
+    {"name": "aws-public", "version": "v0.2.0", "url": "https://example.com/aws-public"},
+  ],
+}
+EOF
   cat > "$home/config.yaml" <<'EOF'
 cost:
   budgets:
@@ -210,10 +219,55 @@ EOF
   run_cmd "$tmp/breach.txt" "$tmp/err" \
     env FINFOCUS_HOME="$home" "$BIN" cost projected --pulumi-json "$PLAN" \
     --exit-on-threshold --exit-code 10
-  if [ "$EXIT" -eq 10 ] && grep -q 'BUDGET STATUS' "$tmp/breach.txt"; then
-    pass "budget breach: exit 10 with BUDGET STATUS block (\$7.59 vs \$5.00 budget)"
+  if [ "$EXIT" -eq 0 ]; then
+    pass "budget yaml ignored once config.hujson exists (exit 0)"
   else
-    fail "budget breach: exit=$EXIT (want 10) out=$(grep -c 'BUDGET STATUS' "$tmp/breach.txt") BUDGET STATUS block(s)"
+    fail "budget yaml was honored beside config.hujson: exit=$EXIT (want 0)"
+  fi
+
+  if [ ! -x "$ROOT/node_modules/.bin/tsx" ]; then
+    fail "budget write: $ROOT/node_modules/.bin/tsx is missing. Run npm ci before scripts/contract.sh"
+  elif ! (
+    cd "$ROOT" || exit 1
+    env -u PULUMI_HOME FINFOCUS_HOME="$home" \
+      BUDGET_AMOUNT=5 \
+      BUDGET_CURRENCY=USD \
+      BUDGET_PERIOD=monthly \
+      BUDGET_ALERTS='[{"threshold":80,"type":"actual"},{"threshold":100,"type":"forecasted"}]' \
+      "$ROOT/node_modules/.bin/tsx" "$ROOT/scripts/write-budget-config.ts"
+  ); then
+    fail "budget write: ConfigManager.writeConfig failed"
+  elif jq -e '
+    .installed_plugins[0].name == "aws-public"
+    and .cost.budgets.global.amount == 5
+    and .cost.budgets.global.currency == "USD"
+    and .cost.budgets.global.period == "monthly"
+  ' "$home/config.hujson" >/dev/null; then
+    pass "budget write: merged cost.budgets.global into config.hujson and kept installed_plugins"
+  else
+    fail "budget write: config.hujson missing budget or plugins: $(cat "$home/config.hujson")"
+  fi
+
+  run_cmd "$tmp/breach.txt" "$tmp/err" \
+    env FINFOCUS_HOME="$home" "$BIN" cost projected --pulumi-json "$PLAN" \
+    --exit-on-threshold --exit-code 10
+  if [ "$EXIT" -eq 10 ] && grep -q 'BUDGET STATUS' "$tmp/breach.txt"; then
+    pass "budget breach: exit 10 with BUDGET STATUS block after hujson merge"
+  else
+    fail "budget breach: exit=$EXIT (want 10) out=$(grep -c 'BUDGET STATUS' "$tmp/breach.txt") BUDGET STATUS block(s) err=$(tail -n1 "$tmp/err")"
+  fi
+
+  # v0.4.0 prints the budgets struct with fmt's default format, which does not
+  # include the amount. A missing budget is the single token <nil>. Exit 10
+  # above is what proves the amount was loaded.
+  run_cmd "$tmp/get.txt" "$tmp/err" \
+    env FINFOCUS_HOME="$home" "$BIN" config get cost.budgets
+  local got
+  got=$(tr -d '[:space:]' < "$tmp/get.txt")
+  if [ "$EXIT" -eq 0 ] && [ -n "$got" ] && [ "$got" != "<nil>" ]; then
+    pass "config get cost.budgets returns a budget (not <nil>)"
+  else
+    fail "config get cost.budgets: exit=$EXIT out=$(head -c 200 "$tmp/get.txt") err=$(tail -n1 "$tmp/err")"
   fi
 
   # 9. subcommand existence: every finfocus subcommand the action runs must
