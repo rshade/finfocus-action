@@ -514,6 +514,17 @@ EOF
     fail "break check: unknown flag exited 0"
   fi
 
+  # A missing plan is a finfocus validation_error (exit 2), never the
+  # action-owned budget breach code 10.
+  run_cmd "$tmp/bad-plan.json" "$tmp/err" \
+    "$BIN" cost projected --pulumi-json "$tmp/does-not-exist.json" \
+    --exit-on-threshold --exit-code 10 --output json
+  if [ "$EXIT" -eq 2 ] && grep -q 'validation_error' "$tmp/err"; then
+    pass "bad plan: exit 2 validation_error, not a budget breach"
+  else
+    fail "bad plan: exit=$EXIT (want 2 validation_error) err=$(head -c 240 "$tmp/err")"
+  fi
+
   # 15. resource filter (issue #20): --filter is a cost projected flag.
   # type= matches a case-insensitive substring. The aws-simple plan has one EC2
   # instance, so type=ec2 keeps exactly that resource.
