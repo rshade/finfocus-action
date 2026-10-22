@@ -1,7 +1,7 @@
 import * as exec from '@actions/exec';
 import * as fs from 'fs';
 import * as core from '@actions/core';
-import { Analyzer } from '../../src/analyze.js';
+import { Analyzer, normalizeCarbonToKg } from '../../src/analyze.js';
 
 jest.mock('@actions/exec');
 jest.mock('@actions/core');
@@ -692,5 +692,40 @@ describe('calculateSustainabilityMetrics units', () => {
     const report: any = { resources: [resource(5, 'kgCO2e', 'a'), resource(999, 'stone', 'b')] };
     expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBe(5);
     expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('"stone"'));
+  });
+
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty'])(
+    'rejects inherited property name "%s" as a unit',
+    (unit) => {
+      expect(normalizeCarbonToKg(5, unit)).toBeUndefined();
+      const report: any = { resources: [resource(5, 'kgCO2e', 'a'), resource(7, unit, 'b')] };
+      expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBe(5);
+      expect(core.warning).toHaveBeenCalledWith(expect.stringContaining(`"${unit}"`));
+    },
+  );
+
+  it.each([
+    ['NaN', NaN],
+    ['negative', -3],
+    ['Infinity', Infinity],
+    ['-Infinity', -Infinity],
+  ])('warns and skips a %s carbon value', (_label, value) => {
+    const report: any = { resources: [resource(5, 'kgCO2e', 'a'), resource(value, 'kgCO2e', 'b')] };
+    expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBe(5);
+    expect(core.warning).toHaveBeenCalledTimes(1);
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('invalid value'));
+  });
+
+  it('skips zero and missing carbon values silently', () => {
+    const report: any = {
+      resources: [
+        resource(0, 'kgCO2e', 'a'),
+        { resourceType: 't', resourceId: 'b', sustainability: { carbon_footprint: {} } },
+        { resourceType: 't', resourceId: 'c' },
+        resource(4, 'kg', 'd'),
+      ],
+    };
+    expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBe(4);
+    expect(core.warning).not.toHaveBeenCalled();
   });
 });

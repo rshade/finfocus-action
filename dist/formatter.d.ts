@@ -7,14 +7,18 @@ import { FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostR
  * resource/action, summing all options inflates the total. This function groups by
  * resource_id + action_type and takes the max savings per group for an accurate total.
  *
- * This is a heuristic: the finfocus CLI JSON does not expose the spec's modification_type, so
- * two independent recommendations of the same action type on one resource cannot be told apart
- * from alternatives and are undercounted (only the larger one is counted).
+ * This is a heuristic. `finfocus cost recommendations --output json` does not emit the engine's
+ * actionDetail (including the modify detail's modificationType), so the action cannot group by it.
+ * Two independent recommendations of the same action type on one resource therefore look like
+ * alternatives, and only the larger one is counted.
+ *
+ * Savings are only summed in one currency. When the recommendations carry more than one distinct
+ * non-empty currency, there is no meaningful total and the result is undefined.
  *
  * @param recommendations - Array of recommendations from finfocus, or undefined
- * @returns Total achievable savings (max per resource+action_type group)
+ * @returns Total achievable savings (max per resource+action_type group), or undefined for mixed currencies
  */
-export declare function calculateAchievableSavings(recommendations: Recommendation[] | undefined): number;
+export declare function calculateAchievableSavings(recommendations: Recommendation[] | undefined): number | undefined;
 /**
  * Get currency symbol for display formatting.
  * @param currency - Currency code (e.g., 'USD', 'EUR')
