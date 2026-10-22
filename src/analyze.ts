@@ -46,7 +46,11 @@ export function normalizeCarbonToKg(value: number, unit: string | undefined): nu
   if (!Number.isFinite(value) || value < 0) {
     return undefined;
   }
-  const factor = CARBON_UNIT_TO_KG[(unit ?? '').toLowerCase()];
+  const key = (unit ?? '')
+    .toLowerCase()
+    .trim()
+    .replace(/\/(month|mo|year|yr)$/, '');
+  const factor = CARBON_UNIT_TO_KG[key];
   return factor === undefined ? undefined : value * factor;
 }
 
@@ -230,7 +234,7 @@ export class Analyzer implements IAnalyzer {
 
   calculateSustainabilityMetrics(report: FinfocusReport): {
     totalCO2e: number;
-    totalCO2eDiff: number;
+    totalCO2eDiff?: number;
     carbonIntensity: number;
   } {
     let totalCO2e = 0;
@@ -251,19 +255,13 @@ export class Analyzer implements IAnalyzer {
       totalCO2e += kg;
     }
 
-    // Since finfocus currently might not provide total diff for sustainability,
-    // we default to 0 for now unless we can calculate it from base state.
-    // For V1 MVP, we will assume 0 or absolute value if base isn't available.
-    // However, if we want to support diff, we'd need the base report which we don't have here.
-    // We will just return the absolute total for now.
-    const totalCO2eDiff = 0;
-
+    // finfocus projected JSON has a per-resource footprint and no carbon diff.
+    // Leave totalCO2eDiff unset instead of reporting a fake 0 kg change.
     const totalCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
     const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0;
 
     return {
       totalCO2e,
-      totalCO2eDiff,
       carbonIntensity,
     };
   }

@@ -672,6 +672,22 @@ describe('calculateSustainabilityMetrics units', () => {
     expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBeCloseTo(expectedKg, 5);
   });
 
+  it('treats a /month suffix as the same unit', () => {
+    const report: any = {
+      summary: { totalMonthly: 10, currency: 'USD' },
+      resources: [resource(2500, 'gCO2e/month')],
+    };
+    const metrics = analyzer.calculateSustainabilityMetrics(report);
+    expect(metrics.totalCO2e).toBeCloseTo(2.5, 5);
+    expect(metrics.carbonIntensity).toBeCloseTo(250, 5);
+    expect(metrics.totalCO2eDiff).toBeUndefined();
+  });
+
+  it('does not invent a zero carbon diff', () => {
+    const report: any = { resources: [resource(1000, 'gCO2e')] };
+    expect(analyzer.calculateSustainabilityMetrics(report).totalCO2eDiff).toBeUndefined();
+  });
+
   it('skips resources with an unknown unit and warns', () => {
     const report: any = { resources: [resource(5, 'kgCO2e', 'a'), resource(999, 'stone', 'b')] };
     expect(analyzer.calculateSustainabilityMetrics(report).totalCO2e).toBe(5);

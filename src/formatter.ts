@@ -13,6 +13,7 @@ import {
   StateOnlyReport,
   isV041Diff,
 } from './types.js';
+import { normalizeCarbonToKg } from './analyze.js';
 import { collectDeclineNotes } from './v04.js';
 import { formatDisplaySections, usesDisplayControls } from './display.js';
 
@@ -263,8 +264,12 @@ function formatSustainabilitySection(
     ? calculateEquivalents(totalCO2e)
     : undefined;
 
-  let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
-  if (totalCO2eDiff > 0) diffText = `+${diffText}`;
+  let changeRow = '';
+  if (totalCO2eDiff !== undefined) {
+    let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
+    if (totalCO2eDiff > 0) diffText = `+${diffText}`;
+    changeRow = `| **Carbon Change** | ${diffText} |\n`;
+  }
 
   let equivalentsSection = '';
   if (equivalents) {
@@ -285,23 +290,22 @@ function formatSustainabilitySection(
 
   if (resources.length > 0) {
     const resourcesWithCarbon = resources
-      .filter(
-        (r) =>
-          r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0,
+      .map((resource) => {
+        const footprint = resource.sustainability?.carbon_footprint;
+        const kg = normalizeCarbonToKg(footprint?.value ?? Number.NaN, footprint?.unit);
+        return kg !== undefined && kg > 0 ? { resource, kg } : undefined;
+      })
+      .filter((entry): entry is { resource: (typeof resources)[number]; kg: number } =>
+        Boolean(entry),
       )
-      .sort(
-        (a, b) =>
-          b.sustainability!.carbon_footprint.value - a.sustainability!.carbon_footprint.value,
-      );
+      .sort((a, b) => b.kg - a.kg);
 
     if (resourcesWithCarbon.length > 0) {
       const resourceRows = resourcesWithCarbon
-        .slice(0, 10) // Top 10 by carbon
-        .map((r) => {
-          const name = r.resourceId.split('::').pop() || r.resourceId;
-          const carbon = r.sustainability!.carbon_footprint.value.toFixed(2);
-          const unit = r.sustainability!.carbon_footprint.unit;
-          return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
+        .slice(0, 10)
+        .map(({ resource, kg }) => {
+          const name = resource.resourceId.split('::').pop() || resource.resourceId;
+          return `| ${name} | ${resource.resourceType} | ${kg.toFixed(2)} kgCO2e |`;
         })
         .join('\n');
 
@@ -325,8 +329,7 @@ ${resourceRows}
 | Metric | Value |
 | :--- | ---: |
 | **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
-| **Carbon Change** | ${diffText} |
-| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
+${changeRow}| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
 ${equivalentsSection}${resourceTable}
 </details>
 `;

@@ -635,23 +635,26 @@ async function run(): Promise<void> {
     if (config.failOnCarbonIncrease && sustainabilityReport) {
       core.info('');
       core.startGroup('🌱 Checking sustainability guardrails');
-      const { checkCarbonThreshold } = await import('./guardrails.js');
-
-      // Calculate base total for percent check
-      const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
-
-      const failed = checkCarbonThreshold(
-        config.failOnCarbonIncrease,
-        sustainabilityReport.totalCO2eDiff,
-        baseTotal,
-      );
-
-      if (failed) {
-        throw new Error(
-          `Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`,
+      if (sustainabilityReport.totalCO2eDiff === undefined) {
+        core.warning(
+          'fail-on-carbon-increase is set, but finfocus did not report a carbon diff. The carbon guardrail was skipped.',
         );
+      } else {
+        const { checkCarbonThreshold } = await import('./guardrails.js');
+        const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
+        const failed = checkCarbonThreshold(
+          config.failOnCarbonIncrease,
+          sustainabilityReport.totalCO2eDiff,
+          baseTotal,
+        );
+
+        if (failed) {
+          throw new Error(
+            `Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`,
+          );
+        }
+        core.info(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
       }
-      core.info(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
       core.endGroup();
     }
 

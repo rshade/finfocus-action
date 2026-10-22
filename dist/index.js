@@ -37541,7 +37541,11 @@ function normalizeCarbonToKg(value, unit) {
     if (!Number.isFinite(value) || value < 0) {
         return undefined;
     }
-    const factor = CARBON_UNIT_TO_KG[(unit ?? '').toLowerCase()];
+    const key = (unit ?? '')
+        .toLowerCase()
+        .trim()
+        .replace(/\/(month|mo|year|yr)$/, '');
+    const factor = CARBON_UNIT_TO_KG[key];
     return factor === undefined ? undefined : value * factor;
 }
 class Analyzer {
@@ -37709,17 +37713,12 @@ class Analyzer {
             }
             totalCO2e += kg;
         }
-        // Since finfocus currently might not provide total diff for sustainability,
-        // we default to 0 for now unless we can calculate it from base state.
-        // For V1 MVP, we will assume 0 or absolute value if base isn't available.
-        // However, if we want to support diff, we'd need the base report which we don't have here.
-        // We will just return the absolute total for now.
-        const totalCO2eDiff = 0;
+        // finfocus projected JSON has a per-resource footprint and no carbon diff.
+        // Leave totalCO2eDiff unset instead of reporting a fake 0 kg change.
         const totalCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
         const carbonIntensity = totalCost > 0 ? (totalCO2e * 1000) / totalCost : 0;
         return {
             totalCO2e,
-            totalCO2eDiff,
             carbonIntensity,
         };
     }
@@ -38320,6 +38319,7 @@ class Analyzer {
 
 
 
+
 /**
  * Calculate achievable savings from recommendations by taking the max per resource+action_type group.
  *
@@ -38536,9 +38536,13 @@ function formatSustainabilitySection(report, config, finfocusReport) {
     const equivalents = config.sustainabilityEquivalents
         ? calculateEquivalents(totalCO2e)
         : undefined;
-    let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
-    if (totalCO2eDiff > 0)
-        diffText = `+${diffText}`;
+    let changeRow = '';
+    if (totalCO2eDiff !== undefined) {
+        let diffText = `${totalCO2eDiff.toFixed(2)} kgCO₂e/month`;
+        if (totalCO2eDiff > 0)
+            diffText = `+${diffText}`;
+        changeRow = `| **Carbon Change** | ${diffText} |\n`;
+    }
     let equivalentsSection = '';
     if (equivalents) {
         equivalentsSection = `
@@ -38556,16 +38560,19 @@ function formatSustainabilitySection(report, config, finfocusReport) {
     const resources = finfocusReport?.resources ?? finfocusReport?.summary?.resources ?? [];
     if (resources.length > 0) {
         const resourcesWithCarbon = resources
-            .filter((r) => r.sustainability?.carbon_footprint?.value && r.sustainability.carbon_footprint.value > 0)
-            .sort((a, b) => b.sustainability.carbon_footprint.value - a.sustainability.carbon_footprint.value);
+            .map((resource) => {
+            const footprint = resource.sustainability?.carbon_footprint;
+            const kg = normalizeCarbonToKg(footprint?.value ?? Number.NaN, footprint?.unit);
+            return kg !== undefined && kg > 0 ? { resource, kg } : undefined;
+        })
+            .filter((entry) => Boolean(entry))
+            .sort((a, b) => b.kg - a.kg);
         if (resourcesWithCarbon.length > 0) {
             const resourceRows = resourcesWithCarbon
-                .slice(0, 10) // Top 10 by carbon
-                .map((r) => {
-                const name = r.resourceId.split('::').pop() || r.resourceId;
-                const carbon = r.sustainability.carbon_footprint.value.toFixed(2);
-                const unit = r.sustainability.carbon_footprint.unit;
-                return `| ${name} | ${r.resourceType} | ${carbon} ${unit} |`;
+                .slice(0, 10)
+                .map(({ resource, kg }) => {
+                const name = resource.resourceId.split('::').pop() || resource.resourceId;
+                return `| ${name} | ${resource.resourceType} | ${kg.toFixed(2)} kgCO2e |`;
             })
                 .join('\n');
             if (resourceRows) {
@@ -38587,8 +38594,7 @@ ${resourceRows}
 | Metric | Value |
 | :--- | ---: |
 | **Carbon Footprint** | ${totalCO2e.toFixed(2)} kgCO₂e/month |
-| **Carbon Change** | ${diffText} |
-| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
+${changeRow}| **Carbon Intensity** | ${carbonIntensity.toFixed(2)} gCO₂e/USD |
 ${equivalentsSection}${resourceTable}
 </details>
 `;
@@ -44874,14 +44880,18 @@ async function run() {
         if (config.failOnCarbonIncrease && sustainabilityReport) {
             lib_core/* info */.pq('');
             lib_core/* startGroup */.Oh('🌱 Checking sustainability guardrails');
-            const { checkCarbonThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
-            // Calculate base total for percent check
-            const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
-            const failed = checkCarbonThreshold(config.failOnCarbonIncrease, sustainabilityReport.totalCO2eDiff, baseTotal);
-            if (failed) {
-                throw new Error(`Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`);
+            if (sustainabilityReport.totalCO2eDiff === undefined) {
+                lib_core/* warning */.$e('fail-on-carbon-increase is set, but finfocus did not report a carbon diff. The carbon guardrail was skipped.');
             }
-            lib_core/* info */.pq(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
+            else {
+                const { checkCarbonThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
+                const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
+                const failed = checkCarbonThreshold(config.failOnCarbonIncrease, sustainabilityReport.totalCO2eDiff, baseTotal);
+                if (failed) {
+                    throw new Error(`Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`);
+                }
+                lib_core/* info */.pq(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
+            }
             lib_core/* endGroup */.N4();
         }
         lib_core/* info */.pq('');

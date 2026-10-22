@@ -8,7 +8,7 @@ export declare class Analyzer implements IAnalyzer {
     runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport>;
     calculateSustainabilityMetrics(report: FinfocusReport): {
         totalCO2e: number;
-        totalCO2eDiff: number;
+        totalCO2eDiff?: number;
         carbonIntensity: number;
     };
     runRecommendations(planPath: string, config?: ActionConfiguration): Promise<RecommendationsReport>;
