@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as github from '@actions/github';
 import * as core from '@actions/core';
 import {
@@ -16,6 +17,39 @@ import { formatCommentBody } from './formatter.js';
 
 export class Commenter implements ICommenter {
   private readonly marker = '<!-- finfocus-action-comment -->';
+
+  /**
+   * Write the PR comment body without calling GitHub.
+   * The contract job sets FINFOCUS_COMMENT_PATH so CI can assert the comment.
+   */
+  writeCommentFile(
+    filePath: string,
+    report: FinfocusReport,
+    config?: ActionConfiguration,
+    recommendationsReport?: RecommendationsReport,
+    actualCostReport?: ActualCostReport,
+    sustainabilityReport?: SustainabilityReport,
+    budgetStatus?: BudgetStatus,
+    estimateReport?: EstimateReport,
+    clusterReport?: ClusterReport,
+    stateOnlyReport?: StateOnlyReport,
+  ): void {
+    fs.writeFileSync(
+      filePath,
+      this.commentBody(
+        report,
+        config,
+        recommendationsReport,
+        actualCostReport,
+        sustainabilityReport,
+        budgetStatus,
+        estimateReport,
+        clusterReport,
+        stateOnlyReport,
+      ),
+      'utf8',
+    );
+  }
 
   async upsertComment(
     report: FinfocusReport,
@@ -38,8 +72,17 @@ export class Commenter implements ICommenter {
     }
 
     const prNumber = context.payload.pull_request.number;
-    const body = `${this.marker}
-${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport)}`;
+    const body = this.commentBody(
+      report,
+      config,
+      recommendationsReport,
+      actualCostReport,
+      sustainabilityReport,
+      budgetStatus,
+      estimateReport,
+      clusterReport,
+      stateOnlyReport,
+    );
 
     const { data: comments } = await octokit.rest.issues.listComments({
       ...context.repo,
@@ -63,5 +106,20 @@ ${formatCommentBody(report, config, recommendationsReport, actualCostReport, sus
         body,
       });
     }
+  }
+
+  private commentBody(
+    report: FinfocusReport,
+    config?: ActionConfiguration,
+    recommendationsReport?: RecommendationsReport,
+    actualCostReport?: ActualCostReport,
+    sustainabilityReport?: SustainabilityReport,
+    budgetStatus?: BudgetStatus,
+    estimateReport?: EstimateReport,
+    clusterReport?: ClusterReport,
+    stateOnlyReport?: StateOnlyReport,
+  ): string {
+    return `${this.marker}
+${formatCommentBody(report, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport)}`;
   }
 }
