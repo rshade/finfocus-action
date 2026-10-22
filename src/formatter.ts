@@ -24,16 +24,27 @@ import { formatDisplaySections, usesDisplayControls } from './display.js';
  * resource/action, summing all options inflates the total. This function groups by
  * resource_id + action_type and takes the max savings per group for an accurate total.
  *
- * This is a heuristic: the finfocus CLI JSON does not expose the spec's modification_type, so
- * two independent recommendations of the same action type on one resource cannot be told apart
- * from alternatives and are undercounted (only the larger one is counted).
+ * This is a heuristic. `finfocus cost recommendations --output json` does not emit the engine's
+ * actionDetail (including the modify detail's modificationType), so the action cannot group by it.
+ * Two independent recommendations of the same action type on one resource therefore look like
+ * alternatives, and only the larger one is counted.
+ *
+ * Savings are only summed in one currency. When the recommendations carry more than one distinct
+ * non-empty currency, there is no meaningful total and the result is undefined.
  *
  * @param recommendations - Array of recommendations from finfocus, or undefined
- * @returns Total achievable savings (max per resource+action_type group)
+ * @returns Total achievable savings (max per resource+action_type group), or undefined for mixed currencies
  */
-export function calculateAchievableSavings(recommendations: Recommendation[] | undefined): number {
+export function calculateAchievableSavings(
+  recommendations: Recommendation[] | undefined,
+): number | undefined {
   if (!recommendations || recommendations.length === 0) {
     return 0;
+  }
+
+  const currencies = new Set(recommendations.map((rec) => rec.currency).filter(Boolean));
+  if (currencies.size > 1) {
+    return undefined;
   }
 
   const groups = new Map<string, number>();
@@ -436,7 +447,10 @@ function formatRecommendationsSection(recommendationsReport?: RecommendationsRep
     return '';
   }
   const totalSavings = calculateAchievableSavings(recommendationsReport.recommendations);
-  const savingsCurrency = recommendationsReport.summary.currency;
+  const savingsSummary =
+    totalSavings === undefined
+      ? `${recommendationsReport.recommendations.length} recommendations (mixed currencies)`
+      : `Save up to <strong>${totalSavings.toFixed(2)} ${recommendationsReport.summary.currency}/mo</strong>`;
   const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
   const recRows = recommendationsReport.recommendations
     .map((rec) => {
@@ -469,7 +483,7 @@ function formatRecommendationsSection(recommendationsReport?: RecommendationsRep
   return `
 
 <details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+<summary><strong>💡 Optimization Opportunities</strong> — ${savingsSummary}</summary>
 
 ${header}
 ${recRows}

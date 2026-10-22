@@ -27,16 +27,16 @@ import {
 } from './v04.js';
 import { filterArgs } from './display.js';
 
-const CARBON_UNIT_TO_KG: Record<string, number> = {
-  g: 0.001,
-  gco2e: 0.001,
-  kg: 1,
-  kgco2e: 1,
-  t: 1000,
-  tco2e: 1000,
-  lb: 0.453592,
-  lbco2e: 0.453592,
-};
+const CARBON_UNIT_TO_KG = new Map<string, number>([
+  ['g', 0.001],
+  ['gco2e', 0.001],
+  ['kg', 1],
+  ['kgco2e', 1],
+  ['t', 1000],
+  ['tco2e', 1000],
+  ['lb', 0.453592],
+  ['lbco2e', 0.453592],
+]);
 
 /**
  * Converts a carbon value to kilograms, mirroring finfocus core's NormalizeToKg.
@@ -46,7 +46,7 @@ export function normalizeCarbonToKg(value: number, unit: string | undefined): nu
   if (!Number.isFinite(value) || value < 0) {
     return undefined;
   }
-  const factor = CARBON_UNIT_TO_KG[(unit ?? '').toLowerCase()];
+  const factor = CARBON_UNIT_TO_KG.get((unit ?? '').toLowerCase());
   return factor === undefined ? undefined : value * factor;
 }
 
@@ -238,13 +238,17 @@ export class Analyzer implements IAnalyzer {
     const resources = report.resources ?? report.summary?.resources ?? [];
     for (const resource of resources) {
       const footprint = resource.sustainability?.carbon_footprint;
-      if (!footprint?.value) {
+      if (footprint?.value === undefined || footprint.value === null || footprint.value === 0) {
         continue;
       }
       const kg = normalizeCarbonToKg(footprint.value, footprint.unit);
       if (kg === undefined) {
+        const reason =
+          Number.isFinite(footprint.value) && footprint.value >= 0
+            ? `unrecognized unit "${footprint.unit}"`
+            : 'invalid value';
         core.warning(
-          `Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: unrecognized unit "${footprint.unit}" (value ${footprint.value})`,
+          `Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: ${reason} (value ${footprint.value}, unit "${footprint.unit}")`,
         );
         continue;
       }

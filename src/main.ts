@@ -496,11 +496,15 @@ async function run(): Promise<void> {
       }
 
       const achievableSavings = calculateAchievableSavings(recommendationsReport.recommendations);
-      core.setOutput('total-savings', achievableSavings.toString());
+      if (achievableSavings === undefined) {
+        core.info('💰 Potential savings span several currencies; total-savings is not set');
+      } else {
+        core.setOutput('total-savings', achievableSavings.toString());
+        core.info(
+          `💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`,
+        );
+      }
       core.setOutput('recommendation-count', recommendationsReport.summary.total_count.toString());
-      core.info(
-        `💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`,
-      );
       core.endGroup();
     } else if (config.includeRecommendations && config.stateOnly && !planFileExists) {
       core.info(

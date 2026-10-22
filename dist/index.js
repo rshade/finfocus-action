@@ -37549,16 +37549,16 @@ var display = __nccwpck_require__(4857);
 
 
 
-const CARBON_UNIT_TO_KG = {
-    g: 0.001,
-    gco2e: 0.001,
-    kg: 1,
-    kgco2e: 1,
-    t: 1000,
-    tco2e: 1000,
-    lb: 0.453592,
-    lbco2e: 0.453592,
-};
+const CARBON_UNIT_TO_KG = new Map([
+    ['g', 0.001],
+    ['gco2e', 0.001],
+    ['kg', 1],
+    ['kgco2e', 1],
+    ['t', 1000],
+    ['tco2e', 1000],
+    ['lb', 0.453592],
+    ['lbco2e', 0.453592],
+]);
 /**
  * Converts a carbon value to kilograms, mirroring finfocus core's NormalizeToKg.
  * Returns undefined for unrecognized units and for negative or non-finite values.
@@ -37567,7 +37567,7 @@ function normalizeCarbonToKg(value, unit) {
     if (!Number.isFinite(value) || value < 0) {
         return undefined;
     }
-    const factor = CARBON_UNIT_TO_KG[(unit ?? '').toLowerCase()];
+    const factor = CARBON_UNIT_TO_KG.get((unit ?? '').toLowerCase());
     return factor === undefined ? undefined : value * factor;
 }
 class Analyzer {
@@ -37725,12 +37725,15 @@ class Analyzer {
         const resources = report.resources ?? report.summary?.resources ?? [];
         for (const resource of resources) {
             const footprint = resource.sustainability?.carbon_footprint;
-            if (!footprint?.value) {
+            if (footprint?.value === undefined || footprint.value === null || footprint.value === 0) {
                 continue;
             }
             const kg = normalizeCarbonToKg(footprint.value, footprint.unit);
             if (kg === undefined) {
-                main_core/* warning */.$e(`Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: unrecognized unit "${footprint.unit}" (value ${footprint.value})`);
+                const reason = Number.isFinite(footprint.value) && footprint.value >= 0
+                    ? `unrecognized unit "${footprint.unit}"`
+                    : 'invalid value';
+                main_core/* warning */.$e(`Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: ${reason} (value ${footprint.value}, unit "${footprint.unit}")`);
                 continue;
             }
             totalCO2e += kg;
@@ -38354,16 +38357,24 @@ class Analyzer {
  * resource/action, summing all options inflates the total. This function groups by
  * resource_id + action_type and takes the max savings per group for an accurate total.
  *
- * This is a heuristic: the finfocus CLI JSON does not expose the spec's modification_type, so
- * two independent recommendations of the same action type on one resource cannot be told apart
- * from alternatives and are undercounted (only the larger one is counted).
+ * This is a heuristic. `finfocus cost recommendations --output json` does not emit the engine's
+ * actionDetail (including the modify detail's modificationType), so the action cannot group by it.
+ * Two independent recommendations of the same action type on one resource therefore look like
+ * alternatives, and only the larger one is counted.
+ *
+ * Savings are only summed in one currency. When the recommendations carry more than one distinct
+ * non-empty currency, there is no meaningful total and the result is undefined.
  *
  * @param recommendations - Array of recommendations from finfocus, or undefined
- * @returns Total achievable savings (max per resource+action_type group)
+ * @returns Total achievable savings (max per resource+action_type group), or undefined for mixed currencies
  */
 function calculateAchievableSavings(recommendations) {
     if (!recommendations || recommendations.length === 0) {
         return 0;
+    }
+    const currencies = new Set(recommendations.map((rec) => rec.currency).filter(Boolean));
+    if (currencies.size > 1) {
+        return undefined;
     }
     const groups = new Map();
     for (const rec of recommendations) {
@@ -38716,7 +38727,9 @@ function formatRecommendationsSection(recommendationsReport) {
         return '';
     }
     const totalSavings = calculateAchievableSavings(recommendationsReport.recommendations);
-    const savingsCurrency = recommendationsReport.summary.currency;
+    const savingsSummary = totalSavings === undefined
+        ? `${recommendationsReport.recommendations.length} recommendations (mixed currencies)`
+        : `Save up to <strong>${totalSavings.toFixed(2)} ${recommendationsReport.summary.currency}/mo</strong>`;
     const scored = recommendationsReport.recommendations.some((rec) => rec.scores);
     const recRows = recommendationsReport.recommendations
         .map((rec) => {
@@ -38746,7 +38759,7 @@ function formatRecommendationsSection(recommendationsReport) {
     return `
 
 <details open>
-<summary><strong>💡 Optimization Opportunities</strong> — Save up to <strong>${totalSavings.toFixed(2)} ${savingsCurrency}/mo</strong></summary>
+<summary><strong>💡 Optimization Opportunities</strong> — ${savingsSummary}</summary>
 
 ${header}
 ${recRows}
@@ -44679,9 +44692,14 @@ async function run() {
                 main_core/* info */.pq(`Recommendations took: ${Date.now() - recommendationsStartTime}ms`);
             }
             const achievableSavings = calculateAchievableSavings(recommendationsReport.recommendations);
-            main_core/* setOutput */.uH('total-savings', achievableSavings.toString());
+            if (achievableSavings === undefined) {
+                main_core/* info */.pq('💰 Potential savings span several currencies; total-savings is not set');
+            }
+            else {
+                main_core/* setOutput */.uH('total-savings', achievableSavings.toString());
+                main_core/* info */.pq(`💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`);
+            }
             main_core/* setOutput */.uH('recommendation-count', recommendationsReport.summary.total_count.toString());
-            main_core/* info */.pq(`💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`);
             main_core/* endGroup */.N4();
         }
         else if (config.includeRecommendations && config.stateOnly && !planFileExists) {

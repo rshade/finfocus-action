@@ -1070,3 +1070,66 @@ describe('Unpriced Resources', () => {
     expect(result1).not.toContain('Resources Not Priced');
   });
 });
+
+describe('mixed currency savings', () => {
+  const report: FinfocusReport = {
+    summary: { totalMonthly: 100, totalHourly: 0.14, currency: 'USD' },
+  };
+  const rec = (
+    resource_id: string,
+    estimated_savings: number,
+    currency: string,
+  ): Recommendation => ({
+    resource_id,
+    action_type: 'RIGHTSIZING',
+    description: `Resize ${resource_id}`,
+    estimated_savings,
+    currency,
+  });
+
+  it('returns undefined when more than one distinct currency is present', () => {
+    expect(
+      calculateAchievableSavings([rec('a', 100, 'USD'), rec('b', 100, 'EUR')]),
+    ).toBeUndefined();
+  });
+
+  it('sums normally when every recommendation shares one currency', () => {
+    expect(calculateAchievableSavings([rec('a', 100, 'EUR'), rec('b', 50, 'EUR')])).toBe(150);
+  });
+
+  it('ignores empty currencies when deciding whether currencies are mixed', () => {
+    expect(calculateAchievableSavings([rec('a', 100, 'USD'), rec('b', 50, '')])).toBe(150);
+  });
+
+  it('renders an em dash and a count with no number for mixed currencies', () => {
+    const recommendations = {
+      summary: {
+        total_count: 2,
+        total_savings: 200,
+        currency: 'USD',
+        count_by_action_type: { RIGHTSIZING: 2 },
+      },
+      recommendations: [rec('a', 100, 'USD'), rec('b', 100, 'EUR')],
+    };
+    const result = formatCommentBody(report, undefined, recommendations);
+    expect(result).toContain('| **$100.00** USD | — | — |');
+    expect(result).toContain('2 recommendations (mixed currencies)');
+    expect(result).not.toContain('Save up to');
+    expect(result).not.toContain('200.00');
+  });
+
+  it('keeps the numeric summary for a single currency', () => {
+    const recommendations = {
+      summary: {
+        total_count: 2,
+        total_savings: 150,
+        currency: 'EUR',
+        count_by_action_type: { RIGHTSIZING: 2 },
+      },
+      recommendations: [rec('a', 100, 'EUR'), rec('b', 50, 'EUR')],
+    };
+    const result = formatCommentBody(report, undefined, recommendations);
+    expect(result).toContain('Save up to <strong>150.00 EUR/mo</strong>');
+    expect(result).not.toContain('mixed currencies');
+  });
+});
