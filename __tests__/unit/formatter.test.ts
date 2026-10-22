@@ -1,4 +1,8 @@
-import { formatCommentBody, calculateAchievableSavings, formatEstimateSection } from '../../src/formatter.js';
+import {
+  formatCommentBody,
+  calculateAchievableSavings,
+  formatEstimateSection,
+} from '../../src/formatter.js';
 import {
   FinfocusReport,
   ActionConfiguration,
@@ -715,8 +719,8 @@ describe('Dashboard Achievable Savings', () => {
 
     // Dashboard should show achievable savings ($100), not raw total ($150)
     expect(result).toContain('**$100.00**/mo');
-    // But recommendations section should still show "up to" raw total
-    expect(result).toContain('Save up to <strong>150.00 USD/mo</strong>');
+    expect(result).toContain('Save up to <strong>100.00 USD/mo</strong>');
+    expect(result).not.toContain('150.00');
   });
 
   it('should show same value when no mutually exclusive options exist', () => {
@@ -750,6 +754,42 @@ describe('Dashboard Achievable Savings', () => {
     // Both dashboard and recommendations section should show $70
     expect(result).toContain('**$70.00**/mo');
     expect(result).toContain('Save up to <strong>70.00 USD/mo</strong>');
+  });
+});
+
+describe('Savings figure consistency (finfocus-demo PR 1)', () => {
+  const rec = (resource_id: string, estimated_savings: number) => ({
+    resource_id,
+    action_type: 'RIGHTSIZING',
+    description: 'Resize',
+    estimated_savings,
+    currency: 'USD',
+  });
+  const recommendations = {
+    summary: {
+      total_count: 5,
+      total_savings: 26.72,
+      currency: 'USD',
+      count_by_action_type: { RIGHTSIZING: 5 },
+    },
+    recommendations: [
+      rec('demo-instance', 0.73),
+      rec('demo-instance', 1.46),
+      rec('legacy-instance', 7.01),
+      rec('demo-instance-large', 5.84),
+      rec('demo-instance-large', 11.68),
+    ],
+  };
+
+  it('shows 20.15 in both the header and the details summary', () => {
+    const result = formatCommentBody(
+      { summary: { totalMonthly: 137.67, totalHourly: 0.19, currency: 'USD' } },
+      undefined,
+      recommendations,
+    );
+    expect(result).toContain('**$20.15**/mo');
+    expect(result).toContain('Save up to <strong>20.15 USD/mo</strong>');
+    expect(result).not.toContain('26.72');
   });
 });
 

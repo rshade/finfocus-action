@@ -1,4 +1,9 @@
 import { IAnalyzer, FinfocusReport, ActionConfiguration, RecommendationsReport, ActualCostReport, BudgetStatus, EstimateReport, ClusterReport, StateOnlyReport } from './types.js';
+/**
+ * Converts a carbon value to kilograms, mirroring finfocus core's NormalizeToKg.
+ * Returns undefined for unrecognized units and for negative or non-finite values.
+ */
+export declare function normalizeCarbonToKg(value: number, unit: string | undefined): number | undefined;
 export declare class Analyzer implements IAnalyzer {
     runAnalysis(planPath: string, config?: ActionConfiguration): Promise<FinfocusReport>;
     calculateSustainabilityMetrics(report: FinfocusReport): {
