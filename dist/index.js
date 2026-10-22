@@ -44776,17 +44776,7 @@ async function run() {
             main_core/* endGroup */.N4();
         }
         if (config.failOnCarbonIncrease && sustainabilityReport) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🌱 Checking sustainability guardrails');
-            const { checkCarbonThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
-            // Calculate base total for percent check
-            const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
-            const failed = checkCarbonThreshold(config.failOnCarbonIncrease, sustainabilityReport.totalCO2eDiff, baseTotal);
-            if (failed) {
-                throw new Error(`Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`);
-            }
-            main_core/* info */.pq(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
-            main_core/* endGroup */.N4();
+            main_core/* warning */.$e(`fail-on-carbon-increase is set to "${config.failOnCarbonIncrease}", but the action has no baseline carbon footprint to compare against, so the guardrail was not evaluated. The carbon figures in the comment are absolute totals.`);
         }
         main_core/* info */.pq('');
         main_core/* info */.pq('✅ finfocus-action completed successfully');

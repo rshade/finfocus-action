@@ -613,26 +613,9 @@ async function run(): Promise<void> {
     }
 
     if (config.failOnCarbonIncrease && sustainabilityReport) {
-      core.info('');
-      core.startGroup('🌱 Checking sustainability guardrails');
-      const { checkCarbonThreshold } = await import('./guardrails.js');
-
-      // Calculate base total for percent check
-      const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
-
-      const failed = checkCarbonThreshold(
-        config.failOnCarbonIncrease,
-        sustainabilityReport.totalCO2eDiff,
-        baseTotal,
+      core.warning(
+        `fail-on-carbon-increase is set to "${config.failOnCarbonIncrease}", but the action has no baseline carbon footprint to compare against, so the guardrail was not evaluated. The carbon figures in the comment are absolute totals.`,
       );
-
-      if (failed) {
-        throw new Error(
-          `Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`,
-        );
-      }
-      core.info(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
-      core.endGroup();
     }
 
     core.info('');

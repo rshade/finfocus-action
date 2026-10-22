@@ -83,7 +83,7 @@ inputs:
     required: false
     default: 'true'
   fail-on-carbon-increase:
-    description: 'Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases'
+    description: 'Opt-in threshold (e.g., "10%", "10kg") for a carbon increase. Not evaluated yet: without a baseline carbon footprint the action logs a warning instead of failing'
     required: false
     default: ''
   budget-amount:

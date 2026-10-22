@@ -34,7 +34,6 @@ posts a comment to the PR.
     github-token: ${{ secrets.GITHUB_TOKEN }}
     include-sustainability: true # Enable carbon footprint metrics
     fail-on-cost-increase: '100USD' # Fail if cost increase > $100
-    fail-on-carbon-increase: '10kg' # Fail if carbon increase > 10kg
     install-plugins: aws-plugin
 ```
 
@@ -51,7 +50,7 @@ metrics, configure the following inputs.
 | `include-sustainability`| Include carbon footprint and sustainability metrics (`true`/`false`). | No | `true` |
 | `utilization-rate` | Assumed utilization rate for sustainability calculations (0.0 to 1.0). | No | `1.0` |
 | `sustainability-equivalents` | Show impact equivalents like trees, miles driven (`true`/`false`). | No | `true` |
-| `fail-on-carbon-increase` | Threshold (e.g., "10%", "10kg") to fail if carbon footprint increases. | No | `""` |
+| `fail-on-carbon-increase` | Opt-in. Threshold (e.g., "10%", "10kg") for a carbon increase. Not evaluated yet: the action has no baseline carbon footprint, so it logs a warning instead of failing. | No | `""` |
 
 ### Budget Tracking
 
