@@ -132,7 +132,9 @@ main.ts
   `plugin install` creates, so writing only the yaml file never arms `--exit-on-threshold`. An
   existing `config.hujson` is parsed as HuJSON (comments and trailing commas) and other keys,
   including `installed_plugins`, are preserved. Jev scoring is the same file: `scoring.enabled`
-  and `scoring.plugin`.
+  and `scoring.plugin`. `fail-on-cost-increase` compares the projected diff locally
+  (`100USD` fails a +137 diff and passes a +50 diff). `fail-on-budget-breach` is the
+  only input that runs `--exit-on-threshold --exit-code 10`.
 - finfocus v0.4.0 has no `budget status` command; budget health and scoped-budget features were
   removed. Budget enforcement works via `--exit-on-threshold --exit-code 10` (action-owned)
 - Budget status extraction returns undefined when using `--output json` (forward compatible for

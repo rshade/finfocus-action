@@ -7,16 +7,15 @@ export const modules = {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   checkBudgetThreshold: () => (/* binding */ checkBudgetThreshold),
+/* harmony export */   checkBudgetThresholdWithExitCodes: () => (/* binding */ checkBudgetThresholdWithExitCodes),
 /* harmony export */   checkCarbonThreshold: () => (/* binding */ checkCarbonThreshold)
 /* harmony export */ });
-/* unused harmony exports BudgetThresholdMessages, checkBudgetThresholdWithExitCodes, checkBudgetThresholdWithJson, checkThreshold */
+/* unused harmony exports BudgetThresholdMessages, checkBudgetThresholdWithJson, checkThreshold */
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2398);
 /* harmony import */ var _actions_exec__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(5260);
 /* harmony import */ var _types_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6141);
-/* harmony import */ var _install_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(8638);
-/* harmony import */ var _errors_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(3916);
-/* harmony import */ var _display_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(4857);
-
+/* harmony import */ var _errors_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(3916);
+/* harmony import */ var _display_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(4857);
 
 
 
@@ -55,7 +54,7 @@ async function checkBudgetThresholdWithExitCodes(config) {
             '--exit-on-threshold',
             '--exit-code',
             String(_types_js__WEBPACK_IMPORTED_MODULE_2__/* .BudgetExitCode */ .T.THRESHOLD_BREACH),
-            ...(0,_display_js__WEBPACK_IMPORTED_MODULE_4__/* .filterArgs */ .et)(config.resourceFilters),
+            ...(0,_display_js__WEBPACK_IMPORTED_MODULE_3__/* .filterArgs */ .et)(config.resourceFilters),
         ], {
             ignoreReturnCode: true,
             silent: !config.debug,
@@ -82,9 +81,9 @@ async function checkBudgetThresholdWithExitCodes(config) {
         }
         // Not a budget result: the finfocus call itself failed. Surface the error
         // envelope message when present, otherwise the raw stderr.
-        const envelope = (0,_errors_js__WEBPACK_IMPORTED_MODULE_5__/* .parseErrorEnvelope */ .a)(result.stderr);
+        const envelope = (0,_errors_js__WEBPACK_IMPORTED_MODULE_4__/* .parseErrorEnvelope */ .a)(result.stderr);
         if (envelope) {
-            throw new Error((0,_errors_js__WEBPACK_IMPORTED_MODULE_5__/* .formatEnvelopeError */ .u)(envelope, result.exitCode));
+            throw new Error((0,_errors_js__WEBPACK_IMPORTED_MODULE_4__/* .formatEnvelopeError */ .u)(envelope, result.exitCode));
         }
         throw new Error(`finfocus cost projected exited with code ${result.exitCode}: ` +
             (result.stderr.trim() || '(no stderr output)'));
@@ -141,31 +140,13 @@ function checkBudgetThresholdWithJson(config, report) {
     };
 }
 /**
- * Main budget threshold check orchestrator.
- * Detects finfocus version and uses exit codes (v0.2.5+) or JSON parsing (older versions).
+ * Compare `fail-on-cost-increase` with the projected cost diff.
  *
- * @param config - Action configuration
- * @param report - Finfocus report with cost data (used for JSON fallback)
- * @returns BudgetThresholdResult with pass/fail status and severity
+ * This does not call finfocus. Budget enforcement is
+ * `checkBudgetThresholdWithExitCodes`, and only when `fail-on-budget-breach`
+ * is set.
  */
-async function checkBudgetThreshold(config, report) {
-    const version = await (0,_install_js__WEBPACK_IMPORTED_MODULE_3__/* .getFinfocusVersion */ .g5)();
-    // Handle version detection failure (getFinfocusVersion returns '0.0.0' on failure)
-    if (version === '0.0.0') {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e('Could not detect finfocus version, falling back to JSON parsing');
-        return checkBudgetThresholdWithJson(config, report);
-    }
-    if (config.debug) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .debug */ .Yz(`Detected finfocus version: ${version}`);
-    }
-    const useExitCodes = (0,_install_js__WEBPACK_IMPORTED_MODULE_3__/* .supportsExitCodes */ .X7)(version);
-    if (config.debug) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .debug */ .Yz(`Using exit codes: ${useExitCodes}`);
-    }
-    if (useExitCodes) {
-        return checkBudgetThresholdWithExitCodes(config);
-    }
-    _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .warning */ .$e('finfocus version < 0.2.5, falling back to JSON parsing for threshold check');
+function checkBudgetThreshold(config, report) {
     return checkBudgetThresholdWithJson(config, report);
 }
 function checkThreshold(threshold, diff, currency) {

@@ -119,24 +119,27 @@ command does not exist in finfocus v0.4.0:
 - `budget-scopes-status` (was: scoped status array)
 
 The action still supports budget tracking via `budget-amount`, `budget-currency`,
-`budget-period`, and `budget-alerts` inputs, which are written to finfocus config
-and enforced through `--exit-on-threshold`.
+`budget-period`, and `budget-alerts`. Those values are merged into `config.hujson`.
+Set `fail-on-budget-breach: true` to fail the job when finfocus reports the projected
+cost over that budget. `fail-on-cost-increase` is a separate check: it compares the
+projected diff with a value such as `100USD` and does not require a budget.
 
 ### Budget Threshold Exit Codes
 
-finfocus v0.4.0 reserves exit codes 0 (success), 1 (`internal_error`) and 2
-(`validation_error`, e.g. a bad plan path or flag). Because of this, the action
-does not interpret finfocus exit codes as budget severities. Instead it runs
-`finfocus cost projected --pulumi-json <plan> --exit-on-threshold --exit-code 10`:
+`fail-on-budget-breach: true` runs
+`finfocus cost projected --pulumi-json <plan> --exit-on-threshold --exit-code 10`.
+finfocus v0.4 and v0.5 reserve exit codes 0 (success), 1 (`internal_error`) and 2
+(`validation_error`, for example a bad plan path). Exit 10 is owned by the action
+and means the budget was breached. A budget alone does not fail the job.
 
 | Exit Code | Meaning | Action behavior |
 | :-------- | :------ | :-------------- |
-| 0 | All budget thresholds passed | Continue |
-| 10 | Budget threshold breached (code owned by the action) | Fail with "Budget exceeded" |
+| 0 | Budget not breached | Continue |
+| 10 | Budget breached | Fail with "Budget exceeded" |
 | 1, 2, other | The finfocus call itself failed | Fail with the `message` from the finfocus error envelope on stderr |
 
-For older finfocus versions (< 0.2.5), the action falls back to JSON parsing for threshold checks,
-maintaining backward compatibility.
+`fail-on-cost-increase: '100USD'` never calls finfocus again. It fails when the
+projected cost diff is greater than 100 USD, whether or not `budget-amount` is set.
 
 ### Terraform State Input (finfocus v0.4.0)
 
@@ -339,9 +342,9 @@ present on the v0.4.0 release.
   breaking changes (for example, the v0.4.0 exit-code change where
   validation errors exit 2). Pin `finfocus-version` (e.g. `v0.4.0`) if you
   need a stable target.
-- Budget threshold enforcement requires finfocus with `--exit-on-threshold`
-  support (v0.2.5+; verified on v0.4.0). Older versions fall back to JSON
-  parsing of the cost diff.
+- `fail-on-budget-breach` requires finfocus `--exit-on-threshold` (verified on
+  v0.4.0 and v0.5.1). `fail-on-cost-increase` uses the cost diff already in
+  the report.
 
 ## Outputs
 

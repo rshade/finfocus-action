@@ -27,9 +27,13 @@ inputs:
     required: false
     default: 'true'
   fail-on-cost-increase:
-    description: 'Threshold string (e.g., "100USD") to fail if diff exceeds'
+    description: 'Threshold string (e.g., "100USD") to fail if the projected cost diff exceeds that amount. Compared locally. Does not enforce budget-amount.'
     required: false
     default: ''
+  fail-on-budget-breach:
+    description: 'If true, fail the job when the projected cost exceeds budget-amount. Runs finfocus cost projected --exit-on-threshold --exit-code 10. Requires budget-amount.'
+    required: false
+    default: 'false'
   analyzer-mode:
     description: 'If true, sets up environment for pulumi preview to use as analyzer'
     required: false
@@ -87,7 +91,7 @@ inputs:
     required: false
     default: ''
   budget-amount:
-    description: 'Budget amount for cost tracking (e.g., 1000). Merged as cost.budgets.global into ~/.finfocus/config.hujson (or $FINFOCUS_HOME) so finfocus enforces it via --exit-on-threshold'
+    description: 'Budget amount for cost tracking (e.g., 1000). Merged as cost.budgets.global into ~/.finfocus/config.hujson (or $FINFOCUS_HOME). The job fails on a breach only when fail-on-budget-breach is true.'
     required: false
     default: ''
   budget-currency:
@@ -238,6 +242,7 @@ runs:
         INPUT_BEHAVIOR_ON_ERROR: ${{ inputs.behavior-on-error }}
         INPUT_POST_COMMENT: ${{ inputs.post-comment }}
         INPUT_FAIL_ON_COST_INCREASE: ${{ inputs.fail-on-cost-increase }}
+        INPUT_FAIL_ON_BUDGET_BREACH: ${{ inputs.fail-on-budget-breach }}
         INPUT_ANALYZER_MODE: ${{ inputs.analyzer-mode }}
         INPUT_DETAILED_COMMENT: ${{ inputs.detailed-comment }}
         INPUT_INCLUDE_RECOMMENDATIONS: ${{ inputs.include-recommendations }}

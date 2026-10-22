@@ -129,6 +129,7 @@ async function run(): Promise<void> {
     const postComment = parseBoolean(postCommentRaw, true);
     const thresholdRaw = core.getInput('fail_on_cost_increase');
     const threshold = thresholdRaw || null;
+    const failOnBudgetBreach = parseBoolean(core.getInput('fail_on_budget_breach'), false);
     const analyzerModeRaw = core.getInput('analyzer_mode');
     const analyzerMode = parseBoolean(analyzerModeRaw, false);
     const detailedCommentRaw = core.getInput('detailed_comment');
@@ -192,6 +193,7 @@ async function run(): Promise<void> {
       behaviorOnError,
       postComment,
       threshold,
+      failOnBudgetBreach,
       analyzerMode,
       detailedComment,
       includeRecommendations,
@@ -242,6 +244,7 @@ async function run(): Promise<void> {
       core.info(`  behavior-on-error: "${behaviorOnError}"`);
       core.info(`  post-comment raw: "${postCommentRaw}" -> parsed: ${postComment}`);
       core.info(`  fail-on-cost-increase: "${threshold}"`);
+      core.info(`  fail-on-budget-breach: ${failOnBudgetBreach}`);
       core.info(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
       core.info(`  detailed-comment raw: "${detailedCommentRaw}" -> parsed: ${detailedComment}`);
       core.info(
@@ -592,19 +595,40 @@ async function run(): Promise<void> {
       core.endGroup();
     }
 
-    if (config.threshold && report.diff) {
+    if (config.threshold) {
       core.info('');
-      core.startGroup('🛡️ Checking cost guardrails');
-      const { checkBudgetThreshold } = await import('./guardrails.js');
-      const thresholdResult = await checkBudgetThreshold(config, report);
+      core.startGroup('🛡️ Checking cost increase');
+      if (!report.diff) {
+        core.warning(
+          'fail-on-cost-increase is set but the report has no cost diff. Skipping the cost increase check.',
+        );
+      } else {
+        const { checkBudgetThreshold } = await import('./guardrails.js');
+        const thresholdResult = checkBudgetThreshold(config, report);
 
-      if (!thresholdResult.passed) {
-        const errorMessage = config.debug
-          ? `${thresholdResult.message} (exit code: ${thresholdResult.exitCode ?? 'N/A'})`
-          : thresholdResult.message;
-        throw new Error(errorMessage);
+        if (!thresholdResult.passed) {
+          throw new Error(thresholdResult.message);
+        }
+        core.info(`✅ Cost increase within ${config.threshold}`);
       }
-      core.info(`✅ Cost within threshold: ${config.threshold}`);
+      core.endGroup();
+    }
+
+    if (config.failOnBudgetBreach) {
+      core.info('');
+      core.startGroup('🛡️ Checking budget breach');
+      if (!config.budgetAmount || config.budgetAmount <= 0) {
+        core.warning(
+          'fail-on-budget-breach is set but budget-amount is missing. The budget check was skipped.',
+        );
+      } else {
+        const { checkBudgetThresholdWithExitCodes } = await import('./guardrails.js');
+        const budgetResult = await checkBudgetThresholdWithExitCodes(config);
+        if (!budgetResult.passed) {
+          throw new Error(budgetResult.message);
+        }
+        core.info('✅ Budget within the configured amount');
+      }
       core.endGroup();
     }
 

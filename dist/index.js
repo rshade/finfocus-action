@@ -31633,1899 +31633,6 @@ function formatEnvelopeError(envelope, exitCode) {
 
 /***/ }),
 
-/***/ 8638:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-
-// EXPORTS
-__nccwpck_require__.d(__webpack_exports__, {
-  PQ: () => (/* binding */ Installer),
-  g5: () => (/* binding */ getFinfocusVersion),
-  X7: () => (/* binding */ supportsExitCodes)
-});
-
-// EXTERNAL MODULE: external "os"
-var external_os_ = __nccwpck_require__(857);
-// EXTERNAL MODULE: external "path"
-var external_path_ = __nccwpck_require__(6928);
-// EXTERNAL MODULE: external "fs"
-var external_fs_ = __nccwpck_require__(9896);
-// EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js + 10 modules
-var lib_core = __nccwpck_require__(2398);
-// EXTERNAL MODULE: ./node_modules/@actions/io/lib/io.js
-var lib_io = __nccwpck_require__(8701);
-// EXTERNAL MODULE: external "crypto"
-var external_crypto_ = __nccwpck_require__(6982);
-// EXTERNAL MODULE: ./node_modules/@actions/tool-cache/node_modules/semver/index.js
-var node_modules_semver = __nccwpck_require__(885);
-// EXTERNAL MODULE: external "child_process"
-var external_child_process_ = __nccwpck_require__(5317);
-;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/manifest.js
-var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-
-
-
-
-
-// Internal object for testability (allows mocking in ESM)
-const _internal = {
-    readLinuxVersionFile() {
-        const lsbReleaseFile = '/etc/lsb-release';
-        const osReleaseFile = '/etc/os-release';
-        let contents = '';
-        if (external_fs_.existsSync(lsbReleaseFile)) {
-            contents = external_fs_.readFileSync(lsbReleaseFile).toString();
-        }
-        else if (external_fs_.existsSync(osReleaseFile)) {
-            contents = external_fs_.readFileSync(osReleaseFile).toString();
-        }
-        return contents;
-    }
-};
-function _findMatch(versionSpec, stable, candidates, archFilter) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const platFilter = os.platform();
-        let result;
-        let match;
-        let file;
-        for (const candidate of candidates) {
-            const version = candidate.version;
-            debug(`check ${version} satisfies ${versionSpec}`);
-            if (semver.satisfies(version, versionSpec) &&
-                (!stable || candidate.stable === stable)) {
-                file = candidate.files.find(item => {
-                    debug(`${item.arch}===${archFilter} && ${item.platform}===${platFilter}`);
-                    let chk = item.arch === archFilter && item.platform === platFilter;
-                    if (chk && item.platform_version) {
-                        const osVersion = _getOsVersion();
-                        if (osVersion === item.platform_version) {
-                            chk = true;
-                        }
-                        else {
-                            chk = semver.satisfies(osVersion, item.platform_version);
-                        }
-                    }
-                    return chk;
-                });
-                if (file) {
-                    debug(`matched ${candidate.version}`);
-                    match = candidate;
-                    break;
-                }
-            }
-        }
-        if (match && file) {
-            // clone since we're mutating the file list to be only the file that matches
-            result = Object.assign({}, match);
-            result.files = [file];
-        }
-        return result;
-    });
-}
-function _getOsVersion() {
-    // TODO: add windows and other linux, arm variants
-    // right now filtering on version is only an ubuntu and macos scenario for tools we build for hosted (python)
-    const plat = os.platform();
-    let version = '';
-    if (plat === 'darwin') {
-        version = cp.execSync('sw_vers -productVersion').toString();
-    }
-    else if (plat === 'linux') {
-        // lsb_release process not in some containers, readfile
-        // Run cat /etc/lsb-release
-        // DISTRIB_ID=Ubuntu
-        // DISTRIB_RELEASE=18.04
-        // DISTRIB_CODENAME=bionic
-        // DISTRIB_DESCRIPTION="Ubuntu 18.04.4 LTS"
-        const lsbContents = _internal.readLinuxVersionFile();
-        if (lsbContents) {
-            const lines = lsbContents.split('\n');
-            for (const line of lines) {
-                const parts = line.split('=');
-                if (parts.length === 2 &&
-                    (parts[0].trim() === 'VERSION_ID' ||
-                        parts[0].trim() === 'DISTRIB_RELEASE')) {
-                    version = parts[1].trim().replace(/^"/, '').replace(/"$/, '');
-                    break;
-                }
-            }
-        }
-    }
-    return version;
-}
-// Alias for backwards compatibility
-function _readLinuxVersionFile() {
-    return _internal.readLinuxVersionFile();
-}
-//# sourceMappingURL=manifest.js.map
-// EXTERNAL MODULE: external "http"
-var external_http_ = __nccwpck_require__(8611);
-var external_http_namespaceObject = /*#__PURE__*/__nccwpck_require__.t(external_http_, 2);
-// EXTERNAL MODULE: external "https"
-var external_https_ = __nccwpck_require__(5692);
-var external_https_namespaceObject = /*#__PURE__*/__nccwpck_require__.t(external_https_, 2);
-;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/node_modules/@actions/http-client/lib/proxy.js
-function getProxyUrl(reqUrl) {
-    const usingSsl = reqUrl.protocol === 'https:';
-    if (checkBypass(reqUrl)) {
-        return undefined;
-    }
-    const proxyVar = (() => {
-        if (usingSsl) {
-            return process.env['https_proxy'] || process.env['HTTPS_PROXY'];
-        }
-        else {
-            return process.env['http_proxy'] || process.env['HTTP_PROXY'];
-        }
-    })();
-    if (proxyVar) {
-        try {
-            return new DecodedURL(proxyVar);
-        }
-        catch (_a) {
-            if (!proxyVar.startsWith('http://') && !proxyVar.startsWith('https://'))
-                return new DecodedURL(`http://${proxyVar}`);
-        }
-    }
-    else {
-        return undefined;
-    }
-}
-function checkBypass(reqUrl) {
-    if (!reqUrl.hostname) {
-        return false;
-    }
-    const reqHost = reqUrl.hostname;
-    if (isLoopbackAddress(reqHost)) {
-        return true;
-    }
-    const noProxy = process.env['no_proxy'] || process.env['NO_PROXY'] || '';
-    if (!noProxy) {
-        return false;
-    }
-    // Determine the request port
-    let reqPort;
-    if (reqUrl.port) {
-        reqPort = Number(reqUrl.port);
-    }
-    else if (reqUrl.protocol === 'http:') {
-        reqPort = 80;
-    }
-    else if (reqUrl.protocol === 'https:') {
-        reqPort = 443;
-    }
-    // Format the request hostname and hostname with port
-    const upperReqHosts = [reqUrl.hostname.toUpperCase()];
-    if (typeof reqPort === 'number') {
-        upperReqHosts.push(`${upperReqHosts[0]}:${reqPort}`);
-    }
-    // Compare request host against noproxy
-    for (const upperNoProxyItem of noProxy
-        .split(',')
-        .map(x => x.trim().toUpperCase())
-        .filter(x => x)) {
-        if (upperNoProxyItem === '*' ||
-            upperReqHosts.some(x => x === upperNoProxyItem ||
-                x.endsWith(`.${upperNoProxyItem}`) ||
-                (upperNoProxyItem.startsWith('.') &&
-                    x.endsWith(`${upperNoProxyItem}`)))) {
-            return true;
-        }
-    }
-    return false;
-}
-function isLoopbackAddress(host) {
-    const hostLower = host.toLowerCase();
-    return (hostLower === 'localhost' ||
-        hostLower.startsWith('127.') ||
-        hostLower.startsWith('[::1]') ||
-        hostLower.startsWith('[0:0:0:0:0:0:0:1]'));
-}
-class DecodedURL extends URL {
-    constructor(url, base) {
-        super(url, base);
-        this._decodedUsername = decodeURIComponent(super.username);
-        this._decodedPassword = decodeURIComponent(super.password);
-    }
-    get username() {
-        return this._decodedUsername;
-    }
-    get password() {
-        return this._decodedPassword;
-    }
-}
-//# sourceMappingURL=proxy.js.map
-// EXTERNAL MODULE: ./node_modules/tunnel/index.js
-var tunnel = __nccwpck_require__(770);
-// EXTERNAL MODULE: ./node_modules/undici/index.js
-var undici = __nccwpck_require__(6752);
-;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/node_modules/@actions/http-client/lib/index.js
-/* eslint-disable @typescript-eslint/no-explicit-any */
-var lib_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-
-
-
-
-
-var HttpCodes;
-(function (HttpCodes) {
-    HttpCodes[HttpCodes["OK"] = 200] = "OK";
-    HttpCodes[HttpCodes["MultipleChoices"] = 300] = "MultipleChoices";
-    HttpCodes[HttpCodes["MovedPermanently"] = 301] = "MovedPermanently";
-    HttpCodes[HttpCodes["ResourceMoved"] = 302] = "ResourceMoved";
-    HttpCodes[HttpCodes["SeeOther"] = 303] = "SeeOther";
-    HttpCodes[HttpCodes["NotModified"] = 304] = "NotModified";
-    HttpCodes[HttpCodes["UseProxy"] = 305] = "UseProxy";
-    HttpCodes[HttpCodes["SwitchProxy"] = 306] = "SwitchProxy";
-    HttpCodes[HttpCodes["TemporaryRedirect"] = 307] = "TemporaryRedirect";
-    HttpCodes[HttpCodes["PermanentRedirect"] = 308] = "PermanentRedirect";
-    HttpCodes[HttpCodes["BadRequest"] = 400] = "BadRequest";
-    HttpCodes[HttpCodes["Unauthorized"] = 401] = "Unauthorized";
-    HttpCodes[HttpCodes["PaymentRequired"] = 402] = "PaymentRequired";
-    HttpCodes[HttpCodes["Forbidden"] = 403] = "Forbidden";
-    HttpCodes[HttpCodes["NotFound"] = 404] = "NotFound";
-    HttpCodes[HttpCodes["MethodNotAllowed"] = 405] = "MethodNotAllowed";
-    HttpCodes[HttpCodes["NotAcceptable"] = 406] = "NotAcceptable";
-    HttpCodes[HttpCodes["ProxyAuthenticationRequired"] = 407] = "ProxyAuthenticationRequired";
-    HttpCodes[HttpCodes["RequestTimeout"] = 408] = "RequestTimeout";
-    HttpCodes[HttpCodes["Conflict"] = 409] = "Conflict";
-    HttpCodes[HttpCodes["Gone"] = 410] = "Gone";
-    HttpCodes[HttpCodes["TooManyRequests"] = 429] = "TooManyRequests";
-    HttpCodes[HttpCodes["InternalServerError"] = 500] = "InternalServerError";
-    HttpCodes[HttpCodes["NotImplemented"] = 501] = "NotImplemented";
-    HttpCodes[HttpCodes["BadGateway"] = 502] = "BadGateway";
-    HttpCodes[HttpCodes["ServiceUnavailable"] = 503] = "ServiceUnavailable";
-    HttpCodes[HttpCodes["GatewayTimeout"] = 504] = "GatewayTimeout";
-})(HttpCodes || (HttpCodes = {}));
-var Headers;
-(function (Headers) {
-    Headers["Accept"] = "accept";
-    Headers["ContentType"] = "content-type";
-})(Headers || (Headers = {}));
-var MediaTypes;
-(function (MediaTypes) {
-    MediaTypes["ApplicationJson"] = "application/json";
-})(MediaTypes || (MediaTypes = {}));
-/**
- * Returns the proxy URL, depending upon the supplied url and proxy environment variables.
- * @param serverUrl  The server URL where the request will be sent. For example, https://api.github.com
- */
-function lib_getProxyUrl(serverUrl) {
-    const proxyUrl = pm.getProxyUrl(new URL(serverUrl));
-    return proxyUrl ? proxyUrl.href : '';
-}
-const HttpRedirectCodes = [
-    HttpCodes.MovedPermanently,
-    HttpCodes.ResourceMoved,
-    HttpCodes.SeeOther,
-    HttpCodes.TemporaryRedirect,
-    HttpCodes.PermanentRedirect
-];
-const HttpResponseRetryCodes = [
-    HttpCodes.BadGateway,
-    HttpCodes.ServiceUnavailable,
-    HttpCodes.GatewayTimeout
-];
-const RetryableHttpVerbs = ['OPTIONS', 'GET', 'DELETE', 'HEAD'];
-const ExponentialBackoffCeiling = 10;
-const ExponentialBackoffTimeSlice = 5;
-class HttpClientError extends Error {
-    constructor(message, statusCode) {
-        super(message);
-        this.name = 'HttpClientError';
-        this.statusCode = statusCode;
-        Object.setPrototypeOf(this, HttpClientError.prototype);
-    }
-}
-class HttpClientResponse {
-    constructor(message) {
-        this.message = message;
-    }
-    readBody() {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => lib_awaiter(this, void 0, void 0, function* () {
-                let output = Buffer.alloc(0);
-                this.message.on('data', (chunk) => {
-                    output = Buffer.concat([output, chunk]);
-                });
-                this.message.on('end', () => {
-                    resolve(output.toString());
-                });
-            }));
-        });
-    }
-    readBodyBuffer() {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve) => lib_awaiter(this, void 0, void 0, function* () {
-                const chunks = [];
-                this.message.on('data', (chunk) => {
-                    chunks.push(chunk);
-                });
-                this.message.on('end', () => {
-                    resolve(Buffer.concat(chunks));
-                });
-            }));
-        });
-    }
-}
-function isHttps(requestUrl) {
-    const parsedUrl = new URL(requestUrl);
-    return parsedUrl.protocol === 'https:';
-}
-class HttpClient {
-    constructor(userAgent, handlers, requestOptions) {
-        this._ignoreSslError = false;
-        this._allowRedirects = true;
-        this._allowRedirectDowngrade = false;
-        this._maxRedirects = 50;
-        this._allowRetries = false;
-        this._maxRetries = 1;
-        this._keepAlive = false;
-        this._disposed = false;
-        this.userAgent = this._getUserAgentWithOrchestrationId(userAgent);
-        this.handlers = handlers || [];
-        this.requestOptions = requestOptions;
-        if (requestOptions) {
-            if (requestOptions.ignoreSslError != null) {
-                this._ignoreSslError = requestOptions.ignoreSslError;
-            }
-            this._socketTimeout = requestOptions.socketTimeout;
-            if (requestOptions.allowRedirects != null) {
-                this._allowRedirects = requestOptions.allowRedirects;
-            }
-            if (requestOptions.allowRedirectDowngrade != null) {
-                this._allowRedirectDowngrade = requestOptions.allowRedirectDowngrade;
-            }
-            if (requestOptions.maxRedirects != null) {
-                this._maxRedirects = Math.max(requestOptions.maxRedirects, 0);
-            }
-            if (requestOptions.keepAlive != null) {
-                this._keepAlive = requestOptions.keepAlive;
-            }
-            if (requestOptions.allowRetries != null) {
-                this._allowRetries = requestOptions.allowRetries;
-            }
-            if (requestOptions.maxRetries != null) {
-                this._maxRetries = requestOptions.maxRetries;
-            }
-        }
-    }
-    options(requestUrl, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('OPTIONS', requestUrl, null, additionalHeaders || {});
-        });
-    }
-    get(requestUrl, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('GET', requestUrl, null, additionalHeaders || {});
-        });
-    }
-    del(requestUrl, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('DELETE', requestUrl, null, additionalHeaders || {});
-        });
-    }
-    post(requestUrl, data, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('POST', requestUrl, data, additionalHeaders || {});
-        });
-    }
-    patch(requestUrl, data, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('PATCH', requestUrl, data, additionalHeaders || {});
-        });
-    }
-    put(requestUrl, data, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('PUT', requestUrl, data, additionalHeaders || {});
-        });
-    }
-    head(requestUrl, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request('HEAD', requestUrl, null, additionalHeaders || {});
-        });
-    }
-    sendStream(verb, requestUrl, stream, additionalHeaders) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return this.request(verb, requestUrl, stream, additionalHeaders);
-        });
-    }
-    /**
-     * Gets a typed object from an endpoint
-     * Be aware that not found returns a null.  Other errors (4xx, 5xx) reject the promise
-     */
-    getJson(requestUrl_1) {
-        return lib_awaiter(this, arguments, void 0, function* (requestUrl, additionalHeaders = {}) {
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            const res = yield this.get(requestUrl, additionalHeaders);
-            return this._processResponse(res, this.requestOptions);
-        });
-    }
-    postJson(requestUrl_1, obj_1) {
-        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
-            const data = JSON.stringify(obj, null, 2);
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] =
-                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
-            const res = yield this.post(requestUrl, data, additionalHeaders);
-            return this._processResponse(res, this.requestOptions);
-        });
-    }
-    putJson(requestUrl_1, obj_1) {
-        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
-            const data = JSON.stringify(obj, null, 2);
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] =
-                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
-            const res = yield this.put(requestUrl, data, additionalHeaders);
-            return this._processResponse(res, this.requestOptions);
-        });
-    }
-    patchJson(requestUrl_1, obj_1) {
-        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
-            const data = JSON.stringify(obj, null, 2);
-            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
-            additionalHeaders[Headers.ContentType] =
-                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
-            const res = yield this.patch(requestUrl, data, additionalHeaders);
-            return this._processResponse(res, this.requestOptions);
-        });
-    }
-    /**
-     * Makes a raw http request.
-     * All other methods such as get, post, patch, and request ultimately call this.
-     * Prefer get, del, post and patch
-     */
-    request(verb, requestUrl, data, headers) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            if (this._disposed) {
-                throw new Error('Client has already been disposed.');
-            }
-            const parsedUrl = new URL(requestUrl);
-            let info = this._prepareRequest(verb, parsedUrl, headers);
-            // Only perform retries on reads since writes may not be idempotent.
-            const maxTries = this._allowRetries && RetryableHttpVerbs.includes(verb)
-                ? this._maxRetries + 1
-                : 1;
-            let numTries = 0;
-            let response;
-            do {
-                response = yield this.requestRaw(info, data);
-                // Check if it's an authentication challenge
-                if (response &&
-                    response.message &&
-                    response.message.statusCode === HttpCodes.Unauthorized) {
-                    let authenticationHandler;
-                    for (const handler of this.handlers) {
-                        if (handler.canHandleAuthentication(response)) {
-                            authenticationHandler = handler;
-                            break;
-                        }
-                    }
-                    if (authenticationHandler) {
-                        return authenticationHandler.handleAuthentication(this, info, data);
-                    }
-                    else {
-                        // We have received an unauthorized response but have no handlers to handle it.
-                        // Let the response return to the caller.
-                        return response;
-                    }
-                }
-                let redirectsRemaining = this._maxRedirects;
-                while (response.message.statusCode &&
-                    HttpRedirectCodes.includes(response.message.statusCode) &&
-                    this._allowRedirects &&
-                    redirectsRemaining > 0) {
-                    const redirectUrl = response.message.headers['location'];
-                    if (!redirectUrl) {
-                        // if there's no location to redirect to, we won't
-                        break;
-                    }
-                    const parsedRedirectUrl = new URL(redirectUrl);
-                    if (parsedUrl.protocol === 'https:' &&
-                        parsedUrl.protocol !== parsedRedirectUrl.protocol &&
-                        !this._allowRedirectDowngrade) {
-                        throw new Error('Redirect from HTTPS to HTTP protocol. This downgrade is not allowed for security reasons. If you want to allow this behavior, set the allowRedirectDowngrade option to true.');
-                    }
-                    // we need to finish reading the response before reassigning response
-                    // which will leak the open socket.
-                    yield response.readBody();
-                    // strip authorization header if redirected to a different hostname
-                    if (parsedRedirectUrl.hostname !== parsedUrl.hostname) {
-                        for (const header in headers) {
-                            // header names are case insensitive
-                            if (header.toLowerCase() === 'authorization') {
-                                delete headers[header];
-                            }
-                        }
-                    }
-                    // let's make the request with the new redirectUrl
-                    info = this._prepareRequest(verb, parsedRedirectUrl, headers);
-                    response = yield this.requestRaw(info, data);
-                    redirectsRemaining--;
-                }
-                if (!response.message.statusCode ||
-                    !HttpResponseRetryCodes.includes(response.message.statusCode)) {
-                    // If not a retry code, return immediately instead of retrying
-                    return response;
-                }
-                numTries += 1;
-                if (numTries < maxTries) {
-                    yield response.readBody();
-                    yield this._performExponentialBackoff(numTries);
-                }
-            } while (numTries < maxTries);
-            return response;
-        });
-    }
-    /**
-     * Needs to be called if keepAlive is set to true in request options.
-     */
-    dispose() {
-        if (this._agent) {
-            this._agent.destroy();
-        }
-        this._disposed = true;
-    }
-    /**
-     * Raw request.
-     * @param info
-     * @param data
-     */
-    requestRaw(info, data) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve, reject) => {
-                function callbackForResult(err, res) {
-                    if (err) {
-                        reject(err);
-                    }
-                    else if (!res) {
-                        // If `err` is not passed, then `res` must be passed.
-                        reject(new Error('Unknown error'));
-                    }
-                    else {
-                        resolve(res);
-                    }
-                }
-                this.requestRawWithCallback(info, data, callbackForResult);
-            });
-        });
-    }
-    /**
-     * Raw request with callback.
-     * @param info
-     * @param data
-     * @param onResult
-     */
-    requestRawWithCallback(info, data, onResult) {
-        if (typeof data === 'string') {
-            if (!info.options.headers) {
-                info.options.headers = {};
-            }
-            info.options.headers['Content-Length'] = Buffer.byteLength(data, 'utf8');
-        }
-        let callbackCalled = false;
-        function handleResult(err, res) {
-            if (!callbackCalled) {
-                callbackCalled = true;
-                onResult(err, res);
-            }
-        }
-        const req = info.httpModule.request(info.options, (msg) => {
-            const res = new HttpClientResponse(msg);
-            handleResult(undefined, res);
-        });
-        let socket;
-        req.on('socket', sock => {
-            socket = sock;
-        });
-        // If we ever get disconnected, we want the socket to timeout eventually
-        req.setTimeout(this._socketTimeout || 3 * 60000, () => {
-            if (socket) {
-                socket.end();
-            }
-            handleResult(new Error(`Request timeout: ${info.options.path}`));
-        });
-        req.on('error', function (err) {
-            // err has statusCode property
-            // res should have headers
-            handleResult(err);
-        });
-        if (data && typeof data === 'string') {
-            req.write(data, 'utf8');
-        }
-        if (data && typeof data !== 'string') {
-            data.on('close', function () {
-                req.end();
-            });
-            data.pipe(req);
-        }
-        else {
-            req.end();
-        }
-    }
-    /**
-     * Gets an http agent. This function is useful when you need an http agent that handles
-     * routing through a proxy server - depending upon the url and proxy environment variables.
-     * @param serverUrl  The server URL where the request will be sent. For example, https://api.github.com
-     */
-    getAgent(serverUrl) {
-        const parsedUrl = new URL(serverUrl);
-        return this._getAgent(parsedUrl);
-    }
-    getAgentDispatcher(serverUrl) {
-        const parsedUrl = new URL(serverUrl);
-        const proxyUrl = getProxyUrl(parsedUrl);
-        const useProxy = proxyUrl && proxyUrl.hostname;
-        if (!useProxy) {
-            return;
-        }
-        return this._getProxyAgentDispatcher(parsedUrl, proxyUrl);
-    }
-    _prepareRequest(method, requestUrl, headers) {
-        const info = {};
-        info.parsedUrl = requestUrl;
-        const usingSsl = info.parsedUrl.protocol === 'https:';
-        info.httpModule = usingSsl ? external_https_namespaceObject : external_http_namespaceObject;
-        const defaultPort = usingSsl ? 443 : 80;
-        info.options = {};
-        info.options.host = info.parsedUrl.hostname;
-        info.options.port = info.parsedUrl.port
-            ? parseInt(info.parsedUrl.port)
-            : defaultPort;
-        info.options.path =
-            (info.parsedUrl.pathname || '') + (info.parsedUrl.search || '');
-        info.options.method = method;
-        info.options.headers = this._mergeHeaders(headers);
-        if (this.userAgent != null) {
-            info.options.headers['user-agent'] = this.userAgent;
-        }
-        info.options.agent = this._getAgent(info.parsedUrl);
-        // gives handlers an opportunity to participate
-        if (this.handlers) {
-            for (const handler of this.handlers) {
-                handler.prepareRequest(info.options);
-            }
-        }
-        return info;
-    }
-    _mergeHeaders(headers) {
-        if (this.requestOptions && this.requestOptions.headers) {
-            return Object.assign({}, lowercaseKeys(this.requestOptions.headers), lowercaseKeys(headers || {}));
-        }
-        return lowercaseKeys(headers || {});
-    }
-    /**
-     * Gets an existing header value or returns a default.
-     * Handles converting number header values to strings since HTTP headers must be strings.
-     * Note: This returns string | string[] since some headers can have multiple values.
-     * For headers that must always be a single string (like Content-Type), use the
-     * specialized _getExistingOrDefaultContentTypeHeader method instead.
-     */
-    _getExistingOrDefaultHeader(additionalHeaders, header, _default) {
-        let clientHeader;
-        if (this.requestOptions && this.requestOptions.headers) {
-            const headerValue = lowercaseKeys(this.requestOptions.headers)[header];
-            if (headerValue) {
-                clientHeader =
-                    typeof headerValue === 'number' ? headerValue.toString() : headerValue;
-            }
-        }
-        const additionalValue = additionalHeaders[header];
-        if (additionalValue !== undefined) {
-            return typeof additionalValue === 'number'
-                ? additionalValue.toString()
-                : additionalValue;
-        }
-        if (clientHeader !== undefined) {
-            return clientHeader;
-        }
-        return _default;
-    }
-    /**
-     * Specialized version of _getExistingOrDefaultHeader for Content-Type header.
-     * Always returns a single string (not an array) since Content-Type should be a single value.
-     * Converts arrays to comma-separated strings and numbers to strings to ensure type safety.
-     * This was split from _getExistingOrDefaultHeader to provide stricter typing for callers
-     * that assign the result to places expecting a string (e.g., additionalHeaders[Headers.ContentType]).
-     */
-    _getExistingOrDefaultContentTypeHeader(additionalHeaders, _default) {
-        let clientHeader;
-        if (this.requestOptions && this.requestOptions.headers) {
-            const headerValue = lowercaseKeys(this.requestOptions.headers)[Headers.ContentType];
-            if (headerValue) {
-                if (typeof headerValue === 'number') {
-                    clientHeader = String(headerValue);
-                }
-                else if (Array.isArray(headerValue)) {
-                    clientHeader = headerValue.join(', ');
-                }
-                else {
-                    clientHeader = headerValue;
-                }
-            }
-        }
-        const additionalValue = additionalHeaders[Headers.ContentType];
-        // Return the first non-undefined value, converting numbers or arrays to strings if necessary
-        if (additionalValue !== undefined) {
-            if (typeof additionalValue === 'number') {
-                return String(additionalValue);
-            }
-            else if (Array.isArray(additionalValue)) {
-                return additionalValue.join(', ');
-            }
-            else {
-                return additionalValue;
-            }
-        }
-        if (clientHeader !== undefined) {
-            return clientHeader;
-        }
-        return _default;
-    }
-    _getAgent(parsedUrl) {
-        let agent;
-        const proxyUrl = getProxyUrl(parsedUrl);
-        const useProxy = proxyUrl && proxyUrl.hostname;
-        if (this._keepAlive && useProxy) {
-            agent = this._proxyAgent;
-        }
-        if (!useProxy) {
-            agent = this._agent;
-        }
-        // if agent is already assigned use that agent.
-        if (agent) {
-            return agent;
-        }
-        const usingSsl = parsedUrl.protocol === 'https:';
-        let maxSockets = 100;
-        if (this.requestOptions) {
-            maxSockets = this.requestOptions.maxSockets || external_http_.globalAgent.maxSockets;
-        }
-        // This is `useProxy` again, but we need to check `proxyURl` directly for TypeScripts's flow analysis.
-        if (proxyUrl && proxyUrl.hostname) {
-            const agentOptions = {
-                maxSockets,
-                keepAlive: this._keepAlive,
-                proxy: Object.assign(Object.assign({}, ((proxyUrl.username || proxyUrl.password) && {
-                    proxyAuth: `${proxyUrl.username}:${proxyUrl.password}`
-                })), { host: proxyUrl.hostname, port: proxyUrl.port })
-            };
-            let tunnelAgent;
-            const overHttps = proxyUrl.protocol === 'https:';
-            if (usingSsl) {
-                tunnelAgent = overHttps ? tunnel.httpsOverHttps : tunnel.httpsOverHttp;
-            }
-            else {
-                tunnelAgent = overHttps ? tunnel.httpOverHttps : tunnel.httpOverHttp;
-            }
-            agent = tunnelAgent(agentOptions);
-            this._proxyAgent = agent;
-        }
-        // if tunneling agent isn't assigned create a new agent
-        if (!agent) {
-            const options = { keepAlive: this._keepAlive, maxSockets };
-            agent = usingSsl ? new external_https_.Agent(options) : new external_http_.Agent(options);
-            this._agent = agent;
-        }
-        if (usingSsl && this._ignoreSslError) {
-            // we don't want to set NODE_TLS_REJECT_UNAUTHORIZED=0 since that will affect request for entire process
-            // http.RequestOptions doesn't expose a way to modify RequestOptions.agent.options
-            // we have to cast it to any and change it directly
-            agent.options = Object.assign(agent.options || {}, {
-                rejectUnauthorized: false
-            });
-        }
-        return agent;
-    }
-    _getProxyAgentDispatcher(parsedUrl, proxyUrl) {
-        let proxyAgent;
-        if (this._keepAlive) {
-            proxyAgent = this._proxyAgentDispatcher;
-        }
-        // if agent is already assigned use that agent.
-        if (proxyAgent) {
-            return proxyAgent;
-        }
-        const usingSsl = parsedUrl.protocol === 'https:';
-        proxyAgent = new undici.ProxyAgent(Object.assign({ uri: proxyUrl.href, pipelining: !this._keepAlive ? 0 : 1 }, ((proxyUrl.username || proxyUrl.password) && {
-            token: `Basic ${Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64')}`
-        })));
-        this._proxyAgentDispatcher = proxyAgent;
-        if (usingSsl && this._ignoreSslError) {
-            // we don't want to set NODE_TLS_REJECT_UNAUTHORIZED=0 since that will affect request for entire process
-            // http.RequestOptions doesn't expose a way to modify RequestOptions.agent.options
-            // we have to cast it to any and change it directly
-            proxyAgent.options = Object.assign(proxyAgent.options.requestTls || {}, {
-                rejectUnauthorized: false
-            });
-        }
-        return proxyAgent;
-    }
-    _getUserAgentWithOrchestrationId(userAgent) {
-        const baseUserAgent = userAgent || 'actions/http-client';
-        const orchId = process.env['ACTIONS_ORCHESTRATION_ID'];
-        if (orchId) {
-            // Sanitize the orchestration ID to ensure it contains only valid characters
-            // Valid characters: 0-9, a-z, _, -, .
-            const sanitizedId = orchId.replace(/[^a-z0-9_.-]/gi, '_');
-            return `${baseUserAgent} actions_orchestration_id/${sanitizedId}`;
-        }
-        return baseUserAgent;
-    }
-    _performExponentialBackoff(retryNumber) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
-            const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
-            return new Promise(resolve => setTimeout(() => resolve(), ms));
-        });
-    }
-    _processResponse(res, options) {
-        return lib_awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve, reject) => lib_awaiter(this, void 0, void 0, function* () {
-                const statusCode = res.message.statusCode || 0;
-                const response = {
-                    statusCode,
-                    result: null,
-                    headers: {}
-                };
-                // not found leads to null obj returned
-                if (statusCode === HttpCodes.NotFound) {
-                    resolve(response);
-                }
-                // get the result from the body
-                function dateTimeDeserializer(key, value) {
-                    if (typeof value === 'string') {
-                        const a = new Date(value);
-                        if (!isNaN(a.valueOf())) {
-                            return a;
-                        }
-                    }
-                    return value;
-                }
-                let obj;
-                let contents;
-                try {
-                    contents = yield res.readBody();
-                    if (contents && contents.length > 0) {
-                        if (options && options.deserializeDates) {
-                            obj = JSON.parse(contents, dateTimeDeserializer);
-                        }
-                        else {
-                            obj = JSON.parse(contents);
-                        }
-                        response.result = obj;
-                    }
-                    response.headers = res.message.headers;
-                }
-                catch (err) {
-                    // Invalid resource (contents not json);  leaving result obj null
-                }
-                // note that 3xx redirects are handled by the http layer.
-                if (statusCode > 299) {
-                    let msg;
-                    // if exception/error in body, attempt to get better error
-                    if (obj && obj.message) {
-                        msg = obj.message;
-                    }
-                    else if (contents && contents.length > 0) {
-                        // it may be the case that the exception is in the body message as string
-                        msg = contents;
-                    }
-                    else {
-                        msg = `Failed request: (${statusCode})`;
-                    }
-                    const err = new HttpClientError(msg, statusCode);
-                    err.result = response.result;
-                    reject(err);
-                }
-                else {
-                    resolve(response);
-                }
-            }));
-        });
-    }
-}
-const lowercaseKeys = (obj) => Object.keys(obj).reduce((c, k) => ((c[k.toLowerCase()] = obj[k]), c), {});
-//# sourceMappingURL=index.js.map
-;// CONCATENATED MODULE: external "stream"
-const external_stream_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream");
-// EXTERNAL MODULE: external "util"
-var external_util_ = __nccwpck_require__(9023);
-// EXTERNAL MODULE: external "assert"
-var external_assert_ = __nccwpck_require__(2613);
-// EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js + 2 modules
-var lib_exec = __nccwpck_require__(5260);
-;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/retry-helper.js
-var retry_helper_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-
-/**
- * Internal class for retries
- */
-class RetryHelper {
-    constructor(maxAttempts, minSeconds, maxSeconds) {
-        if (maxAttempts < 1) {
-            throw new Error('max attempts should be greater than or equal to 1');
-        }
-        this.maxAttempts = maxAttempts;
-        this.minSeconds = Math.floor(minSeconds);
-        this.maxSeconds = Math.floor(maxSeconds);
-        if (this.minSeconds > this.maxSeconds) {
-            throw new Error('min seconds should be less than or equal to max seconds');
-        }
-    }
-    execute(action, isRetryable) {
-        return retry_helper_awaiter(this, void 0, void 0, function* () {
-            let attempt = 1;
-            while (attempt < this.maxAttempts) {
-                // Try
-                try {
-                    return yield action();
-                }
-                catch (err) {
-                    if (isRetryable && !isRetryable(err)) {
-                        throw err;
-                    }
-                    lib_core/* info */.pq(err.message);
-                }
-                // Sleep
-                const seconds = this.getSleepAmount();
-                lib_core/* info */.pq(`Waiting ${seconds} seconds before trying again`);
-                yield this.sleep(seconds);
-                attempt++;
-            }
-            // Last attempt
-            return yield action();
-        });
-    }
-    getSleepAmount() {
-        return (Math.floor(Math.random() * (this.maxSeconds - this.minSeconds + 1)) +
-            this.minSeconds);
-    }
-    sleep(seconds) {
-        return retry_helper_awaiter(this, void 0, void 0, function* () {
-            return new Promise(resolve => setTimeout(resolve, seconds * 1000));
-        });
-    }
-}
-//# sourceMappingURL=retry-helper.js.map
-;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/tool-cache.js
-var tool_cache_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class HTTPError extends Error {
-    constructor(httpStatusCode) {
-        super(`Unexpected HTTP response: ${httpStatusCode}`);
-        this.httpStatusCode = httpStatusCode;
-        Object.setPrototypeOf(this, new.target.prototype);
-    }
-}
-const IS_WINDOWS = process.platform === 'win32';
-const IS_MAC = process.platform === 'darwin';
-const userAgent = 'actions/tool-cache';
-/**
- * Download a tool from an url and stream it into a file
- *
- * @param url       url of tool to download
- * @param dest      path to download tool
- * @param auth      authorization header
- * @param headers   other headers
- * @returns         path to downloaded tool
- */
-function downloadTool(url, dest, auth, headers) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        dest = dest || external_path_.join(_getTempDirectory(), external_crypto_.randomUUID());
-        yield lib_io/* mkdirP */.U$(external_path_.dirname(dest));
-        lib_core/* debug */.Yz(`Downloading ${url}`);
-        lib_core/* debug */.Yz(`Destination ${dest}`);
-        const maxAttempts = 3;
-        const minSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MIN_SECONDS', 10);
-        const maxSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MAX_SECONDS', 20);
-        const retryHelper = new RetryHelper(maxAttempts, minSeconds, maxSeconds);
-        return yield retryHelper.execute(() => tool_cache_awaiter(this, void 0, void 0, function* () {
-            return yield downloadToolAttempt(url, dest || '', auth, headers);
-        }), (err) => {
-            if (err instanceof HTTPError && err.httpStatusCode) {
-                // Don't retry anything less than 500, except 408 Request Timeout and 429 Too Many Requests
-                if (err.httpStatusCode < 500 &&
-                    err.httpStatusCode !== 408 &&
-                    err.httpStatusCode !== 429) {
-                    return false;
-                }
-            }
-            // Otherwise retry
-            return true;
-        });
-    });
-}
-function downloadToolAttempt(url, dest, auth, headers) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        if (external_fs_.existsSync(dest)) {
-            throw new Error(`Destination file path ${dest} already exists`);
-        }
-        // Get the response headers
-        const http = new HttpClient(userAgent, [], {
-            allowRetries: false
-        });
-        if (auth) {
-            lib_core/* debug */.Yz('set auth');
-            if (headers === undefined) {
-                headers = {};
-            }
-            headers.authorization = auth;
-        }
-        const response = yield http.get(url, headers);
-        if (response.message.statusCode !== 200) {
-            const err = new HTTPError(response.message.statusCode);
-            lib_core/* debug */.Yz(`Failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`);
-            throw err;
-        }
-        // Download the response body
-        const pipeline = external_util_.promisify(external_stream_namespaceObject.pipeline);
-        const responseMessageFactory = _getGlobal('TEST_DOWNLOAD_TOOL_RESPONSE_MESSAGE_FACTORY', () => response.message);
-        const readStream = responseMessageFactory();
-        let succeeded = false;
-        try {
-            yield pipeline(readStream, external_fs_.createWriteStream(dest));
-            lib_core/* debug */.Yz('download complete');
-            succeeded = true;
-            return dest;
-        }
-        finally {
-            // Error, delete dest before retry
-            if (!succeeded) {
-                lib_core/* debug */.Yz('download failed');
-                try {
-                    yield lib_io/* rmRF */.Yz(dest);
-                }
-                catch (err) {
-                    lib_core/* debug */.Yz(`Failed to delete '${dest}'. ${err.message}`);
-                }
-            }
-        }
-    });
-}
-/**
- * Extract a .7z file
- *
- * @param file     path to the .7z file
- * @param dest     destination directory. Optional.
- * @param _7zPath  path to 7zr.exe. Optional, for long path support. Most .7z archives do not have this
- * problem. If your .7z archive contains very long paths, you can pass the path to 7zr.exe which will
- * gracefully handle long paths. By default 7zdec.exe is used because it is a very small program and is
- * bundled with the tool lib. However it does not support long paths. 7zr.exe is the reduced command line
- * interface, it is smaller than the full command line interface, and it does support long paths. At the
- * time of this writing, it is freely available from the LZMA SDK that is available on the 7zip website.
- * Be sure to check the current license agreement. If 7zr.exe is bundled with your action, then the path
- * to 7zr.exe can be pass to this function.
- * @returns        path to the destination directory
- */
-function extract7z(file, dest, _7zPath) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        ok(IS_WINDOWS, 'extract7z() not supported on current OS');
-        ok(file, 'parameter "file" is required');
-        dest = yield _createExtractFolder(dest);
-        const originalCwd = process.cwd();
-        process.chdir(dest);
-        if (_7zPath) {
-            try {
-                const logLevel = core.isDebug() ? '-bb1' : '-bb0';
-                const args = [
-                    'x', // eXtract files with full paths
-                    logLevel, // -bb[0-3] : set output log level
-                    '-bd', // disable progress indicator
-                    '-sccUTF-8', // set charset for for console input/output
-                    file
-                ];
-                const options = {
-                    silent: true
-                };
-                yield exec(`"${_7zPath}"`, args, options);
-            }
-            finally {
-                process.chdir(originalCwd);
-            }
-        }
-        else {
-            const escapedScript = path
-                .join(__dirname, '..', 'scripts', 'Invoke-7zdec.ps1')
-                .replace(/'/g, "''")
-                .replace(/"|\n|\r/g, ''); // double-up single quotes, remove double quotes and newlines
-            const escapedFile = file.replace(/'/g, "''").replace(/"|\n|\r/g, '');
-            const escapedTarget = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
-            const command = `& '${escapedScript}' -Source '${escapedFile}' -Target '${escapedTarget}'`;
-            const args = [
-                '-NoLogo',
-                '-Sta',
-                '-NoProfile',
-                '-NonInteractive',
-                '-ExecutionPolicy',
-                'Unrestricted',
-                '-Command',
-                command
-            ];
-            const options = {
-                silent: true
-            };
-            try {
-                const powershellPath = yield io.which('powershell', true);
-                yield exec(`"${powershellPath}"`, args, options);
-            }
-            finally {
-                process.chdir(originalCwd);
-            }
-        }
-        return dest;
-    });
-}
-/**
- * Extract a compressed tar archive
- *
- * @param file     path to the tar
- * @param dest     destination directory. Optional.
- * @param flags    flags for the tar command to use for extraction. Defaults to 'xz' (extracting gzipped tars). Optional.
- * @returns        path to the destination directory
- */
-function extractTar(file_1, dest_1) {
-    return tool_cache_awaiter(this, arguments, void 0, function* (file, dest, flags = 'xz') {
-        if (!file) {
-            throw new Error("parameter 'file' is required");
-        }
-        // Create dest
-        dest = yield _createExtractFolder(dest);
-        // Determine whether GNU tar
-        lib_core/* debug */.Yz('Checking tar --version');
-        let versionOutput = '';
-        yield (0,lib_exec/* exec */.m)('tar --version', [], {
-            ignoreReturnCode: true,
-            silent: true,
-            listeners: {
-                stdout: (data) => (versionOutput += data.toString()),
-                stderr: (data) => (versionOutput += data.toString())
-            }
-        });
-        lib_core/* debug */.Yz(versionOutput.trim());
-        const isGnuTar = versionOutput.toUpperCase().includes('GNU TAR');
-        // Initialize args
-        let args;
-        if (flags instanceof Array) {
-            args = flags;
-        }
-        else {
-            args = [flags];
-        }
-        if (lib_core/* isDebug */._o() && !flags.includes('v')) {
-            args.push('-v');
-        }
-        let destArg = dest;
-        let fileArg = file;
-        if (IS_WINDOWS && isGnuTar) {
-            args.push('--force-local');
-            destArg = dest.replace(/\\/g, '/');
-            // Technically only the dest needs to have `/` but for aesthetic consistency
-            // convert slashes in the file arg too.
-            fileArg = file.replace(/\\/g, '/');
-        }
-        if (isGnuTar) {
-            // Suppress warnings when using GNU tar to extract archives created by BSD tar
-            args.push('--warning=no-unknown-keyword');
-            args.push('--overwrite');
-        }
-        args.push('-C', destArg, '-f', fileArg);
-        yield (0,lib_exec/* exec */.m)(`tar`, args);
-        return dest;
-    });
-}
-/**
- * Extract a xar compatible archive
- *
- * @param file     path to the archive
- * @param dest     destination directory. Optional.
- * @param flags    flags for the xar. Optional.
- * @returns        path to the destination directory
- */
-function extractXar(file_1, dest_1) {
-    return tool_cache_awaiter(this, arguments, void 0, function* (file, dest, flags = []) {
-        ok(IS_MAC, 'extractXar() not supported on current OS');
-        ok(file, 'parameter "file" is required');
-        dest = yield _createExtractFolder(dest);
-        let args;
-        if (flags instanceof Array) {
-            args = flags;
-        }
-        else {
-            args = [flags];
-        }
-        args.push('-x', '-C', dest, '-f', file);
-        if (core.isDebug()) {
-            args.push('-v');
-        }
-        const xarPath = yield io.which('xar', true);
-        yield exec(`"${xarPath}"`, _unique(args));
-        return dest;
-    });
-}
-/**
- * Extract a zip
- *
- * @param file     path to the zip
- * @param dest     destination directory. Optional.
- * @returns        path to the destination directory
- */
-function extractZip(file, dest) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        if (!file) {
-            throw new Error("parameter 'file' is required");
-        }
-        dest = yield _createExtractFolder(dest);
-        if (IS_WINDOWS) {
-            yield extractZipWin(file, dest);
-        }
-        else {
-            yield extractZipNix(file, dest);
-        }
-        return dest;
-    });
-}
-function extractZipWin(file, dest) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        // build the powershell command
-        const escapedFile = file.replace(/'/g, "''").replace(/"|\n|\r/g, ''); // double-up single quotes, remove double quotes and newlines
-        const escapedDest = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
-        const pwshPath = yield lib_io/* which */.K7('pwsh', false);
-        //To match the file overwrite behavior on nix systems, we use the overwrite = true flag for ExtractToDirectory
-        //and the -Force flag for Expand-Archive as a fallback
-        if (pwshPath) {
-            //attempt to use pwsh with ExtractToDirectory, if this fails attempt Expand-Archive
-            const pwshCommand = [
-                `$ErrorActionPreference = 'Stop' ;`,
-                `try { Add-Type -AssemblyName System.IO.Compression.ZipFile } catch { } ;`,
-                `try { [System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedFile}', '${escapedDest}', $true) }`,
-                `catch { if (($_.Exception.GetType().FullName -eq 'System.Management.Automation.MethodException') -or ($_.Exception.GetType().FullName -eq 'System.Management.Automation.RuntimeException') ){ Expand-Archive -LiteralPath '${escapedFile}' -DestinationPath '${escapedDest}' -Force } else { throw $_ } } ;`
-            ].join(' ');
-            const args = [
-                '-NoLogo',
-                '-NoProfile',
-                '-NonInteractive',
-                '-ExecutionPolicy',
-                'Unrestricted',
-                '-Command',
-                pwshCommand
-            ];
-            lib_core/* debug */.Yz(`Using pwsh at path: ${pwshPath}`);
-            yield (0,lib_exec/* exec */.m)(`"${pwshPath}"`, args);
-        }
-        else {
-            const powershellCommand = [
-                `$ErrorActionPreference = 'Stop' ;`,
-                `try { Add-Type -AssemblyName System.IO.Compression.FileSystem } catch { } ;`,
-                `if ((Get-Command -Name Expand-Archive -Module Microsoft.PowerShell.Archive -ErrorAction Ignore)) { Expand-Archive -LiteralPath '${escapedFile}' -DestinationPath '${escapedDest}' -Force }`,
-                `else {[System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedFile}', '${escapedDest}', $true) }`
-            ].join(' ');
-            const args = [
-                '-NoLogo',
-                '-Sta',
-                '-NoProfile',
-                '-NonInteractive',
-                '-ExecutionPolicy',
-                'Unrestricted',
-                '-Command',
-                powershellCommand
-            ];
-            const powershellPath = yield lib_io/* which */.K7('powershell', true);
-            lib_core/* debug */.Yz(`Using powershell at path: ${powershellPath}`);
-            yield (0,lib_exec/* exec */.m)(`"${powershellPath}"`, args);
-        }
-    });
-}
-function extractZipNix(file, dest) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        const unzipPath = yield lib_io/* which */.K7('unzip', true);
-        const args = [file];
-        if (!lib_core/* isDebug */._o()) {
-            args.unshift('-q');
-        }
-        args.unshift('-o'); //overwrite with -o, otherwise a prompt is shown which freezes the run
-        yield (0,lib_exec/* exec */.m)(`"${unzipPath}"`, args, { cwd: dest });
-    });
-}
-/**
- * Caches a directory and installs it into the tool cacheDir
- *
- * @param sourceDir    the directory to cache into tools
- * @param tool          tool name
- * @param version       version of the tool.  semver format
- * @param arch          architecture of the tool.  Optional.  Defaults to machine architecture
- */
-function cacheDir(sourceDir, tool, version, arch) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        version = node_modules_semver.clean(version) || version;
-        arch = arch || external_os_.arch();
-        lib_core/* debug */.Yz(`Caching tool ${tool} ${version} ${arch}`);
-        lib_core/* debug */.Yz(`source dir: ${sourceDir}`);
-        if (!external_fs_.statSync(sourceDir).isDirectory()) {
-            throw new Error('sourceDir is not a directory');
-        }
-        // Create the tool dir
-        const destPath = yield _createToolPath(tool, version, arch);
-        // copy each child item. do not move. move can fail on Windows
-        // due to anti-virus software having an open handle on a file.
-        for (const itemName of external_fs_.readdirSync(sourceDir)) {
-            const s = external_path_.join(sourceDir, itemName);
-            yield lib_io.cp(s, destPath, { recursive: true });
-        }
-        // write .complete
-        _completeToolPath(tool, version, arch);
-        return destPath;
-    });
-}
-/**
- * Caches a downloaded file (GUID) and installs it
- * into the tool cache with a given targetName
- *
- * @param sourceFile    the file to cache into tools.  Typically a result of downloadTool which is a guid.
- * @param targetFile    the name of the file name in the tools directory
- * @param tool          tool name
- * @param version       version of the tool.  semver format
- * @param arch          architecture of the tool.  Optional.  Defaults to machine architecture
- */
-function cacheFile(sourceFile, targetFile, tool, version, arch) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        version = semver.clean(version) || version;
-        arch = arch || os.arch();
-        core.debug(`Caching tool ${tool} ${version} ${arch}`);
-        core.debug(`source file: ${sourceFile}`);
-        if (!fs.statSync(sourceFile).isFile()) {
-            throw new Error('sourceFile is not a file');
-        }
-        // create the tool dir
-        const destFolder = yield _createToolPath(tool, version, arch);
-        // copy instead of move. move can fail on Windows due to
-        // anti-virus software having an open handle on a file.
-        const destPath = path.join(destFolder, targetFile);
-        core.debug(`destination file ${destPath}`);
-        yield io.cp(sourceFile, destPath);
-        // write .complete
-        _completeToolPath(tool, version, arch);
-        return destFolder;
-    });
-}
-/**
- * Finds the path to a tool version in the local installed tool cache
- *
- * @param toolName      name of the tool
- * @param versionSpec   version of the tool
- * @param arch          optional arch.  defaults to arch of computer
- */
-function find(toolName, versionSpec, arch) {
-    if (!toolName) {
-        throw new Error('toolName parameter is required');
-    }
-    if (!versionSpec) {
-        throw new Error('versionSpec parameter is required');
-    }
-    arch = arch || external_os_.arch();
-    // attempt to resolve an explicit version
-    if (!isExplicitVersion(versionSpec)) {
-        const localVersions = findAllVersions(toolName, arch);
-        const match = evaluateVersions(localVersions, versionSpec);
-        versionSpec = match;
-    }
-    // check for the explicit version in the cache
-    let toolPath = '';
-    if (versionSpec) {
-        versionSpec = node_modules_semver.clean(versionSpec) || '';
-        const cachePath = external_path_.join(_getCacheDirectory(), toolName, versionSpec, arch);
-        lib_core/* debug */.Yz(`checking cache: ${cachePath}`);
-        if (external_fs_.existsSync(cachePath) && external_fs_.existsSync(`${cachePath}.complete`)) {
-            lib_core/* debug */.Yz(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
-            toolPath = cachePath;
-        }
-        else {
-            lib_core/* debug */.Yz('not found');
-        }
-    }
-    return toolPath;
-}
-/**
- * Finds the paths to all versions of a tool that are installed in the local tool cache
- *
- * @param toolName  name of the tool
- * @param arch      optional arch.  defaults to arch of computer
- */
-function findAllVersions(toolName, arch) {
-    const versions = [];
-    arch = arch || external_os_.arch();
-    const toolPath = external_path_.join(_getCacheDirectory(), toolName);
-    if (external_fs_.existsSync(toolPath)) {
-        const children = external_fs_.readdirSync(toolPath);
-        for (const child of children) {
-            if (isExplicitVersion(child)) {
-                const fullPath = external_path_.join(toolPath, child, arch || '');
-                if (external_fs_.existsSync(fullPath) && external_fs_.existsSync(`${fullPath}.complete`)) {
-                    versions.push(child);
-                }
-            }
-        }
-    }
-    return versions;
-}
-function getManifestFromRepo(owner_1, repo_1, auth_1) {
-    return tool_cache_awaiter(this, arguments, void 0, function* (owner, repo, auth, branch = 'master') {
-        let releases = [];
-        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`;
-        const http = new httpm.HttpClient('tool-cache');
-        const headers = {};
-        if (auth) {
-            core.debug('set auth');
-            headers.authorization = auth;
-        }
-        const response = yield http.getJson(treeUrl, headers);
-        if (!response.result) {
-            return releases;
-        }
-        let manifestUrl = '';
-        for (const item of response.result.tree) {
-            if (item.path === 'versions-manifest.json') {
-                manifestUrl = item.url;
-                break;
-            }
-        }
-        headers['accept'] = 'application/vnd.github.VERSION.raw';
-        let versionsRaw = yield (yield http.get(manifestUrl, headers)).readBody();
-        if (versionsRaw) {
-            // shouldn't be needed but protects against invalid json saved with BOM
-            versionsRaw = versionsRaw.replace(/^\uFEFF/, '');
-            try {
-                releases = JSON.parse(versionsRaw);
-            }
-            catch (_a) {
-                core.debug('Invalid json');
-            }
-        }
-        return releases;
-    });
-}
-function findFromManifest(versionSpec_1, stable_1, manifest_1) {
-    return tool_cache_awaiter(this, arguments, void 0, function* (versionSpec, stable, manifest, archFilter = os.arch()) {
-        // wrap the internal impl
-        const match = yield mm._findMatch(versionSpec, stable, manifest, archFilter);
-        return match;
-    });
-}
-function _createExtractFolder(dest) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        if (!dest) {
-            // create a temp dir
-            dest = external_path_.join(_getTempDirectory(), external_crypto_.randomUUID());
-        }
-        yield lib_io/* mkdirP */.U$(dest);
-        return dest;
-    });
-}
-function _createToolPath(tool, version, arch) {
-    return tool_cache_awaiter(this, void 0, void 0, function* () {
-        const folderPath = external_path_.join(_getCacheDirectory(), tool, node_modules_semver.clean(version) || version, arch || '');
-        lib_core/* debug */.Yz(`destination ${folderPath}`);
-        const markerPath = `${folderPath}.complete`;
-        yield lib_io/* rmRF */.Yz(folderPath);
-        yield lib_io/* rmRF */.Yz(markerPath);
-        yield lib_io/* mkdirP */.U$(folderPath);
-        return folderPath;
-    });
-}
-function _completeToolPath(tool, version, arch) {
-    const folderPath = external_path_.join(_getCacheDirectory(), tool, node_modules_semver.clean(version) || version, arch || '');
-    const markerPath = `${folderPath}.complete`;
-    external_fs_.writeFileSync(markerPath, '');
-    lib_core/* debug */.Yz('finished caching tool');
-}
-/**
- * Check if version string is explicit
- *
- * @param versionSpec      version string to check
- */
-function isExplicitVersion(versionSpec) {
-    const c = node_modules_semver.clean(versionSpec) || '';
-    lib_core/* debug */.Yz(`isExplicit: ${c}`);
-    const valid = node_modules_semver.valid(c) != null;
-    lib_core/* debug */.Yz(`explicit? ${valid}`);
-    return valid;
-}
-/**
- * Get the highest satisfiying semantic version in `versions` which satisfies `versionSpec`
- *
- * @param versions        array of versions to evaluate
- * @param versionSpec     semantic version spec to satisfy
- */
-function evaluateVersions(versions, versionSpec) {
-    let version = '';
-    lib_core/* debug */.Yz(`evaluating ${versions.length} versions`);
-    versions = versions.sort((a, b) => {
-        if (node_modules_semver.gt(a, b)) {
-            return 1;
-        }
-        return -1;
-    });
-    for (let i = versions.length - 1; i >= 0; i--) {
-        const potential = versions[i];
-        const satisfied = node_modules_semver.satisfies(potential, versionSpec);
-        if (satisfied) {
-            version = potential;
-            break;
-        }
-    }
-    if (version) {
-        lib_core/* debug */.Yz(`matched: ${version}`);
-    }
-    else {
-        lib_core/* debug */.Yz('match not found');
-    }
-    return version;
-}
-/**
- * Gets RUNNER_TOOL_CACHE
- */
-function _getCacheDirectory() {
-    const cacheDirectory = process.env['RUNNER_TOOL_CACHE'] || '';
-    (0,external_assert_.ok)(cacheDirectory, 'Expected RUNNER_TOOL_CACHE to be defined');
-    return cacheDirectory;
-}
-/**
- * Gets RUNNER_TEMP
- */
-function _getTempDirectory() {
-    const tempDirectory = process.env['RUNNER_TEMP'] || '';
-    (0,external_assert_.ok)(tempDirectory, 'Expected RUNNER_TEMP to be defined');
-    return tempDirectory;
-}
-/**
- * Gets a global variable
- */
-function _getGlobal(key, defaultValue) {
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const value = global[key];
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    return value !== undefined ? value : defaultValue;
-}
-/**
- * Returns an array of unique values.
- * @param values Values to make unique.
- */
-function _unique(values) {
-    return Array.from(new Set(values));
-}
-//# sourceMappingURL=tool-cache.js.map
-;// CONCATENATED MODULE: ./src/install.ts
-
-
-
-
-
-
-const REPO_OWNER = 'rshade';
-const REPO_NAME = 'finfocus';
-/**
- * Minimum finfocus version that supports exit codes for budget threshold checks.
- */
-const EXIT_CODE_MIN_VERSION = '0.2.5';
-/**
- * Get the installed finfocus version by running `finfocus --version`.
- * Returns '0.0.0' if version cannot be determined.
- */
-async function getFinfocusVersion() {
-    try {
-        const output = await lib_exec/* getExecOutput */.H('finfocus', ['--version'], {
-            ignoreReturnCode: true,
-            silent: true,
-        });
-        // Parse "finfocus v0.2.5" or "finfocus 0.2.5" format
-        const match = output.stdout.match(/v?(\d+\.\d+\.\d+)/);
-        return match ? match[1] : '0.0.0';
-    }
-    catch {
-        return '0.0.0';
-    }
-}
-/**
- * Check if the given version supports exit codes for budget threshold checks.
- * Requires finfocus v0.2.5 or higher.
- */
-function supportsExitCodes(version) {
-    return compareVersions(version, EXIT_CODE_MIN_VERSION) >= 0;
-}
-/**
- * Compare two semantic versions.
- * @returns -1 if a < b, 0 if a == b, 1 if a > b
- */
-function compareVersions(a, b) {
-    const [aMajor, aMinor, aPatch] = a.split('.').map(Number);
-    const [bMajor, bMinor, bPatch] = b.split('.').map(Number);
-    if (aMajor > bMajor)
-        return 1;
-    if (aMajor < bMajor)
-        return -1;
-    if (aMinor > bMinor)
-        return 1;
-    if (aMinor < bMinor)
-        return -1;
-    if (aPatch > bPatch)
-        return 1;
-    if (aPatch < bPatch)
-        return -1;
-    return 0;
-}
-/**
- * Check if a tag name matches the stable CLI release pattern (v<major>.<minor>.<patch>).
- * Excludes prefixed tags like kubernetes-v*, jev-v*, and other non-CLI tags.
- */
-function isStableCliRelease(tagName) {
-    return /^v\d+\.\d+\.\d+$/.test(tagName);
-}
-class Installer {
-    async install(version, config) {
-        const debug = config?.debug === true;
-        const platform = this.getPlatform();
-        const arch = this.getArch();
-        if (debug) {
-            lib_core/* info */.pq(`=== Installer: Starting installation ===`);
-            lib_core/* info */.pq(`  Requested version: ${version}`);
-            lib_core/* info */.pq(`  Detected OS platform: ${external_os_.platform()}`);
-            lib_core/* info */.pq(`  Detected OS arch: ${external_os_.arch()}`);
-            lib_core/* info */.pq(`  Mapped platform: ${platform}`);
-            lib_core/* info */.pq(`  Mapped arch: ${arch}`);
-        }
-        else {
-            lib_core/* info */.pq(`Installing finfocus (${version})...`);
-        }
-        const resolvedVersion = await this.resolveVersion(version, debug);
-        if (debug)
-            lib_core/* info */.pq(`  Resolved version: ${resolvedVersion}`);
-        if (debug)
-            lib_core/* info */.pq(`=== Checking tool cache ===`);
-        const cached = find('finfocus', resolvedVersion, arch);
-        if (cached) {
-            if (debug) {
-                lib_core/* info */.pq(`  Cache HIT: Found finfocus at ${cached}`);
-                lib_core/* info */.pq(`  Binary path: ${external_path_.join(cached, this.getBinaryName())}`);
-            }
-            lib_core/* addPath */.fM(cached);
-            await this.verifyInstallation(debug);
-            return external_path_.join(cached, this.getBinaryName());
-        }
-        if (debug)
-            lib_core/* info */.pq(`  Cache MISS: Will download`);
-        const ext = platform === 'windows' ? 'zip' : 'tar.gz';
-        const assetName = `finfocus-v${resolvedVersion}-${platform}-${arch}.${ext}`;
-        const downloadUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/v${resolvedVersion}/${assetName}`;
-        if (debug) {
-            lib_core/* info */.pq(`=== Download Details ===`);
-            lib_core/* info */.pq(`  Asset name: ${assetName}`);
-            lib_core/* info */.pq(`  Download URL: ${downloadUrl}`);
-        }
-        let downloadPath;
-        try {
-            if (debug)
-                lib_core/* info */.pq(`  Starting download...`);
-            const downloadStart = Date.now();
-            downloadPath = await downloadTool(downloadUrl);
-            if (debug) {
-                lib_core/* info */.pq(`  Download completed in ${Date.now() - downloadStart}ms`);
-                lib_core/* info */.pq(`  Downloaded to: ${downloadPath}`);
-                const downloadStats = external_fs_.statSync(downloadPath);
-                lib_core/* info */.pq(`  Downloaded file size: ${downloadStats.size} bytes`);
-            }
-        }
-        catch (err) {
-            lib_core/* error */.z3(`  Download FAILED`);
-            throw new Error(`Failed to download finfocus from ${downloadUrl}. ` +
-                `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
-                `Error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
-        }
-        let extractPath;
-        try {
-            if (debug) {
-                lib_core/* info */.pq(`=== Extracting archive ===`);
-                lib_core/* info */.pq(`  Archive type: ${ext}`);
-            }
-            const extractStart = Date.now();
-            if (platform === 'windows') {
-                extractPath = await extractZip(downloadPath);
-            }
-            else {
-                extractPath = await extractTar(downloadPath);
-            }
-            if (debug) {
-                lib_core/* info */.pq(`  Extraction completed in ${Date.now() - extractStart}ms`);
-                lib_core/* info */.pq(`  Extracted to: ${extractPath}`);
-                const extractedFiles = external_fs_.readdirSync(extractPath);
-                lib_core/* info */.pq(`  Extracted files: ${extractedFiles.join(', ')}`);
-            }
-        }
-        catch (err) {
-            lib_core/* error */.z3(`  Extraction FAILED`);
-            throw new Error(`Failed to extract finfocus archive. Error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
-        }
-        if (debug)
-            lib_core/* info */.pq(`=== Caching binary ===`);
-        const cachedPath = await cacheDir(extractPath, 'finfocus', resolvedVersion, arch);
-        lib_core/* addPath */.fM(cachedPath);
-        const binaryPath = external_path_.join(cachedPath, this.getBinaryName());
-        if (platform !== 'windows') {
-            await lib_exec/* exec */.m('chmod', ['+x', binaryPath], { silent: !debug });
-        }
-        await this.verifyInstallation(debug);
-        if (debug) {
-            lib_core/* info */.pq(`=== Installation complete ===`);
-            lib_core/* info */.pq(`  Final binary path: ${binaryPath}`);
-        }
-        return binaryPath;
-    }
-    async verifyInstallation(debug) {
-        if (debug)
-            lib_core/* info */.pq(`=== Verifying installation ===`);
-        try {
-            if (debug)
-                lib_core/* info */.pq(`  Running: finfocus --version`);
-            const output = await lib_exec/* getExecOutput */.H('finfocus', ['--version'], {
-                silent: !debug,
-                ignoreReturnCode: true,
-            });
-            if (debug) {
-                lib_core/* info */.pq(`  Exit code: ${output.exitCode}`);
-                lib_core/* info */.pq(`  Stdout: ${output.stdout.trim()}`);
-            }
-            if (output.exitCode !== 0) {
-                lib_core/* warning */.$e(`  finfocus --version returned non-zero exit code: ${output.exitCode}`);
-            }
-            else if (debug) {
-                lib_core/* info */.pq(`  Verification successful`);
-            }
-        }
-        catch (err) {
-            if (debug)
-                lib_core/* warning */.$e(`  Verification FAILED: ${err instanceof Error ? err.message : String(err)}`);
-        }
-        if (debug) {
-            lib_core/* info */.pq(`  Checking PATH for finfocus...`);
-            try {
-                const whichOutput = await lib_exec/* getExecOutput */.H('which', ['finfocus'], {
-                    silent: true,
-                    ignoreReturnCode: true,
-                });
-                lib_core/* info */.pq(`  which finfocus: ${whichOutput.stdout.trim() || '(not found)'}`);
-            }
-            catch {
-                lib_core/* info */.pq(`  which command failed`);
-            }
-        }
-    }
-    async resolveVersion(version, debug) {
-        if (version !== 'latest') {
-            return version.replace(/^v/, '');
-        }
-        if (debug)
-            lib_core/* info */.pq(`=== Resolving 'latest' version ===`);
-        const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=100`;
-        const response = await fetch(apiUrl, {
-            headers: {
-                Accept: 'application/vnd.github.v3+json',
-                'User-Agent': 'finfocus-action',
-            },
-        });
-        if (!response.ok) {
-            throw new Error(`Failed to fetch releases: ${response.status} ${response.statusText}`);
-        }
-        const releases = (await response.json());
-        if (debug) {
-            lib_core/* info */.pq(`  Total releases fetched: ${releases.length}`);
-        }
-        // Filter to stable CLI releases (not prefixed, not prerelease/draft)
-        const stableReleases = releases.filter((r) => isStableCliRelease(r.tag_name) && !r.prerelease && !r.draft);
-        if (stableReleases.length === 0) {
-            throw new Error(`No stable release found matching v<major>.<minor>.<patch> pattern in the first 100 releases`);
-        }
-        // Sort by semantic version (descending) to get the highest version
-        stableReleases.sort((a, b) => {
-            const aVersion = a.tag_name.replace(/^v/, '');
-            const bVersion = b.tag_name.replace(/^v/, '');
-            return compareVersions(bVersion, aVersion); // b - a for descending order
-        });
-        const latestRelease = stableReleases[0];
-        if (debug) {
-            lib_core/* info */.pq(`  Stable releases found: ${stableReleases.length}`);
-            lib_core/* info */.pq(`  Selected tag_name: ${latestRelease.tag_name}`);
-        }
-        return latestRelease.tag_name.replace(/^v/, '');
-    }
-    getPlatform() {
-        const p = external_os_.platform();
-        if (p === 'win32')
-            return 'windows';
-        if (p === 'darwin')
-            return 'macos';
-        return p;
-    }
-    getArch() {
-        const a = external_os_.arch();
-        if (a === 'x64')
-            return 'amd64';
-        if (a === 'arm64')
-            return 'arm64';
-        return a;
-    }
-    getBinaryName() {
-        return external_os_.platform() === 'win32' ? 'finfocus.exe' : 'finfocus';
-    }
-}
-
-
-/***/ }),
-
 /***/ 6141:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
@@ -37019,13 +35126,13 @@ function copyFile(srcFile, destFile, force) {
 var __webpack_exports__ = {};
 
 // EXTERNAL MODULE: ./node_modules/@actions/core/lib/core.js + 10 modules
-var main_core = __nccwpck_require__(2398);
+var lib_core = __nccwpck_require__(2398);
 // EXTERNAL MODULE: external "fs"
 var external_fs_ = __nccwpck_require__(9896);
 // EXTERNAL MODULE: ./src/types.ts
 var types = __nccwpck_require__(6141);
 // EXTERNAL MODULE: ./node_modules/@actions/exec/lib/exec.js + 2 modules
-var main_exec = __nccwpck_require__(5260);
+var lib_exec = __nccwpck_require__(5260);
 // EXTERNAL MODULE: ./src/errors.ts
 var errors = __nccwpck_require__(3916);
 ;// CONCATENATED MODULE: ./src/v04.ts
@@ -37258,19 +35365,19 @@ async function executeStateOnly(config) {
 async function executeRecommendationLifecycle(planPath, config) {
     const plan = planPath && external_fs_.existsSync(planPath) ? planPath : undefined;
     for (const item of parseDismissals(config.dismissRecommendations)) {
-        main_core/* info */.pq(`Dismissing recommendation ${item.id} (${item.reason})`);
+        lib_core/* info */.pq(`Dismissing recommendation ${item.id} (${item.reason})`);
         await runFinFocus(dismissArgs(plan, item), config.debug === true);
     }
     for (const item of parseSnoozes(config.snoozeRecommendations)) {
-        main_core/* info */.pq(`Snoozing recommendation ${item.id} until ${item.until}`);
+        lib_core/* info */.pq(`Snoozing recommendation ${item.id} until ${item.until}`);
         await runFinFocus(snoozeArgs(plan, item), config.debug === true);
     }
 }
 async function runFinFocus(args, debug) {
     if (debug) {
-        main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+        lib_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
     }
-    const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+    const output = await lib_exec/* getExecOutput */.H('finfocus', args, {
         silent: !debug,
         ignoreReturnCode: true,
     });
@@ -37337,12 +35444,1879 @@ function optionalNote(item, index, inputName) {
     return item.note;
 }
 
-// EXTERNAL MODULE: ./src/install.ts + 6 modules
-var install = __nccwpck_require__(8638);
-// EXTERNAL MODULE: external "path"
-var external_path_ = __nccwpck_require__(6928);
 // EXTERNAL MODULE: external "os"
 var external_os_ = __nccwpck_require__(857);
+// EXTERNAL MODULE: external "path"
+var external_path_ = __nccwpck_require__(6928);
+// EXTERNAL MODULE: ./node_modules/@actions/io/lib/io.js
+var lib_io = __nccwpck_require__(8701);
+// EXTERNAL MODULE: external "crypto"
+var external_crypto_ = __nccwpck_require__(6982);
+// EXTERNAL MODULE: ./node_modules/@actions/tool-cache/node_modules/semver/index.js
+var node_modules_semver = __nccwpck_require__(885);
+// EXTERNAL MODULE: external "child_process"
+var external_child_process_ = __nccwpck_require__(5317);
+;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/manifest.js
+var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+
+
+
+
+
+// Internal object for testability (allows mocking in ESM)
+const _internal = {
+    readLinuxVersionFile() {
+        const lsbReleaseFile = '/etc/lsb-release';
+        const osReleaseFile = '/etc/os-release';
+        let contents = '';
+        if (external_fs_.existsSync(lsbReleaseFile)) {
+            contents = external_fs_.readFileSync(lsbReleaseFile).toString();
+        }
+        else if (external_fs_.existsSync(osReleaseFile)) {
+            contents = external_fs_.readFileSync(osReleaseFile).toString();
+        }
+        return contents;
+    }
+};
+function _findMatch(versionSpec, stable, candidates, archFilter) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const platFilter = os.platform();
+        let result;
+        let match;
+        let file;
+        for (const candidate of candidates) {
+            const version = candidate.version;
+            debug(`check ${version} satisfies ${versionSpec}`);
+            if (semver.satisfies(version, versionSpec) &&
+                (!stable || candidate.stable === stable)) {
+                file = candidate.files.find(item => {
+                    debug(`${item.arch}===${archFilter} && ${item.platform}===${platFilter}`);
+                    let chk = item.arch === archFilter && item.platform === platFilter;
+                    if (chk && item.platform_version) {
+                        const osVersion = _getOsVersion();
+                        if (osVersion === item.platform_version) {
+                            chk = true;
+                        }
+                        else {
+                            chk = semver.satisfies(osVersion, item.platform_version);
+                        }
+                    }
+                    return chk;
+                });
+                if (file) {
+                    debug(`matched ${candidate.version}`);
+                    match = candidate;
+                    break;
+                }
+            }
+        }
+        if (match && file) {
+            // clone since we're mutating the file list to be only the file that matches
+            result = Object.assign({}, match);
+            result.files = [file];
+        }
+        return result;
+    });
+}
+function _getOsVersion() {
+    // TODO: add windows and other linux, arm variants
+    // right now filtering on version is only an ubuntu and macos scenario for tools we build for hosted (python)
+    const plat = os.platform();
+    let version = '';
+    if (plat === 'darwin') {
+        version = cp.execSync('sw_vers -productVersion').toString();
+    }
+    else if (plat === 'linux') {
+        // lsb_release process not in some containers, readfile
+        // Run cat /etc/lsb-release
+        // DISTRIB_ID=Ubuntu
+        // DISTRIB_RELEASE=18.04
+        // DISTRIB_CODENAME=bionic
+        // DISTRIB_DESCRIPTION="Ubuntu 18.04.4 LTS"
+        const lsbContents = _internal.readLinuxVersionFile();
+        if (lsbContents) {
+            const lines = lsbContents.split('\n');
+            for (const line of lines) {
+                const parts = line.split('=');
+                if (parts.length === 2 &&
+                    (parts[0].trim() === 'VERSION_ID' ||
+                        parts[0].trim() === 'DISTRIB_RELEASE')) {
+                    version = parts[1].trim().replace(/^"/, '').replace(/"$/, '');
+                    break;
+                }
+            }
+        }
+    }
+    return version;
+}
+// Alias for backwards compatibility
+function _readLinuxVersionFile() {
+    return _internal.readLinuxVersionFile();
+}
+//# sourceMappingURL=manifest.js.map
+// EXTERNAL MODULE: external "http"
+var external_http_ = __nccwpck_require__(8611);
+var external_http_namespaceObject = /*#__PURE__*/__nccwpck_require__.t(external_http_, 2);
+// EXTERNAL MODULE: external "https"
+var external_https_ = __nccwpck_require__(5692);
+var external_https_namespaceObject = /*#__PURE__*/__nccwpck_require__.t(external_https_, 2);
+;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/node_modules/@actions/http-client/lib/proxy.js
+function getProxyUrl(reqUrl) {
+    const usingSsl = reqUrl.protocol === 'https:';
+    if (checkBypass(reqUrl)) {
+        return undefined;
+    }
+    const proxyVar = (() => {
+        if (usingSsl) {
+            return process.env['https_proxy'] || process.env['HTTPS_PROXY'];
+        }
+        else {
+            return process.env['http_proxy'] || process.env['HTTP_PROXY'];
+        }
+    })();
+    if (proxyVar) {
+        try {
+            return new DecodedURL(proxyVar);
+        }
+        catch (_a) {
+            if (!proxyVar.startsWith('http://') && !proxyVar.startsWith('https://'))
+                return new DecodedURL(`http://${proxyVar}`);
+        }
+    }
+    else {
+        return undefined;
+    }
+}
+function checkBypass(reqUrl) {
+    if (!reqUrl.hostname) {
+        return false;
+    }
+    const reqHost = reqUrl.hostname;
+    if (isLoopbackAddress(reqHost)) {
+        return true;
+    }
+    const noProxy = process.env['no_proxy'] || process.env['NO_PROXY'] || '';
+    if (!noProxy) {
+        return false;
+    }
+    // Determine the request port
+    let reqPort;
+    if (reqUrl.port) {
+        reqPort = Number(reqUrl.port);
+    }
+    else if (reqUrl.protocol === 'http:') {
+        reqPort = 80;
+    }
+    else if (reqUrl.protocol === 'https:') {
+        reqPort = 443;
+    }
+    // Format the request hostname and hostname with port
+    const upperReqHosts = [reqUrl.hostname.toUpperCase()];
+    if (typeof reqPort === 'number') {
+        upperReqHosts.push(`${upperReqHosts[0]}:${reqPort}`);
+    }
+    // Compare request host against noproxy
+    for (const upperNoProxyItem of noProxy
+        .split(',')
+        .map(x => x.trim().toUpperCase())
+        .filter(x => x)) {
+        if (upperNoProxyItem === '*' ||
+            upperReqHosts.some(x => x === upperNoProxyItem ||
+                x.endsWith(`.${upperNoProxyItem}`) ||
+                (upperNoProxyItem.startsWith('.') &&
+                    x.endsWith(`${upperNoProxyItem}`)))) {
+            return true;
+        }
+    }
+    return false;
+}
+function isLoopbackAddress(host) {
+    const hostLower = host.toLowerCase();
+    return (hostLower === 'localhost' ||
+        hostLower.startsWith('127.') ||
+        hostLower.startsWith('[::1]') ||
+        hostLower.startsWith('[0:0:0:0:0:0:0:1]'));
+}
+class DecodedURL extends URL {
+    constructor(url, base) {
+        super(url, base);
+        this._decodedUsername = decodeURIComponent(super.username);
+        this._decodedPassword = decodeURIComponent(super.password);
+    }
+    get username() {
+        return this._decodedUsername;
+    }
+    get password() {
+        return this._decodedPassword;
+    }
+}
+//# sourceMappingURL=proxy.js.map
+// EXTERNAL MODULE: ./node_modules/tunnel/index.js
+var main_tunnel = __nccwpck_require__(770);
+// EXTERNAL MODULE: ./node_modules/undici/index.js
+var undici = __nccwpck_require__(6752);
+;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/node_modules/@actions/http-client/lib/index.js
+/* eslint-disable @typescript-eslint/no-explicit-any */
+var lib_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+
+
+
+
+
+var HttpCodes;
+(function (HttpCodes) {
+    HttpCodes[HttpCodes["OK"] = 200] = "OK";
+    HttpCodes[HttpCodes["MultipleChoices"] = 300] = "MultipleChoices";
+    HttpCodes[HttpCodes["MovedPermanently"] = 301] = "MovedPermanently";
+    HttpCodes[HttpCodes["ResourceMoved"] = 302] = "ResourceMoved";
+    HttpCodes[HttpCodes["SeeOther"] = 303] = "SeeOther";
+    HttpCodes[HttpCodes["NotModified"] = 304] = "NotModified";
+    HttpCodes[HttpCodes["UseProxy"] = 305] = "UseProxy";
+    HttpCodes[HttpCodes["SwitchProxy"] = 306] = "SwitchProxy";
+    HttpCodes[HttpCodes["TemporaryRedirect"] = 307] = "TemporaryRedirect";
+    HttpCodes[HttpCodes["PermanentRedirect"] = 308] = "PermanentRedirect";
+    HttpCodes[HttpCodes["BadRequest"] = 400] = "BadRequest";
+    HttpCodes[HttpCodes["Unauthorized"] = 401] = "Unauthorized";
+    HttpCodes[HttpCodes["PaymentRequired"] = 402] = "PaymentRequired";
+    HttpCodes[HttpCodes["Forbidden"] = 403] = "Forbidden";
+    HttpCodes[HttpCodes["NotFound"] = 404] = "NotFound";
+    HttpCodes[HttpCodes["MethodNotAllowed"] = 405] = "MethodNotAllowed";
+    HttpCodes[HttpCodes["NotAcceptable"] = 406] = "NotAcceptable";
+    HttpCodes[HttpCodes["ProxyAuthenticationRequired"] = 407] = "ProxyAuthenticationRequired";
+    HttpCodes[HttpCodes["RequestTimeout"] = 408] = "RequestTimeout";
+    HttpCodes[HttpCodes["Conflict"] = 409] = "Conflict";
+    HttpCodes[HttpCodes["Gone"] = 410] = "Gone";
+    HttpCodes[HttpCodes["TooManyRequests"] = 429] = "TooManyRequests";
+    HttpCodes[HttpCodes["InternalServerError"] = 500] = "InternalServerError";
+    HttpCodes[HttpCodes["NotImplemented"] = 501] = "NotImplemented";
+    HttpCodes[HttpCodes["BadGateway"] = 502] = "BadGateway";
+    HttpCodes[HttpCodes["ServiceUnavailable"] = 503] = "ServiceUnavailable";
+    HttpCodes[HttpCodes["GatewayTimeout"] = 504] = "GatewayTimeout";
+})(HttpCodes || (HttpCodes = {}));
+var Headers;
+(function (Headers) {
+    Headers["Accept"] = "accept";
+    Headers["ContentType"] = "content-type";
+})(Headers || (Headers = {}));
+var MediaTypes;
+(function (MediaTypes) {
+    MediaTypes["ApplicationJson"] = "application/json";
+})(MediaTypes || (MediaTypes = {}));
+/**
+ * Returns the proxy URL, depending upon the supplied url and proxy environment variables.
+ * @param serverUrl  The server URL where the request will be sent. For example, https://api.github.com
+ */
+function lib_getProxyUrl(serverUrl) {
+    const proxyUrl = pm.getProxyUrl(new URL(serverUrl));
+    return proxyUrl ? proxyUrl.href : '';
+}
+const HttpRedirectCodes = [
+    HttpCodes.MovedPermanently,
+    HttpCodes.ResourceMoved,
+    HttpCodes.SeeOther,
+    HttpCodes.TemporaryRedirect,
+    HttpCodes.PermanentRedirect
+];
+const HttpResponseRetryCodes = [
+    HttpCodes.BadGateway,
+    HttpCodes.ServiceUnavailable,
+    HttpCodes.GatewayTimeout
+];
+const RetryableHttpVerbs = ['OPTIONS', 'GET', 'DELETE', 'HEAD'];
+const ExponentialBackoffCeiling = 10;
+const ExponentialBackoffTimeSlice = 5;
+class HttpClientError extends Error {
+    constructor(message, statusCode) {
+        super(message);
+        this.name = 'HttpClientError';
+        this.statusCode = statusCode;
+        Object.setPrototypeOf(this, HttpClientError.prototype);
+    }
+}
+class HttpClientResponse {
+    constructor(message) {
+        this.message = message;
+    }
+    readBody() {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve) => lib_awaiter(this, void 0, void 0, function* () {
+                let output = Buffer.alloc(0);
+                this.message.on('data', (chunk) => {
+                    output = Buffer.concat([output, chunk]);
+                });
+                this.message.on('end', () => {
+                    resolve(output.toString());
+                });
+            }));
+        });
+    }
+    readBodyBuffer() {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve) => lib_awaiter(this, void 0, void 0, function* () {
+                const chunks = [];
+                this.message.on('data', (chunk) => {
+                    chunks.push(chunk);
+                });
+                this.message.on('end', () => {
+                    resolve(Buffer.concat(chunks));
+                });
+            }));
+        });
+    }
+}
+function isHttps(requestUrl) {
+    const parsedUrl = new URL(requestUrl);
+    return parsedUrl.protocol === 'https:';
+}
+class main_HttpClient {
+    constructor(userAgent, handlers, requestOptions) {
+        this._ignoreSslError = false;
+        this._allowRedirects = true;
+        this._allowRedirectDowngrade = false;
+        this._maxRedirects = 50;
+        this._allowRetries = false;
+        this._maxRetries = 1;
+        this._keepAlive = false;
+        this._disposed = false;
+        this.userAgent = this._getUserAgentWithOrchestrationId(userAgent);
+        this.handlers = handlers || [];
+        this.requestOptions = requestOptions;
+        if (requestOptions) {
+            if (requestOptions.ignoreSslError != null) {
+                this._ignoreSslError = requestOptions.ignoreSslError;
+            }
+            this._socketTimeout = requestOptions.socketTimeout;
+            if (requestOptions.allowRedirects != null) {
+                this._allowRedirects = requestOptions.allowRedirects;
+            }
+            if (requestOptions.allowRedirectDowngrade != null) {
+                this._allowRedirectDowngrade = requestOptions.allowRedirectDowngrade;
+            }
+            if (requestOptions.maxRedirects != null) {
+                this._maxRedirects = Math.max(requestOptions.maxRedirects, 0);
+            }
+            if (requestOptions.keepAlive != null) {
+                this._keepAlive = requestOptions.keepAlive;
+            }
+            if (requestOptions.allowRetries != null) {
+                this._allowRetries = requestOptions.allowRetries;
+            }
+            if (requestOptions.maxRetries != null) {
+                this._maxRetries = requestOptions.maxRetries;
+            }
+        }
+    }
+    options(requestUrl, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('OPTIONS', requestUrl, null, additionalHeaders || {});
+        });
+    }
+    get(requestUrl, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('GET', requestUrl, null, additionalHeaders || {});
+        });
+    }
+    del(requestUrl, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('DELETE', requestUrl, null, additionalHeaders || {});
+        });
+    }
+    post(requestUrl, data, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('POST', requestUrl, data, additionalHeaders || {});
+        });
+    }
+    patch(requestUrl, data, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('PATCH', requestUrl, data, additionalHeaders || {});
+        });
+    }
+    put(requestUrl, data, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('PUT', requestUrl, data, additionalHeaders || {});
+        });
+    }
+    head(requestUrl, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request('HEAD', requestUrl, null, additionalHeaders || {});
+        });
+    }
+    sendStream(verb, requestUrl, stream, additionalHeaders) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return this.request(verb, requestUrl, stream, additionalHeaders);
+        });
+    }
+    /**
+     * Gets a typed object from an endpoint
+     * Be aware that not found returns a null.  Other errors (4xx, 5xx) reject the promise
+     */
+    getJson(requestUrl_1) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, additionalHeaders = {}) {
+            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+            const res = yield this.get(requestUrl, additionalHeaders);
+            return this._processResponse(res, this.requestOptions);
+        });
+    }
+    postJson(requestUrl_1, obj_1) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
+            const data = JSON.stringify(obj, null, 2);
+            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[Headers.ContentType] =
+                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
+            const res = yield this.post(requestUrl, data, additionalHeaders);
+            return this._processResponse(res, this.requestOptions);
+        });
+    }
+    putJson(requestUrl_1, obj_1) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
+            const data = JSON.stringify(obj, null, 2);
+            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[Headers.ContentType] =
+                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
+            const res = yield this.put(requestUrl, data, additionalHeaders);
+            return this._processResponse(res, this.requestOptions);
+        });
+    }
+    patchJson(requestUrl_1, obj_1) {
+        return lib_awaiter(this, arguments, void 0, function* (requestUrl, obj, additionalHeaders = {}) {
+            const data = JSON.stringify(obj, null, 2);
+            additionalHeaders[Headers.Accept] = this._getExistingOrDefaultHeader(additionalHeaders, Headers.Accept, MediaTypes.ApplicationJson);
+            additionalHeaders[Headers.ContentType] =
+                this._getExistingOrDefaultContentTypeHeader(additionalHeaders, MediaTypes.ApplicationJson);
+            const res = yield this.patch(requestUrl, data, additionalHeaders);
+            return this._processResponse(res, this.requestOptions);
+        });
+    }
+    /**
+     * Makes a raw http request.
+     * All other methods such as get, post, patch, and request ultimately call this.
+     * Prefer get, del, post and patch
+     */
+    request(verb, requestUrl, data, headers) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            if (this._disposed) {
+                throw new Error('Client has already been disposed.');
+            }
+            const parsedUrl = new URL(requestUrl);
+            let info = this._prepareRequest(verb, parsedUrl, headers);
+            // Only perform retries on reads since writes may not be idempotent.
+            const maxTries = this._allowRetries && RetryableHttpVerbs.includes(verb)
+                ? this._maxRetries + 1
+                : 1;
+            let numTries = 0;
+            let response;
+            do {
+                response = yield this.requestRaw(info, data);
+                // Check if it's an authentication challenge
+                if (response &&
+                    response.message &&
+                    response.message.statusCode === HttpCodes.Unauthorized) {
+                    let authenticationHandler;
+                    for (const handler of this.handlers) {
+                        if (handler.canHandleAuthentication(response)) {
+                            authenticationHandler = handler;
+                            break;
+                        }
+                    }
+                    if (authenticationHandler) {
+                        return authenticationHandler.handleAuthentication(this, info, data);
+                    }
+                    else {
+                        // We have received an unauthorized response but have no handlers to handle it.
+                        // Let the response return to the caller.
+                        return response;
+                    }
+                }
+                let redirectsRemaining = this._maxRedirects;
+                while (response.message.statusCode &&
+                    HttpRedirectCodes.includes(response.message.statusCode) &&
+                    this._allowRedirects &&
+                    redirectsRemaining > 0) {
+                    const redirectUrl = response.message.headers['location'];
+                    if (!redirectUrl) {
+                        // if there's no location to redirect to, we won't
+                        break;
+                    }
+                    const parsedRedirectUrl = new URL(redirectUrl);
+                    if (parsedUrl.protocol === 'https:' &&
+                        parsedUrl.protocol !== parsedRedirectUrl.protocol &&
+                        !this._allowRedirectDowngrade) {
+                        throw new Error('Redirect from HTTPS to HTTP protocol. This downgrade is not allowed for security reasons. If you want to allow this behavior, set the allowRedirectDowngrade option to true.');
+                    }
+                    // we need to finish reading the response before reassigning response
+                    // which will leak the open socket.
+                    yield response.readBody();
+                    // strip authorization header if redirected to a different hostname
+                    if (parsedRedirectUrl.hostname !== parsedUrl.hostname) {
+                        for (const header in headers) {
+                            // header names are case insensitive
+                            if (header.toLowerCase() === 'authorization') {
+                                delete headers[header];
+                            }
+                        }
+                    }
+                    // let's make the request with the new redirectUrl
+                    info = this._prepareRequest(verb, parsedRedirectUrl, headers);
+                    response = yield this.requestRaw(info, data);
+                    redirectsRemaining--;
+                }
+                if (!response.message.statusCode ||
+                    !HttpResponseRetryCodes.includes(response.message.statusCode)) {
+                    // If not a retry code, return immediately instead of retrying
+                    return response;
+                }
+                numTries += 1;
+                if (numTries < maxTries) {
+                    yield response.readBody();
+                    yield this._performExponentialBackoff(numTries);
+                }
+            } while (numTries < maxTries);
+            return response;
+        });
+    }
+    /**
+     * Needs to be called if keepAlive is set to true in request options.
+     */
+    dispose() {
+        if (this._agent) {
+            this._agent.destroy();
+        }
+        this._disposed = true;
+    }
+    /**
+     * Raw request.
+     * @param info
+     * @param data
+     */
+    requestRaw(info, data) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve, reject) => {
+                function callbackForResult(err, res) {
+                    if (err) {
+                        reject(err);
+                    }
+                    else if (!res) {
+                        // If `err` is not passed, then `res` must be passed.
+                        reject(new Error('Unknown error'));
+                    }
+                    else {
+                        resolve(res);
+                    }
+                }
+                this.requestRawWithCallback(info, data, callbackForResult);
+            });
+        });
+    }
+    /**
+     * Raw request with callback.
+     * @param info
+     * @param data
+     * @param onResult
+     */
+    requestRawWithCallback(info, data, onResult) {
+        if (typeof data === 'string') {
+            if (!info.options.headers) {
+                info.options.headers = {};
+            }
+            info.options.headers['Content-Length'] = Buffer.byteLength(data, 'utf8');
+        }
+        let callbackCalled = false;
+        function handleResult(err, res) {
+            if (!callbackCalled) {
+                callbackCalled = true;
+                onResult(err, res);
+            }
+        }
+        const req = info.httpModule.request(info.options, (msg) => {
+            const res = new HttpClientResponse(msg);
+            handleResult(undefined, res);
+        });
+        let socket;
+        req.on('socket', sock => {
+            socket = sock;
+        });
+        // If we ever get disconnected, we want the socket to timeout eventually
+        req.setTimeout(this._socketTimeout || 3 * 60000, () => {
+            if (socket) {
+                socket.end();
+            }
+            handleResult(new Error(`Request timeout: ${info.options.path}`));
+        });
+        req.on('error', function (err) {
+            // err has statusCode property
+            // res should have headers
+            handleResult(err);
+        });
+        if (data && typeof data === 'string') {
+            req.write(data, 'utf8');
+        }
+        if (data && typeof data !== 'string') {
+            data.on('close', function () {
+                req.end();
+            });
+            data.pipe(req);
+        }
+        else {
+            req.end();
+        }
+    }
+    /**
+     * Gets an http agent. This function is useful when you need an http agent that handles
+     * routing through a proxy server - depending upon the url and proxy environment variables.
+     * @param serverUrl  The server URL where the request will be sent. For example, https://api.github.com
+     */
+    getAgent(serverUrl) {
+        const parsedUrl = new URL(serverUrl);
+        return this._getAgent(parsedUrl);
+    }
+    getAgentDispatcher(serverUrl) {
+        const parsedUrl = new URL(serverUrl);
+        const proxyUrl = getProxyUrl(parsedUrl);
+        const useProxy = proxyUrl && proxyUrl.hostname;
+        if (!useProxy) {
+            return;
+        }
+        return this._getProxyAgentDispatcher(parsedUrl, proxyUrl);
+    }
+    _prepareRequest(method, requestUrl, headers) {
+        const info = {};
+        info.parsedUrl = requestUrl;
+        const usingSsl = info.parsedUrl.protocol === 'https:';
+        info.httpModule = usingSsl ? external_https_namespaceObject : external_http_namespaceObject;
+        const defaultPort = usingSsl ? 443 : 80;
+        info.options = {};
+        info.options.host = info.parsedUrl.hostname;
+        info.options.port = info.parsedUrl.port
+            ? parseInt(info.parsedUrl.port)
+            : defaultPort;
+        info.options.path =
+            (info.parsedUrl.pathname || '') + (info.parsedUrl.search || '');
+        info.options.method = method;
+        info.options.headers = this._mergeHeaders(headers);
+        if (this.userAgent != null) {
+            info.options.headers['user-agent'] = this.userAgent;
+        }
+        info.options.agent = this._getAgent(info.parsedUrl);
+        // gives handlers an opportunity to participate
+        if (this.handlers) {
+            for (const handler of this.handlers) {
+                handler.prepareRequest(info.options);
+            }
+        }
+        return info;
+    }
+    _mergeHeaders(headers) {
+        if (this.requestOptions && this.requestOptions.headers) {
+            return Object.assign({}, lowercaseKeys(this.requestOptions.headers), lowercaseKeys(headers || {}));
+        }
+        return lowercaseKeys(headers || {});
+    }
+    /**
+     * Gets an existing header value or returns a default.
+     * Handles converting number header values to strings since HTTP headers must be strings.
+     * Note: This returns string | string[] since some headers can have multiple values.
+     * For headers that must always be a single string (like Content-Type), use the
+     * specialized _getExistingOrDefaultContentTypeHeader method instead.
+     */
+    _getExistingOrDefaultHeader(additionalHeaders, header, _default) {
+        let clientHeader;
+        if (this.requestOptions && this.requestOptions.headers) {
+            const headerValue = lowercaseKeys(this.requestOptions.headers)[header];
+            if (headerValue) {
+                clientHeader =
+                    typeof headerValue === 'number' ? headerValue.toString() : headerValue;
+            }
+        }
+        const additionalValue = additionalHeaders[header];
+        if (additionalValue !== undefined) {
+            return typeof additionalValue === 'number'
+                ? additionalValue.toString()
+                : additionalValue;
+        }
+        if (clientHeader !== undefined) {
+            return clientHeader;
+        }
+        return _default;
+    }
+    /**
+     * Specialized version of _getExistingOrDefaultHeader for Content-Type header.
+     * Always returns a single string (not an array) since Content-Type should be a single value.
+     * Converts arrays to comma-separated strings and numbers to strings to ensure type safety.
+     * This was split from _getExistingOrDefaultHeader to provide stricter typing for callers
+     * that assign the result to places expecting a string (e.g., additionalHeaders[Headers.ContentType]).
+     */
+    _getExistingOrDefaultContentTypeHeader(additionalHeaders, _default) {
+        let clientHeader;
+        if (this.requestOptions && this.requestOptions.headers) {
+            const headerValue = lowercaseKeys(this.requestOptions.headers)[Headers.ContentType];
+            if (headerValue) {
+                if (typeof headerValue === 'number') {
+                    clientHeader = String(headerValue);
+                }
+                else if (Array.isArray(headerValue)) {
+                    clientHeader = headerValue.join(', ');
+                }
+                else {
+                    clientHeader = headerValue;
+                }
+            }
+        }
+        const additionalValue = additionalHeaders[Headers.ContentType];
+        // Return the first non-undefined value, converting numbers or arrays to strings if necessary
+        if (additionalValue !== undefined) {
+            if (typeof additionalValue === 'number') {
+                return String(additionalValue);
+            }
+            else if (Array.isArray(additionalValue)) {
+                return additionalValue.join(', ');
+            }
+            else {
+                return additionalValue;
+            }
+        }
+        if (clientHeader !== undefined) {
+            return clientHeader;
+        }
+        return _default;
+    }
+    _getAgent(parsedUrl) {
+        let agent;
+        const proxyUrl = getProxyUrl(parsedUrl);
+        const useProxy = proxyUrl && proxyUrl.hostname;
+        if (this._keepAlive && useProxy) {
+            agent = this._proxyAgent;
+        }
+        if (!useProxy) {
+            agent = this._agent;
+        }
+        // if agent is already assigned use that agent.
+        if (agent) {
+            return agent;
+        }
+        const usingSsl = parsedUrl.protocol === 'https:';
+        let maxSockets = 100;
+        if (this.requestOptions) {
+            maxSockets = this.requestOptions.maxSockets || external_http_.globalAgent.maxSockets;
+        }
+        // This is `useProxy` again, but we need to check `proxyURl` directly for TypeScripts's flow analysis.
+        if (proxyUrl && proxyUrl.hostname) {
+            const agentOptions = {
+                maxSockets,
+                keepAlive: this._keepAlive,
+                proxy: Object.assign(Object.assign({}, ((proxyUrl.username || proxyUrl.password) && {
+                    proxyAuth: `${proxyUrl.username}:${proxyUrl.password}`
+                })), { host: proxyUrl.hostname, port: proxyUrl.port })
+            };
+            let tunnelAgent;
+            const overHttps = proxyUrl.protocol === 'https:';
+            if (usingSsl) {
+                tunnelAgent = overHttps ? main_tunnel.httpsOverHttps : main_tunnel.httpsOverHttp;
+            }
+            else {
+                tunnelAgent = overHttps ? main_tunnel.httpOverHttps : main_tunnel.httpOverHttp;
+            }
+            agent = tunnelAgent(agentOptions);
+            this._proxyAgent = agent;
+        }
+        // if tunneling agent isn't assigned create a new agent
+        if (!agent) {
+            const options = { keepAlive: this._keepAlive, maxSockets };
+            agent = usingSsl ? new external_https_.Agent(options) : new external_http_.Agent(options);
+            this._agent = agent;
+        }
+        if (usingSsl && this._ignoreSslError) {
+            // we don't want to set NODE_TLS_REJECT_UNAUTHORIZED=0 since that will affect request for entire process
+            // http.RequestOptions doesn't expose a way to modify RequestOptions.agent.options
+            // we have to cast it to any and change it directly
+            agent.options = Object.assign(agent.options || {}, {
+                rejectUnauthorized: false
+            });
+        }
+        return agent;
+    }
+    _getProxyAgentDispatcher(parsedUrl, proxyUrl) {
+        let proxyAgent;
+        if (this._keepAlive) {
+            proxyAgent = this._proxyAgentDispatcher;
+        }
+        // if agent is already assigned use that agent.
+        if (proxyAgent) {
+            return proxyAgent;
+        }
+        const usingSsl = parsedUrl.protocol === 'https:';
+        proxyAgent = new undici.ProxyAgent(Object.assign({ uri: proxyUrl.href, pipelining: !this._keepAlive ? 0 : 1 }, ((proxyUrl.username || proxyUrl.password) && {
+            token: `Basic ${Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64')}`
+        })));
+        this._proxyAgentDispatcher = proxyAgent;
+        if (usingSsl && this._ignoreSslError) {
+            // we don't want to set NODE_TLS_REJECT_UNAUTHORIZED=0 since that will affect request for entire process
+            // http.RequestOptions doesn't expose a way to modify RequestOptions.agent.options
+            // we have to cast it to any and change it directly
+            proxyAgent.options = Object.assign(proxyAgent.options.requestTls || {}, {
+                rejectUnauthorized: false
+            });
+        }
+        return proxyAgent;
+    }
+    _getUserAgentWithOrchestrationId(userAgent) {
+        const baseUserAgent = userAgent || 'actions/http-client';
+        const orchId = process.env['ACTIONS_ORCHESTRATION_ID'];
+        if (orchId) {
+            // Sanitize the orchestration ID to ensure it contains only valid characters
+            // Valid characters: 0-9, a-z, _, -, .
+            const sanitizedId = orchId.replace(/[^a-z0-9_.-]/gi, '_');
+            return `${baseUserAgent} actions_orchestration_id/${sanitizedId}`;
+        }
+        return baseUserAgent;
+    }
+    _performExponentialBackoff(retryNumber) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            retryNumber = Math.min(ExponentialBackoffCeiling, retryNumber);
+            const ms = ExponentialBackoffTimeSlice * Math.pow(2, retryNumber);
+            return new Promise(resolve => setTimeout(() => resolve(), ms));
+        });
+    }
+    _processResponse(res, options) {
+        return lib_awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve, reject) => lib_awaiter(this, void 0, void 0, function* () {
+                const statusCode = res.message.statusCode || 0;
+                const response = {
+                    statusCode,
+                    result: null,
+                    headers: {}
+                };
+                // not found leads to null obj returned
+                if (statusCode === HttpCodes.NotFound) {
+                    resolve(response);
+                }
+                // get the result from the body
+                function dateTimeDeserializer(key, value) {
+                    if (typeof value === 'string') {
+                        const a = new Date(value);
+                        if (!isNaN(a.valueOf())) {
+                            return a;
+                        }
+                    }
+                    return value;
+                }
+                let obj;
+                let contents;
+                try {
+                    contents = yield res.readBody();
+                    if (contents && contents.length > 0) {
+                        if (options && options.deserializeDates) {
+                            obj = JSON.parse(contents, dateTimeDeserializer);
+                        }
+                        else {
+                            obj = JSON.parse(contents);
+                        }
+                        response.result = obj;
+                    }
+                    response.headers = res.message.headers;
+                }
+                catch (err) {
+                    // Invalid resource (contents not json);  leaving result obj null
+                }
+                // note that 3xx redirects are handled by the http layer.
+                if (statusCode > 299) {
+                    let msg;
+                    // if exception/error in body, attempt to get better error
+                    if (obj && obj.message) {
+                        msg = obj.message;
+                    }
+                    else if (contents && contents.length > 0) {
+                        // it may be the case that the exception is in the body message as string
+                        msg = contents;
+                    }
+                    else {
+                        msg = `Failed request: (${statusCode})`;
+                    }
+                    const err = new HttpClientError(msg, statusCode);
+                    err.result = response.result;
+                    reject(err);
+                }
+                else {
+                    resolve(response);
+                }
+            }));
+        });
+    }
+}
+const lowercaseKeys = (obj) => Object.keys(obj).reduce((c, k) => ((c[k.toLowerCase()] = obj[k]), c), {});
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: external "stream"
+const external_stream_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("stream");
+// EXTERNAL MODULE: external "util"
+var external_util_ = __nccwpck_require__(9023);
+// EXTERNAL MODULE: external "assert"
+var external_assert_ = __nccwpck_require__(2613);
+;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/retry-helper.js
+var retry_helper_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+
+/**
+ * Internal class for retries
+ */
+class RetryHelper {
+    constructor(maxAttempts, minSeconds, maxSeconds) {
+        if (maxAttempts < 1) {
+            throw new Error('max attempts should be greater than or equal to 1');
+        }
+        this.maxAttempts = maxAttempts;
+        this.minSeconds = Math.floor(minSeconds);
+        this.maxSeconds = Math.floor(maxSeconds);
+        if (this.minSeconds > this.maxSeconds) {
+            throw new Error('min seconds should be less than or equal to max seconds');
+        }
+    }
+    execute(action, isRetryable) {
+        return retry_helper_awaiter(this, void 0, void 0, function* () {
+            let attempt = 1;
+            while (attempt < this.maxAttempts) {
+                // Try
+                try {
+                    return yield action();
+                }
+                catch (err) {
+                    if (isRetryable && !isRetryable(err)) {
+                        throw err;
+                    }
+                    lib_core/* info */.pq(err.message);
+                }
+                // Sleep
+                const seconds = this.getSleepAmount();
+                lib_core/* info */.pq(`Waiting ${seconds} seconds before trying again`);
+                yield this.sleep(seconds);
+                attempt++;
+            }
+            // Last attempt
+            return yield action();
+        });
+    }
+    getSleepAmount() {
+        return (Math.floor(Math.random() * (this.maxSeconds - this.minSeconds + 1)) +
+            this.minSeconds);
+    }
+    sleep(seconds) {
+        return retry_helper_awaiter(this, void 0, void 0, function* () {
+            return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+        });
+    }
+}
+//# sourceMappingURL=retry-helper.js.map
+;// CONCATENATED MODULE: ./node_modules/@actions/tool-cache/lib/tool-cache.js
+var tool_cache_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class HTTPError extends Error {
+    constructor(httpStatusCode) {
+        super(`Unexpected HTTP response: ${httpStatusCode}`);
+        this.httpStatusCode = httpStatusCode;
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+const IS_WINDOWS = process.platform === 'win32';
+const IS_MAC = process.platform === 'darwin';
+const userAgent = 'actions/tool-cache';
+/**
+ * Download a tool from an url and stream it into a file
+ *
+ * @param url       url of tool to download
+ * @param dest      path to download tool
+ * @param auth      authorization header
+ * @param headers   other headers
+ * @returns         path to downloaded tool
+ */
+function downloadTool(url, dest, auth, headers) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        dest = dest || external_path_.join(_getTempDirectory(), external_crypto_.randomUUID());
+        yield lib_io/* mkdirP */.U$(external_path_.dirname(dest));
+        lib_core/* debug */.Yz(`Downloading ${url}`);
+        lib_core/* debug */.Yz(`Destination ${dest}`);
+        const maxAttempts = 3;
+        const minSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MIN_SECONDS', 10);
+        const maxSeconds = _getGlobal('TEST_DOWNLOAD_TOOL_RETRY_MAX_SECONDS', 20);
+        const retryHelper = new RetryHelper(maxAttempts, minSeconds, maxSeconds);
+        return yield retryHelper.execute(() => tool_cache_awaiter(this, void 0, void 0, function* () {
+            return yield downloadToolAttempt(url, dest || '', auth, headers);
+        }), (err) => {
+            if (err instanceof HTTPError && err.httpStatusCode) {
+                // Don't retry anything less than 500, except 408 Request Timeout and 429 Too Many Requests
+                if (err.httpStatusCode < 500 &&
+                    err.httpStatusCode !== 408 &&
+                    err.httpStatusCode !== 429) {
+                    return false;
+                }
+            }
+            // Otherwise retry
+            return true;
+        });
+    });
+}
+function downloadToolAttempt(url, dest, auth, headers) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        if (external_fs_.existsSync(dest)) {
+            throw new Error(`Destination file path ${dest} already exists`);
+        }
+        // Get the response headers
+        const http = new main_HttpClient(userAgent, [], {
+            allowRetries: false
+        });
+        if (auth) {
+            lib_core/* debug */.Yz('set auth');
+            if (headers === undefined) {
+                headers = {};
+            }
+            headers.authorization = auth;
+        }
+        const response = yield http.get(url, headers);
+        if (response.message.statusCode !== 200) {
+            const err = new HTTPError(response.message.statusCode);
+            lib_core/* debug */.Yz(`Failed to download from "${url}". Code(${response.message.statusCode}) Message(${response.message.statusMessage})`);
+            throw err;
+        }
+        // Download the response body
+        const pipeline = external_util_.promisify(external_stream_namespaceObject.pipeline);
+        const responseMessageFactory = _getGlobal('TEST_DOWNLOAD_TOOL_RESPONSE_MESSAGE_FACTORY', () => response.message);
+        const readStream = responseMessageFactory();
+        let succeeded = false;
+        try {
+            yield pipeline(readStream, external_fs_.createWriteStream(dest));
+            lib_core/* debug */.Yz('download complete');
+            succeeded = true;
+            return dest;
+        }
+        finally {
+            // Error, delete dest before retry
+            if (!succeeded) {
+                lib_core/* debug */.Yz('download failed');
+                try {
+                    yield lib_io/* rmRF */.Yz(dest);
+                }
+                catch (err) {
+                    lib_core/* debug */.Yz(`Failed to delete '${dest}'. ${err.message}`);
+                }
+            }
+        }
+    });
+}
+/**
+ * Extract a .7z file
+ *
+ * @param file     path to the .7z file
+ * @param dest     destination directory. Optional.
+ * @param _7zPath  path to 7zr.exe. Optional, for long path support. Most .7z archives do not have this
+ * problem. If your .7z archive contains very long paths, you can pass the path to 7zr.exe which will
+ * gracefully handle long paths. By default 7zdec.exe is used because it is a very small program and is
+ * bundled with the tool lib. However it does not support long paths. 7zr.exe is the reduced command line
+ * interface, it is smaller than the full command line interface, and it does support long paths. At the
+ * time of this writing, it is freely available from the LZMA SDK that is available on the 7zip website.
+ * Be sure to check the current license agreement. If 7zr.exe is bundled with your action, then the path
+ * to 7zr.exe can be pass to this function.
+ * @returns        path to the destination directory
+ */
+function extract7z(file, dest, _7zPath) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        ok(IS_WINDOWS, 'extract7z() not supported on current OS');
+        ok(file, 'parameter "file" is required');
+        dest = yield _createExtractFolder(dest);
+        const originalCwd = process.cwd();
+        process.chdir(dest);
+        if (_7zPath) {
+            try {
+                const logLevel = core.isDebug() ? '-bb1' : '-bb0';
+                const args = [
+                    'x', // eXtract files with full paths
+                    logLevel, // -bb[0-3] : set output log level
+                    '-bd', // disable progress indicator
+                    '-sccUTF-8', // set charset for for console input/output
+                    file
+                ];
+                const options = {
+                    silent: true
+                };
+                yield exec(`"${_7zPath}"`, args, options);
+            }
+            finally {
+                process.chdir(originalCwd);
+            }
+        }
+        else {
+            const escapedScript = path
+                .join(__dirname, '..', 'scripts', 'Invoke-7zdec.ps1')
+                .replace(/'/g, "''")
+                .replace(/"|\n|\r/g, ''); // double-up single quotes, remove double quotes and newlines
+            const escapedFile = file.replace(/'/g, "''").replace(/"|\n|\r/g, '');
+            const escapedTarget = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
+            const command = `& '${escapedScript}' -Source '${escapedFile}' -Target '${escapedTarget}'`;
+            const args = [
+                '-NoLogo',
+                '-Sta',
+                '-NoProfile',
+                '-NonInteractive',
+                '-ExecutionPolicy',
+                'Unrestricted',
+                '-Command',
+                command
+            ];
+            const options = {
+                silent: true
+            };
+            try {
+                const powershellPath = yield io.which('powershell', true);
+                yield exec(`"${powershellPath}"`, args, options);
+            }
+            finally {
+                process.chdir(originalCwd);
+            }
+        }
+        return dest;
+    });
+}
+/**
+ * Extract a compressed tar archive
+ *
+ * @param file     path to the tar
+ * @param dest     destination directory. Optional.
+ * @param flags    flags for the tar command to use for extraction. Defaults to 'xz' (extracting gzipped tars). Optional.
+ * @returns        path to the destination directory
+ */
+function extractTar(file_1, dest_1) {
+    return tool_cache_awaiter(this, arguments, void 0, function* (file, dest, flags = 'xz') {
+        if (!file) {
+            throw new Error("parameter 'file' is required");
+        }
+        // Create dest
+        dest = yield _createExtractFolder(dest);
+        // Determine whether GNU tar
+        lib_core/* debug */.Yz('Checking tar --version');
+        let versionOutput = '';
+        yield (0,lib_exec/* exec */.m)('tar --version', [], {
+            ignoreReturnCode: true,
+            silent: true,
+            listeners: {
+                stdout: (data) => (versionOutput += data.toString()),
+                stderr: (data) => (versionOutput += data.toString())
+            }
+        });
+        lib_core/* debug */.Yz(versionOutput.trim());
+        const isGnuTar = versionOutput.toUpperCase().includes('GNU TAR');
+        // Initialize args
+        let args;
+        if (flags instanceof Array) {
+            args = flags;
+        }
+        else {
+            args = [flags];
+        }
+        if (lib_core/* isDebug */._o() && !flags.includes('v')) {
+            args.push('-v');
+        }
+        let destArg = dest;
+        let fileArg = file;
+        if (IS_WINDOWS && isGnuTar) {
+            args.push('--force-local');
+            destArg = dest.replace(/\\/g, '/');
+            // Technically only the dest needs to have `/` but for aesthetic consistency
+            // convert slashes in the file arg too.
+            fileArg = file.replace(/\\/g, '/');
+        }
+        if (isGnuTar) {
+            // Suppress warnings when using GNU tar to extract archives created by BSD tar
+            args.push('--warning=no-unknown-keyword');
+            args.push('--overwrite');
+        }
+        args.push('-C', destArg, '-f', fileArg);
+        yield (0,lib_exec/* exec */.m)(`tar`, args);
+        return dest;
+    });
+}
+/**
+ * Extract a xar compatible archive
+ *
+ * @param file     path to the archive
+ * @param dest     destination directory. Optional.
+ * @param flags    flags for the xar. Optional.
+ * @returns        path to the destination directory
+ */
+function extractXar(file_1, dest_1) {
+    return tool_cache_awaiter(this, arguments, void 0, function* (file, dest, flags = []) {
+        ok(IS_MAC, 'extractXar() not supported on current OS');
+        ok(file, 'parameter "file" is required');
+        dest = yield _createExtractFolder(dest);
+        let args;
+        if (flags instanceof Array) {
+            args = flags;
+        }
+        else {
+            args = [flags];
+        }
+        args.push('-x', '-C', dest, '-f', file);
+        if (core.isDebug()) {
+            args.push('-v');
+        }
+        const xarPath = yield io.which('xar', true);
+        yield exec(`"${xarPath}"`, _unique(args));
+        return dest;
+    });
+}
+/**
+ * Extract a zip
+ *
+ * @param file     path to the zip
+ * @param dest     destination directory. Optional.
+ * @returns        path to the destination directory
+ */
+function extractZip(file, dest) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        if (!file) {
+            throw new Error("parameter 'file' is required");
+        }
+        dest = yield _createExtractFolder(dest);
+        if (IS_WINDOWS) {
+            yield extractZipWin(file, dest);
+        }
+        else {
+            yield extractZipNix(file, dest);
+        }
+        return dest;
+    });
+}
+function extractZipWin(file, dest) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        // build the powershell command
+        const escapedFile = file.replace(/'/g, "''").replace(/"|\n|\r/g, ''); // double-up single quotes, remove double quotes and newlines
+        const escapedDest = dest.replace(/'/g, "''").replace(/"|\n|\r/g, '');
+        const pwshPath = yield lib_io/* which */.K7('pwsh', false);
+        //To match the file overwrite behavior on nix systems, we use the overwrite = true flag for ExtractToDirectory
+        //and the -Force flag for Expand-Archive as a fallback
+        if (pwshPath) {
+            //attempt to use pwsh with ExtractToDirectory, if this fails attempt Expand-Archive
+            const pwshCommand = [
+                `$ErrorActionPreference = 'Stop' ;`,
+                `try { Add-Type -AssemblyName System.IO.Compression.ZipFile } catch { } ;`,
+                `try { [System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedFile}', '${escapedDest}', $true) }`,
+                `catch { if (($_.Exception.GetType().FullName -eq 'System.Management.Automation.MethodException') -or ($_.Exception.GetType().FullName -eq 'System.Management.Automation.RuntimeException') ){ Expand-Archive -LiteralPath '${escapedFile}' -DestinationPath '${escapedDest}' -Force } else { throw $_ } } ;`
+            ].join(' ');
+            const args = [
+                '-NoLogo',
+                '-NoProfile',
+                '-NonInteractive',
+                '-ExecutionPolicy',
+                'Unrestricted',
+                '-Command',
+                pwshCommand
+            ];
+            lib_core/* debug */.Yz(`Using pwsh at path: ${pwshPath}`);
+            yield (0,lib_exec/* exec */.m)(`"${pwshPath}"`, args);
+        }
+        else {
+            const powershellCommand = [
+                `$ErrorActionPreference = 'Stop' ;`,
+                `try { Add-Type -AssemblyName System.IO.Compression.FileSystem } catch { } ;`,
+                `if ((Get-Command -Name Expand-Archive -Module Microsoft.PowerShell.Archive -ErrorAction Ignore)) { Expand-Archive -LiteralPath '${escapedFile}' -DestinationPath '${escapedDest}' -Force }`,
+                `else {[System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedFile}', '${escapedDest}', $true) }`
+            ].join(' ');
+            const args = [
+                '-NoLogo',
+                '-Sta',
+                '-NoProfile',
+                '-NonInteractive',
+                '-ExecutionPolicy',
+                'Unrestricted',
+                '-Command',
+                powershellCommand
+            ];
+            const powershellPath = yield lib_io/* which */.K7('powershell', true);
+            lib_core/* debug */.Yz(`Using powershell at path: ${powershellPath}`);
+            yield (0,lib_exec/* exec */.m)(`"${powershellPath}"`, args);
+        }
+    });
+}
+function extractZipNix(file, dest) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        const unzipPath = yield lib_io/* which */.K7('unzip', true);
+        const args = [file];
+        if (!lib_core/* isDebug */._o()) {
+            args.unshift('-q');
+        }
+        args.unshift('-o'); //overwrite with -o, otherwise a prompt is shown which freezes the run
+        yield (0,lib_exec/* exec */.m)(`"${unzipPath}"`, args, { cwd: dest });
+    });
+}
+/**
+ * Caches a directory and installs it into the tool cacheDir
+ *
+ * @param sourceDir    the directory to cache into tools
+ * @param tool          tool name
+ * @param version       version of the tool.  semver format
+ * @param arch          architecture of the tool.  Optional.  Defaults to machine architecture
+ */
+function cacheDir(sourceDir, tool, version, arch) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        version = node_modules_semver.clean(version) || version;
+        arch = arch || external_os_.arch();
+        lib_core/* debug */.Yz(`Caching tool ${tool} ${version} ${arch}`);
+        lib_core/* debug */.Yz(`source dir: ${sourceDir}`);
+        if (!external_fs_.statSync(sourceDir).isDirectory()) {
+            throw new Error('sourceDir is not a directory');
+        }
+        // Create the tool dir
+        const destPath = yield _createToolPath(tool, version, arch);
+        // copy each child item. do not move. move can fail on Windows
+        // due to anti-virus software having an open handle on a file.
+        for (const itemName of external_fs_.readdirSync(sourceDir)) {
+            const s = external_path_.join(sourceDir, itemName);
+            yield lib_io.cp(s, destPath, { recursive: true });
+        }
+        // write .complete
+        _completeToolPath(tool, version, arch);
+        return destPath;
+    });
+}
+/**
+ * Caches a downloaded file (GUID) and installs it
+ * into the tool cache with a given targetName
+ *
+ * @param sourceFile    the file to cache into tools.  Typically a result of downloadTool which is a guid.
+ * @param targetFile    the name of the file name in the tools directory
+ * @param tool          tool name
+ * @param version       version of the tool.  semver format
+ * @param arch          architecture of the tool.  Optional.  Defaults to machine architecture
+ */
+function cacheFile(sourceFile, targetFile, tool, version, arch) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        version = semver.clean(version) || version;
+        arch = arch || os.arch();
+        core.debug(`Caching tool ${tool} ${version} ${arch}`);
+        core.debug(`source file: ${sourceFile}`);
+        if (!fs.statSync(sourceFile).isFile()) {
+            throw new Error('sourceFile is not a file');
+        }
+        // create the tool dir
+        const destFolder = yield _createToolPath(tool, version, arch);
+        // copy instead of move. move can fail on Windows due to
+        // anti-virus software having an open handle on a file.
+        const destPath = path.join(destFolder, targetFile);
+        core.debug(`destination file ${destPath}`);
+        yield io.cp(sourceFile, destPath);
+        // write .complete
+        _completeToolPath(tool, version, arch);
+        return destFolder;
+    });
+}
+/**
+ * Finds the path to a tool version in the local installed tool cache
+ *
+ * @param toolName      name of the tool
+ * @param versionSpec   version of the tool
+ * @param arch          optional arch.  defaults to arch of computer
+ */
+function find(toolName, versionSpec, arch) {
+    if (!toolName) {
+        throw new Error('toolName parameter is required');
+    }
+    if (!versionSpec) {
+        throw new Error('versionSpec parameter is required');
+    }
+    arch = arch || external_os_.arch();
+    // attempt to resolve an explicit version
+    if (!isExplicitVersion(versionSpec)) {
+        const localVersions = findAllVersions(toolName, arch);
+        const match = evaluateVersions(localVersions, versionSpec);
+        versionSpec = match;
+    }
+    // check for the explicit version in the cache
+    let toolPath = '';
+    if (versionSpec) {
+        versionSpec = node_modules_semver.clean(versionSpec) || '';
+        const cachePath = external_path_.join(_getCacheDirectory(), toolName, versionSpec, arch);
+        lib_core/* debug */.Yz(`checking cache: ${cachePath}`);
+        if (external_fs_.existsSync(cachePath) && external_fs_.existsSync(`${cachePath}.complete`)) {
+            lib_core/* debug */.Yz(`Found tool in cache ${toolName} ${versionSpec} ${arch}`);
+            toolPath = cachePath;
+        }
+        else {
+            lib_core/* debug */.Yz('not found');
+        }
+    }
+    return toolPath;
+}
+/**
+ * Finds the paths to all versions of a tool that are installed in the local tool cache
+ *
+ * @param toolName  name of the tool
+ * @param arch      optional arch.  defaults to arch of computer
+ */
+function findAllVersions(toolName, arch) {
+    const versions = [];
+    arch = arch || external_os_.arch();
+    const toolPath = external_path_.join(_getCacheDirectory(), toolName);
+    if (external_fs_.existsSync(toolPath)) {
+        const children = external_fs_.readdirSync(toolPath);
+        for (const child of children) {
+            if (isExplicitVersion(child)) {
+                const fullPath = external_path_.join(toolPath, child, arch || '');
+                if (external_fs_.existsSync(fullPath) && external_fs_.existsSync(`${fullPath}.complete`)) {
+                    versions.push(child);
+                }
+            }
+        }
+    }
+    return versions;
+}
+function getManifestFromRepo(owner_1, repo_1, auth_1) {
+    return tool_cache_awaiter(this, arguments, void 0, function* (owner, repo, auth, branch = 'master') {
+        let releases = [];
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`;
+        const http = new httpm.HttpClient('tool-cache');
+        const headers = {};
+        if (auth) {
+            core.debug('set auth');
+            headers.authorization = auth;
+        }
+        const response = yield http.getJson(treeUrl, headers);
+        if (!response.result) {
+            return releases;
+        }
+        let manifestUrl = '';
+        for (const item of response.result.tree) {
+            if (item.path === 'versions-manifest.json') {
+                manifestUrl = item.url;
+                break;
+            }
+        }
+        headers['accept'] = 'application/vnd.github.VERSION.raw';
+        let versionsRaw = yield (yield http.get(manifestUrl, headers)).readBody();
+        if (versionsRaw) {
+            // shouldn't be needed but protects against invalid json saved with BOM
+            versionsRaw = versionsRaw.replace(/^\uFEFF/, '');
+            try {
+                releases = JSON.parse(versionsRaw);
+            }
+            catch (_a) {
+                core.debug('Invalid json');
+            }
+        }
+        return releases;
+    });
+}
+function findFromManifest(versionSpec_1, stable_1, manifest_1) {
+    return tool_cache_awaiter(this, arguments, void 0, function* (versionSpec, stable, manifest, archFilter = os.arch()) {
+        // wrap the internal impl
+        const match = yield mm._findMatch(versionSpec, stable, manifest, archFilter);
+        return match;
+    });
+}
+function _createExtractFolder(dest) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        if (!dest) {
+            // create a temp dir
+            dest = external_path_.join(_getTempDirectory(), external_crypto_.randomUUID());
+        }
+        yield lib_io/* mkdirP */.U$(dest);
+        return dest;
+    });
+}
+function _createToolPath(tool, version, arch) {
+    return tool_cache_awaiter(this, void 0, void 0, function* () {
+        const folderPath = external_path_.join(_getCacheDirectory(), tool, node_modules_semver.clean(version) || version, arch || '');
+        lib_core/* debug */.Yz(`destination ${folderPath}`);
+        const markerPath = `${folderPath}.complete`;
+        yield lib_io/* rmRF */.Yz(folderPath);
+        yield lib_io/* rmRF */.Yz(markerPath);
+        yield lib_io/* mkdirP */.U$(folderPath);
+        return folderPath;
+    });
+}
+function _completeToolPath(tool, version, arch) {
+    const folderPath = external_path_.join(_getCacheDirectory(), tool, node_modules_semver.clean(version) || version, arch || '');
+    const markerPath = `${folderPath}.complete`;
+    external_fs_.writeFileSync(markerPath, '');
+    lib_core/* debug */.Yz('finished caching tool');
+}
+/**
+ * Check if version string is explicit
+ *
+ * @param versionSpec      version string to check
+ */
+function isExplicitVersion(versionSpec) {
+    const c = node_modules_semver.clean(versionSpec) || '';
+    lib_core/* debug */.Yz(`isExplicit: ${c}`);
+    const valid = node_modules_semver.valid(c) != null;
+    lib_core/* debug */.Yz(`explicit? ${valid}`);
+    return valid;
+}
+/**
+ * Get the highest satisfiying semantic version in `versions` which satisfies `versionSpec`
+ *
+ * @param versions        array of versions to evaluate
+ * @param versionSpec     semantic version spec to satisfy
+ */
+function evaluateVersions(versions, versionSpec) {
+    let version = '';
+    lib_core/* debug */.Yz(`evaluating ${versions.length} versions`);
+    versions = versions.sort((a, b) => {
+        if (node_modules_semver.gt(a, b)) {
+            return 1;
+        }
+        return -1;
+    });
+    for (let i = versions.length - 1; i >= 0; i--) {
+        const potential = versions[i];
+        const satisfied = node_modules_semver.satisfies(potential, versionSpec);
+        if (satisfied) {
+            version = potential;
+            break;
+        }
+    }
+    if (version) {
+        lib_core/* debug */.Yz(`matched: ${version}`);
+    }
+    else {
+        lib_core/* debug */.Yz('match not found');
+    }
+    return version;
+}
+/**
+ * Gets RUNNER_TOOL_CACHE
+ */
+function _getCacheDirectory() {
+    const cacheDirectory = process.env['RUNNER_TOOL_CACHE'] || '';
+    (0,external_assert_.ok)(cacheDirectory, 'Expected RUNNER_TOOL_CACHE to be defined');
+    return cacheDirectory;
+}
+/**
+ * Gets RUNNER_TEMP
+ */
+function _getTempDirectory() {
+    const tempDirectory = process.env['RUNNER_TEMP'] || '';
+    (0,external_assert_.ok)(tempDirectory, 'Expected RUNNER_TEMP to be defined');
+    return tempDirectory;
+}
+/**
+ * Gets a global variable
+ */
+function _getGlobal(key, defaultValue) {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const value = global[key];
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    return value !== undefined ? value : defaultValue;
+}
+/**
+ * Returns an array of unique values.
+ * @param values Values to make unique.
+ */
+function _unique(values) {
+    return Array.from(new Set(values));
+}
+//# sourceMappingURL=tool-cache.js.map
+;// CONCATENATED MODULE: ./src/install.ts
+
+
+
+
+
+
+const REPO_OWNER = 'rshade';
+const REPO_NAME = 'finfocus';
+/**
+ * Minimum finfocus version that supports exit codes for budget threshold checks.
+ */
+const EXIT_CODE_MIN_VERSION = '0.2.5';
+/**
+ * Get the installed finfocus version by running `finfocus --version`.
+ * Returns '0.0.0' if version cannot be determined.
+ */
+async function getFinfocusVersion() {
+    try {
+        const output = await exec.getExecOutput('finfocus', ['--version'], {
+            ignoreReturnCode: true,
+            silent: true,
+        });
+        // Parse "finfocus v0.2.5" or "finfocus 0.2.5" format
+        const match = output.stdout.match(/v?(\d+\.\d+\.\d+)/);
+        return match ? match[1] : '0.0.0';
+    }
+    catch {
+        return '0.0.0';
+    }
+}
+/**
+ * Check if the given version supports exit codes for budget threshold checks.
+ * Requires finfocus v0.2.5 or higher.
+ */
+function supportsExitCodes(version) {
+    return compareVersions(version, EXIT_CODE_MIN_VERSION) >= 0;
+}
+/**
+ * Compare two semantic versions.
+ * @returns -1 if a < b, 0 if a == b, 1 if a > b
+ */
+function compareVersions(a, b) {
+    const [aMajor, aMinor, aPatch] = a.split('.').map(Number);
+    const [bMajor, bMinor, bPatch] = b.split('.').map(Number);
+    if (aMajor > bMajor)
+        return 1;
+    if (aMajor < bMajor)
+        return -1;
+    if (aMinor > bMinor)
+        return 1;
+    if (aMinor < bMinor)
+        return -1;
+    if (aPatch > bPatch)
+        return 1;
+    if (aPatch < bPatch)
+        return -1;
+    return 0;
+}
+/**
+ * Check if a tag name matches the stable CLI release pattern (v<major>.<minor>.<patch>).
+ * Excludes prefixed tags like kubernetes-v*, jev-v*, and other non-CLI tags.
+ */
+function isStableCliRelease(tagName) {
+    return /^v\d+\.\d+\.\d+$/.test(tagName);
+}
+class Installer {
+    async install(version, config) {
+        const debug = config?.debug === true;
+        const platform = this.getPlatform();
+        const arch = this.getArch();
+        if (debug) {
+            lib_core/* info */.pq(`=== Installer: Starting installation ===`);
+            lib_core/* info */.pq(`  Requested version: ${version}`);
+            lib_core/* info */.pq(`  Detected OS platform: ${external_os_.platform()}`);
+            lib_core/* info */.pq(`  Detected OS arch: ${external_os_.arch()}`);
+            lib_core/* info */.pq(`  Mapped platform: ${platform}`);
+            lib_core/* info */.pq(`  Mapped arch: ${arch}`);
+        }
+        else {
+            lib_core/* info */.pq(`Installing finfocus (${version})...`);
+        }
+        const resolvedVersion = await this.resolveVersion(version, debug);
+        if (debug)
+            lib_core/* info */.pq(`  Resolved version: ${resolvedVersion}`);
+        if (debug)
+            lib_core/* info */.pq(`=== Checking tool cache ===`);
+        const cached = find('finfocus', resolvedVersion, arch);
+        if (cached) {
+            if (debug) {
+                lib_core/* info */.pq(`  Cache HIT: Found finfocus at ${cached}`);
+                lib_core/* info */.pq(`  Binary path: ${external_path_.join(cached, this.getBinaryName())}`);
+            }
+            lib_core/* addPath */.fM(cached);
+            await this.verifyInstallation(debug);
+            return external_path_.join(cached, this.getBinaryName());
+        }
+        if (debug)
+            lib_core/* info */.pq(`  Cache MISS: Will download`);
+        const ext = platform === 'windows' ? 'zip' : 'tar.gz';
+        const assetName = `finfocus-v${resolvedVersion}-${platform}-${arch}.${ext}`;
+        const downloadUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/v${resolvedVersion}/${assetName}`;
+        if (debug) {
+            lib_core/* info */.pq(`=== Download Details ===`);
+            lib_core/* info */.pq(`  Asset name: ${assetName}`);
+            lib_core/* info */.pq(`  Download URL: ${downloadUrl}`);
+        }
+        let downloadPath;
+        try {
+            if (debug)
+                lib_core/* info */.pq(`  Starting download...`);
+            const downloadStart = Date.now();
+            downloadPath = await downloadTool(downloadUrl);
+            if (debug) {
+                lib_core/* info */.pq(`  Download completed in ${Date.now() - downloadStart}ms`);
+                lib_core/* info */.pq(`  Downloaded to: ${downloadPath}`);
+                const downloadStats = external_fs_.statSync(downloadPath);
+                lib_core/* info */.pq(`  Downloaded file size: ${downloadStats.size} bytes`);
+            }
+        }
+        catch (err) {
+            lib_core/* error */.z3(`  Download FAILED`);
+            throw new Error(`Failed to download finfocus from ${downloadUrl}. ` +
+                `Check if version ${resolvedVersion} exists and has ${assetName} asset. ` +
+                `Error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+        }
+        let extractPath;
+        try {
+            if (debug) {
+                lib_core/* info */.pq(`=== Extracting archive ===`);
+                lib_core/* info */.pq(`  Archive type: ${ext}`);
+            }
+            const extractStart = Date.now();
+            if (platform === 'windows') {
+                extractPath = await extractZip(downloadPath);
+            }
+            else {
+                extractPath = await extractTar(downloadPath);
+            }
+            if (debug) {
+                lib_core/* info */.pq(`  Extraction completed in ${Date.now() - extractStart}ms`);
+                lib_core/* info */.pq(`  Extracted to: ${extractPath}`);
+                const extractedFiles = external_fs_.readdirSync(extractPath);
+                lib_core/* info */.pq(`  Extracted files: ${extractedFiles.join(', ')}`);
+            }
+        }
+        catch (err) {
+            lib_core/* error */.z3(`  Extraction FAILED`);
+            throw new Error(`Failed to extract finfocus archive. Error: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+        }
+        if (debug)
+            lib_core/* info */.pq(`=== Caching binary ===`);
+        const cachedPath = await cacheDir(extractPath, 'finfocus', resolvedVersion, arch);
+        lib_core/* addPath */.fM(cachedPath);
+        const binaryPath = external_path_.join(cachedPath, this.getBinaryName());
+        if (platform !== 'windows') {
+            await lib_exec/* exec */.m('chmod', ['+x', binaryPath], { silent: !debug });
+        }
+        await this.verifyInstallation(debug);
+        if (debug) {
+            lib_core/* info */.pq(`=== Installation complete ===`);
+            lib_core/* info */.pq(`  Final binary path: ${binaryPath}`);
+        }
+        return binaryPath;
+    }
+    async verifyInstallation(debug) {
+        if (debug)
+            lib_core/* info */.pq(`=== Verifying installation ===`);
+        try {
+            if (debug)
+                lib_core/* info */.pq(`  Running: finfocus --version`);
+            const output = await lib_exec/* getExecOutput */.H('finfocus', ['--version'], {
+                silent: !debug,
+                ignoreReturnCode: true,
+            });
+            if (debug) {
+                lib_core/* info */.pq(`  Exit code: ${output.exitCode}`);
+                lib_core/* info */.pq(`  Stdout: ${output.stdout.trim()}`);
+            }
+            if (output.exitCode !== 0) {
+                lib_core/* warning */.$e(`  finfocus --version returned non-zero exit code: ${output.exitCode}`);
+            }
+            else if (debug) {
+                lib_core/* info */.pq(`  Verification successful`);
+            }
+        }
+        catch (err) {
+            if (debug)
+                lib_core/* warning */.$e(`  Verification FAILED: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        if (debug) {
+            lib_core/* info */.pq(`  Checking PATH for finfocus...`);
+            try {
+                const whichOutput = await lib_exec/* getExecOutput */.H('which', ['finfocus'], {
+                    silent: true,
+                    ignoreReturnCode: true,
+                });
+                lib_core/* info */.pq(`  which finfocus: ${whichOutput.stdout.trim() || '(not found)'}`);
+            }
+            catch {
+                lib_core/* info */.pq(`  which command failed`);
+            }
+        }
+    }
+    async resolveVersion(version, debug) {
+        if (version !== 'latest') {
+            return version.replace(/^v/, '');
+        }
+        if (debug)
+            lib_core/* info */.pq(`=== Resolving 'latest' version ===`);
+        const apiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=100`;
+        const response = await fetch(apiUrl, {
+            headers: {
+                Accept: 'application/vnd.github.v3+json',
+                'User-Agent': 'finfocus-action',
+            },
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to fetch releases: ${response.status} ${response.statusText}`);
+        }
+        const releases = (await response.json());
+        if (debug) {
+            lib_core/* info */.pq(`  Total releases fetched: ${releases.length}`);
+        }
+        // Filter to stable CLI releases (not prefixed, not prerelease/draft)
+        const stableReleases = releases.filter((r) => isStableCliRelease(r.tag_name) && !r.prerelease && !r.draft);
+        if (stableReleases.length === 0) {
+            throw new Error(`No stable release found matching v<major>.<minor>.<patch> pattern in the first 100 releases`);
+        }
+        // Sort by semantic version (descending) to get the highest version
+        stableReleases.sort((a, b) => {
+            const aVersion = a.tag_name.replace(/^v/, '');
+            const bVersion = b.tag_name.replace(/^v/, '');
+            return compareVersions(bVersion, aVersion); // b - a for descending order
+        });
+        const latestRelease = stableReleases[0];
+        if (debug) {
+            lib_core/* info */.pq(`  Stable releases found: ${stableReleases.length}`);
+            lib_core/* info */.pq(`  Selected tag_name: ${latestRelease.tag_name}`);
+        }
+        return latestRelease.tag_name.replace(/^v/, '');
+    }
+    getPlatform() {
+        const p = external_os_.platform();
+        if (p === 'win32')
+            return 'windows';
+        if (p === 'darwin')
+            return 'macos';
+        return p;
+    }
+    getArch() {
+        const a = external_os_.arch();
+        if (a === 'x64')
+            return 'amd64';
+        if (a === 'arm64')
+            return 'arm64';
+        return a;
+    }
+    getBinaryName() {
+        return external_os_.platform() === 'win32' ? 'finfocus.exe' : 'finfocus';
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/plugin-specs.ts
 /**
  * Plugin specifiers accepted by `finfocus plugin install` (finfocus v0.4.0+).
@@ -37431,13 +37405,13 @@ class PluginManager {
     async installPlugins(plugins, config) {
         const debug = config?.debug === true;
         if (debug) {
-            main_core/* info */.pq(`=== PluginManager: Starting plugin installation ===`);
-            main_core/* info */.pq(`  Plugins to install: [${plugins.map((p) => `"${p}"`).join(', ')}]`);
+            lib_core/* info */.pq(`=== PluginManager: Starting plugin installation ===`);
+            lib_core/* info */.pq(`  Plugins to install: [${plugins.map((p) => `"${p}"`).join(', ')}]`);
         }
         const requested = plugins.map((plugin) => plugin.trim()).filter((plugin) => plugin.length > 0);
         if (requested.length === 0) {
             if (debug)
-                main_core/* info */.pq(`  No plugins to install`);
+                lib_core/* info */.pq(`  No plugins to install`);
             return;
         }
         const registryNames = await this.availablePluginNames(debug);
@@ -37446,66 +37420,66 @@ class PluginManager {
         }
         const pluginDir = external_path_.join(external_os_.homedir(), '.finfocus', 'plugins');
         if (debug) {
-            main_core/* info */.pq(`  Plugin directory: ${pluginDir}`);
-            main_core/* info */.pq(`  Plugin directory exists: ${external_fs_.existsSync(pluginDir)}`);
+            lib_core/* info */.pq(`  Plugin directory: ${pluginDir}`);
+            lib_core/* info */.pq(`  Plugin directory exists: ${external_fs_.existsSync(pluginDir)}`);
         }
         for (let i = 0; i < requested.length; i++) {
             const trimmedPlugin = requested[i];
             if (debug)
-                main_core/* info */.pq(`=== Installing plugin ${i + 1}/${requested.length}: "${trimmedPlugin}" ===`);
+                lib_core/* info */.pq(`=== Installing plugin ${i + 1}/${requested.length}: "${trimmedPlugin}" ===`);
             else
-                main_core/* info */.pq(`Installing finfocus plugin: "${trimmedPlugin}"`);
+                lib_core/* info */.pq(`Installing finfocus plugin: "${trimmedPlugin}"`);
             // We avoid the progress bar in logs by using silent mode in exec
             const args = ['plugin', 'install', trimmedPlugin];
             if (debug)
-                main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+                lib_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
             try {
                 const installStart = Date.now();
-                const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+                const output = await lib_exec/* getExecOutput */.H('finfocus', args, {
                     silent: !debug,
                     ignoreReturnCode: true,
                 });
                 if (debug) {
-                    main_core/* info */.pq(`  Installation took: ${Date.now() - installStart}ms`);
-                    main_core/* info */.pq(`  Exit code: ${output.exitCode}`);
-                    main_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
+                    lib_core/* info */.pq(`  Installation took: ${Date.now() - installStart}ms`);
+                    lib_core/* info */.pq(`  Exit code: ${output.exitCode}`);
+                    lib_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
                     if (output.stdout) {
-                        main_core/* info */.pq(`  Stdout:\n${output.stdout}`);
+                        lib_core/* info */.pq(`  Stdout:\n${output.stdout}`);
                     }
                     if (output.stderr) {
-                        main_core/* info */.pq(`  Stderr:\n${output.stderr}`);
+                        lib_core/* info */.pq(`  Stderr:\n${output.stderr}`);
                     }
                 }
                 if (output.exitCode !== 0) {
-                    main_core/* error */.z3(`  Plugin installation FAILED with exit code ${output.exitCode}`);
+                    lib_core/* error */.z3(`  Plugin installation FAILED with exit code ${output.exitCode}`);
                     throw new Error(`Failed to install plugin ${trimmedPlugin}.\n` +
                         `Exit code: ${output.exitCode}\n` +
                         `Stderr: ${output.stderr}\n` +
                         `Stdout: ${output.stdout}`);
                 }
                 if (debug)
-                    main_core/* info */.pq(`  Plugin "${trimmedPlugin}" installed successfully`);
+                    lib_core/* info */.pq(`  Plugin "${trimmedPlugin}" installed successfully`);
             }
             catch (err) {
-                main_core/* error */.z3(`  Plugin installation threw exception`);
-                main_core/* error */.z3(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
+                lib_core/* error */.z3(`  Plugin installation threw exception`);
+                lib_core/* error */.z3(`  Error message: ${err instanceof Error ? err.message : String(err)}`);
                 throw new Error(`Error installing plugin ${trimmedPlugin}: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
             }
         }
         if (debug) {
-            main_core/* info */.pq(`=== Listing installed plugins ===`);
+            lib_core/* info */.pq(`=== Listing installed plugins ===`);
             await this.listInstalledPlugins(debug);
-            main_core/* info */.pq(`=== Checking plugin directory contents ===`);
+            lib_core/* info */.pq(`=== Checking plugin directory contents ===`);
             if (external_fs_.existsSync(pluginDir)) {
                 const contents = external_fs_.readdirSync(pluginDir);
-                main_core/* info */.pq(`  Plugin directory contents: ${contents.join(', ') || '(empty)'}`);
+                lib_core/* info */.pq(`  Plugin directory contents: ${contents.join(', ') || '(empty)'}`);
             }
         }
     }
     async availablePluginNames(debug) {
         if (debug)
-            main_core/* info */.pq(`  Running: finfocus plugin list --available --output json`);
-        const output = await main_exec/* getExecOutput */.H('finfocus', ['plugin', 'list', '--available', '--output', 'json'], { silent: !debug, ignoreReturnCode: true });
+            lib_core/* info */.pq(`  Running: finfocus plugin list --available --output json`);
+        const output = await lib_exec/* getExecOutput */.H('finfocus', ['plugin', 'list', '--available', '--output', 'json'], { silent: !debug, ignoreReturnCode: true });
         if (output.exitCode !== 0) {
             throw new Error(`Failed to list registry plugins.\n` +
                 `Exit code: ${output.exitCode}\n` +
@@ -37514,25 +37488,25 @@ class PluginManager {
         }
         const names = registryNamesFromList(output.stdout);
         if (debug)
-            main_core/* info */.pq(`  Registry plugins: ${names.join(', ')}`);
+            lib_core/* info */.pq(`  Registry plugins: ${names.join(', ')}`);
         return names;
     }
     async listInstalledPlugins(debug) {
         try {
             if (debug)
-                main_core/* info */.pq(`  Running: finfocus plugin list`);
-            const output = await main_exec/* getExecOutput */.H('finfocus', ['plugin', 'list'], {
+                lib_core/* info */.pq(`  Running: finfocus plugin list`);
+            const output = await lib_exec/* getExecOutput */.H('finfocus', ['plugin', 'list'], {
                 silent: !debug,
                 ignoreReturnCode: true,
             });
             if (debug) {
-                main_core/* info */.pq(`  Exit code: ${output.exitCode}`);
-                main_core/* info */.pq(`  Stdout:\n${output.stdout || '(empty)'}`);
+                lib_core/* info */.pq(`  Exit code: ${output.exitCode}`);
+                lib_core/* info */.pq(`  Stdout:\n${output.stdout || '(empty)'}`);
             }
         }
         catch (err) {
             if (debug)
-                main_core/* warning */.$e(`  Could not list plugins: ${err instanceof Error ? err.message : String(err)}`);
+                lib_core/* warning */.$e(`  Could not list plugins: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 }
@@ -37581,27 +37555,27 @@ class Analyzer {
         const inputPath = terraformStatePath || planPath;
         const inputFlag = terraformStatePath ? '--terraform-state' : '--pulumi-json';
         if (terraformStatePath && external_fs_.existsSync(planPath)) {
-            main_core/* warning */.$e(`Both pulumi-plan-json ("${planPath}") and terraform-state ("${terraformStatePath}") ` +
+            lib_core/* warning */.$e(`Both pulumi-plan-json ("${planPath}") and terraform-state ("${terraformStatePath}") ` +
                 `are present; finfocus treats them as mutually exclusive. Using --terraform-state.`);
         }
         if (debug) {
-            main_core/* info */.pq(`=== Analyzer: Running cost analysis ===`);
-            main_core/* info */.pq(`  Input file path: ${inputPath} (${inputFlag})`);
-            main_core/* info */.pq(`  Absolute path: ${external_path_.resolve(inputPath)}`);
+            lib_core/* info */.pq(`=== Analyzer: Running cost analysis ===`);
+            lib_core/* info */.pq(`  Input file path: ${inputPath} (${inputFlag})`);
+            lib_core/* info */.pq(`  Absolute path: ${external_path_.resolve(inputPath)}`);
         }
         if (!external_fs_.existsSync(inputPath)) {
-            main_core/* error */.z3(`  Input file NOT FOUND: ${inputPath}`);
+            lib_core/* error */.z3(`  Input file NOT FOUND: ${inputPath}`);
             if (debug) {
-                main_core/* info */.pq(`  Current working directory: ${process.cwd()}`);
-                main_core/* info */.pq(`  Directory contents:`);
+                lib_core/* info */.pq(`  Current working directory: ${process.cwd()}`);
+                lib_core/* info */.pq(`  Directory contents:`);
                 const files = external_fs_.readdirSync('.');
                 for (const file of files) {
                     try {
                         const stat = external_fs_.statSync(file);
-                        main_core/* info */.pq(`    ${file} (${stat.isDirectory() ? 'directory' : stat.size + ' bytes'})`);
+                        lib_core/* info */.pq(`    ${file} (${stat.isDirectory() ? 'directory' : stat.size + ' bytes'})`);
                     }
                     catch {
-                        main_core/* info */.pq(`    ${file} (stat failed)`);
+                        lib_core/* info */.pq(`    ${file} (stat failed)`);
                     }
                 }
             }
@@ -37612,34 +37586,34 @@ class Analyzer {
         }
         const planStats = external_fs_.statSync(inputPath);
         if (debug) {
-            main_core/* info */.pq(`  Input file size: ${planStats.size} bytes`);
-            main_core/* info */.pq(`  Input file modified: ${planStats.mtime.toISOString()}`);
+            lib_core/* info */.pq(`  Input file size: ${planStats.size} bytes`);
+            lib_core/* info */.pq(`  Input file modified: ${planStats.mtime.toISOString()}`);
         }
         if (planStats.size === 0) {
-            main_core/* error */.z3(`  Input file is EMPTY`);
+            lib_core/* error */.z3(`  Input file is EMPTY`);
             throw new Error(terraformStatePath
                 ? `Terraform state file is empty: ${inputPath}`
                 : `Pulumi plan file is empty: ${inputPath}`);
         }
         const planContent = external_fs_.readFileSync(inputPath, 'utf8');
         if (debug) {
-            main_core/* info */.pq(`  Input file content length: ${planContent.length} chars`);
+            lib_core/* info */.pq(`  Input file content length: ${planContent.length} chars`);
             if (planContent.length < 5000) {
-                main_core/* info */.pq(`  Input file content:\n${planContent}`);
+                lib_core/* info */.pq(`  Input file content:\n${planContent}`);
             }
             else {
-                main_core/* info */.pq(`  Input file first 2000 chars:\n${planContent.substring(0, 2000)}`);
-                main_core/* info */.pq(`  ... (truncated, total ${planContent.length} chars)`);
+                lib_core/* info */.pq(`  Input file first 2000 chars:\n${planContent.substring(0, 2000)}`);
+                lib_core/* info */.pq(`  ... (truncated, total ${planContent.length} chars)`);
             }
         }
         try {
             JSON.parse(planContent);
             if (debug)
-                main_core/* info */.pq(`  Input file is valid JSON`);
+                lib_core/* info */.pq(`  Input file is valid JSON`);
         }
         catch (parseErr) {
-            main_core/* error */.z3(`  Input file is NOT valid JSON`);
-            main_core/* error */.z3(`  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+            lib_core/* error */.z3(`  Input file is NOT valid JSON`);
+            lib_core/* error */.z3(`  JSON parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
             throw new Error(`Input file is not valid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`, { cause: parseErr });
         }
         const args = ['cost', 'projected', inputFlag, inputPath, '--output', 'json'];
@@ -37649,34 +37623,34 @@ class Analyzer {
             args.push('--utilization', config.utilizationRate);
         }
         if (debug) {
-            main_core/* info */.pq(`=== Running finfocus command ===`);
-            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+            lib_core/* info */.pq(`=== Running finfocus command ===`);
+            lib_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
         }
         const analysisStart = Date.now();
-        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+        const output = await lib_exec/* getExecOutput */.H('finfocus', args, {
             silent: !debug,
             ignoreReturnCode: true,
         });
         if (debug) {
-            main_core/* info */.pq(`  Execution took: ${Date.now() - analysisStart}ms`);
-            main_core/* info */.pq(`  Exit code: ${output.exitCode}`);
-            main_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
-            main_core/* info */.pq(`  Stderr length: ${output.stderr.length} chars`);
+            lib_core/* info */.pq(`  Execution took: ${Date.now() - analysisStart}ms`);
+            lib_core/* info */.pq(`  Exit code: ${output.exitCode}`);
+            lib_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
+            lib_core/* info */.pq(`  Stderr length: ${output.stderr.length} chars`);
             if (output.stdout) {
                 if (output.stdout.length < 5000) {
-                    main_core/* info */.pq(`  Stdout:\n${output.stdout}`);
+                    lib_core/* info */.pq(`  Stdout:\n${output.stdout}`);
                 }
                 else {
-                    main_core/* info */.pq(`  Stdout (first 2000 chars):\n${output.stdout.substring(0, 2000)}`);
-                    main_core/* info */.pq(`  ... (truncated, total ${output.stdout.length} chars)`);
+                    lib_core/* info */.pq(`  Stdout (first 2000 chars):\n${output.stdout.substring(0, 2000)}`);
+                    lib_core/* info */.pq(`  ... (truncated, total ${output.stdout.length} chars)`);
                 }
             }
             if (output.stderr) {
-                main_core/* info */.pq(`  Stderr:\n${output.stderr}`);
+                lib_core/* info */.pq(`  Stderr:\n${output.stderr}`);
             }
         }
         if (output.exitCode !== 0) {
-            main_core/* error */.z3(`  finfocus command FAILED with exit code ${output.exitCode}`);
+            lib_core/* error */.z3(`  finfocus command FAILED with exit code ${output.exitCode}`);
             const envelope = (0,errors/* parseErrorEnvelope */.a)(output.stderr);
             if (envelope) {
                 throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, output.exitCode));
@@ -37686,18 +37660,18 @@ class Analyzer {
                 `Stdout: ${output.stdout}`);
         }
         if (debug)
-            main_core/* info */.pq(`=== Parsing analysis output ===`);
+            lib_core/* info */.pq(`=== Parsing analysis output ===`);
         try {
             const parsed = JSON.parse(output.stdout);
             // Handle wrapped format (finfocus v0.2.4+) where output is wrapped in "finfocus" key
             // Also maintain backward compatibility with unwrapped format
             const report = (parsed.finfocus ? parsed.finfocus : parsed);
             if (debug) {
-                main_core/* info */.pq(`  Parsed successfully`);
-                main_core/* info */.pq(`  Format: ${parsed.finfocus ? 'wrapped' : 'unwrapped'}`);
-                main_core/* info */.pq(`  Report fields: ${Object.keys(report).join(', ')}`);
-                main_core/* info */.pq(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
-                main_core/* info */.pq(`  currency: ${report.currency}`);
+                lib_core/* info */.pq(`  Parsed successfully`);
+                lib_core/* info */.pq(`  Format: ${parsed.finfocus ? 'wrapped' : 'unwrapped'}`);
+                lib_core/* info */.pq(`  Report fields: ${Object.keys(report).join(', ')}`);
+                lib_core/* info */.pq(`  projected_monthly_cost: ${report.projected_monthly_cost}`);
+                lib_core/* info */.pq(`  currency: ${report.currency}`);
                 if (report.diff) {
                     let diffChange;
                     if ((0,types/* isV041Diff */.k)(report.diff)) {
@@ -37706,15 +37680,15 @@ class Analyzer {
                     else {
                         diffChange = report.diff.monthly_cost_change;
                     }
-                    main_core/* info */.pq(`  diff change: ${diffChange}`);
+                    lib_core/* info */.pq(`  diff change: ${diffChange}`);
                 }
             }
             return report;
         }
         catch (err) {
-            main_core/* error */.z3(`  Failed to parse finfocus output as JSON`);
-            main_core/* error */.z3(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
-            main_core/* error */.z3(`  Raw output (first 1000 chars): ${output.stdout.substring(0, 1000)}`);
+            lib_core/* error */.z3(`  Failed to parse finfocus output as JSON`);
+            lib_core/* error */.z3(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
+            lib_core/* error */.z3(`  Raw output (first 1000 chars): ${output.stdout.substring(0, 1000)}`);
             throw new Error(`Failed to parse finfocus JSON output.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}\n` +
                 `Raw output: ${output.stdout.substring(0, 500)}...`, { cause: err });
@@ -37730,7 +37704,7 @@ class Analyzer {
             }
             const kg = normalizeCarbonToKg(footprint.value, footprint.unit);
             if (kg === undefined) {
-                main_core/* warning */.$e(`Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: unrecognized unit "${footprint.unit}" (value ${footprint.value})`);
+                lib_core/* warning */.$e(`Skipping carbon footprint of ${resource.resourceType ?? 'resource'} ${resource.resourceId ?? ''}: unrecognized unit "${footprint.unit}" (value ${footprint.value})`);
                 continue;
             }
             totalCO2e += kg;
@@ -37767,15 +37741,15 @@ class Analyzer {
         }
         const args = recommendationArgs(planPath, config);
         if (debug) {
-            main_core/* info */.pq(`=== Running finfocus recommendations command ===`);
-            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+            lib_core/* info */.pq(`=== Running finfocus recommendations command ===`);
+            lib_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
         }
-        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+        const output = await lib_exec/* getExecOutput */.H('finfocus', args, {
             silent: !debug,
             ignoreReturnCode: true,
         });
         if (output.exitCode !== 0) {
-            main_core/* warning */.$e(`finfocus recommendations failed with exit code ${output.exitCode}: ${output.stderr}`);
+            lib_core/* warning */.$e(`finfocus recommendations failed with exit code ${output.exitCode}: ${output.stderr}`);
             // Return empty recommendations instead of failing
             return {
                 summary: {
@@ -37791,13 +37765,13 @@ class Analyzer {
             const parsed = JSON.parse(output.stdout);
             const report = hideDismissedRecommendations(parsed.finfocus ?? parsed, config);
             if (debug) {
-                main_core/* info */.pq(`  Parsed recommendations successfully`);
-                main_core/* info */.pq(`  Total recommendations: ${report.summary.total_count}`);
+                lib_core/* info */.pq(`  Parsed recommendations successfully`);
+                lib_core/* info */.pq(`  Total recommendations: ${report.summary.total_count}`);
             }
             return report;
         }
         catch (err) {
-            main_core/* warning */.$e(`Failed to parse finfocus recommendations output: ${err instanceof Error ? err.message : String(err)}`);
+            lib_core/* warning */.$e(`Failed to parse finfocus recommendations output: ${err instanceof Error ? err.message : String(err)}`);
             // Return empty recommendations
             return {
                 summary: {
@@ -37822,7 +37796,7 @@ class Analyzer {
     async runActualCosts(config) {
         const debug = config?.debug === true;
         if (debug) {
-            main_core/* info */.pq(`=== Analyzer: Running actual costs ===`);
+            lib_core/* info */.pq(`=== Analyzer: Running actual costs ===`);
         }
         // Validate group-by parameter
         const validGroupByOptions = ['resource', 'type', 'provider', 'service', 'region', 'tag'];
@@ -37862,14 +37836,14 @@ class Analyzer {
         }
         args.push(...(0,display/* filterArgs */.et)(config.resourceFilters));
         if (debug) {
-            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+            lib_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
         }
-        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+        const output = await lib_exec/* getExecOutput */.H('finfocus', args, {
             silent: !debug,
             ignoreReturnCode: true,
         });
         if (output.exitCode !== 0) {
-            main_core/* warning */.$e(`finfocus cost actual failed with exit code ${output.exitCode}: ${output.stderr}`);
+            lib_core/* warning */.$e(`finfocus cost actual failed with exit code ${output.exitCode}: ${output.stderr}`);
             return {
                 total: 0,
                 currency: 'USD',
@@ -37881,7 +37855,7 @@ class Analyzer {
         try {
             const raw = JSON.parse(output.stdout);
             if (debug) {
-                main_core/* info */.pq(`  Parsed actual costs successfully`);
+                lib_core/* info */.pq(`  Parsed actual costs successfully`);
             }
             // Map raw output to ActualCostReport
             const total = raw.total ?? raw.summary?.total ?? raw.totalCost ?? 0;
@@ -37900,7 +37874,7 @@ class Analyzer {
             };
         }
         catch (err) {
-            main_core/* warning */.$e(`Failed to parse actual cost output: ${err instanceof Error ? err.message : String(err)}`);
+            lib_core/* warning */.$e(`Failed to parse actual cost output: ${err instanceof Error ? err.message : String(err)}`);
             return {
                 total: 0,
                 currency: 'USD',
@@ -37921,9 +37895,9 @@ class Analyzer {
             return undefined;
         }
         if (debug) {
-            main_core/* info */.pq(`=== Analyzer: Running what-if cost estimate ===`);
-            main_core/* info */.pq(`  Provider: ${spec.provider}`);
-            main_core/* info */.pq(`  Resource type: ${spec.resource_type}`);
+            lib_core/* info */.pq(`=== Analyzer: Running what-if cost estimate ===`);
+            lib_core/* info */.pq(`  Provider: ${spec.provider}`);
+            lib_core/* info */.pq(`  Resource type: ${spec.resource_type}`);
         }
         const args = [
             'cost',
@@ -37941,25 +37915,25 @@ class Analyzer {
         }
         args.push('--output', 'json');
         if (debug) {
-            main_core/* info */.pq(`=== Running finfocus estimate command ===`);
-            main_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
+            lib_core/* info */.pq(`=== Running finfocus estimate command ===`);
+            lib_core/* info */.pq(`  Command: finfocus ${args.join(' ')}`);
         }
         const estimateStart = Date.now();
-        const output = await main_exec/* getExecOutput */.H('finfocus', args, {
+        const output = await lib_exec/* getExecOutput */.H('finfocus', args, {
             silent: !debug,
             ignoreReturnCode: true,
         });
         if (debug) {
-            main_core/* info */.pq(`  Execution took: ${Date.now() - estimateStart}ms`);
-            main_core/* info */.pq(`  Exit code: ${output.exitCode}`);
-            main_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
-            main_core/* info */.pq(`  Stderr length: ${output.stderr.length} chars`);
+            lib_core/* info */.pq(`  Execution took: ${Date.now() - estimateStart}ms`);
+            lib_core/* info */.pq(`  Exit code: ${output.exitCode}`);
+            lib_core/* info */.pq(`  Stdout length: ${output.stdout.length} chars`);
+            lib_core/* info */.pq(`  Stderr length: ${output.stderr.length} chars`);
             if (output.stderr) {
-                main_core/* info */.pq(`  Stderr:\n${output.stderr}`);
+                lib_core/* info */.pq(`  Stderr:\n${output.stderr}`);
             }
         }
         if (output.exitCode !== 0) {
-            main_core/* error */.z3(`  finfocus estimate command FAILED with exit code ${output.exitCode}`);
+            lib_core/* error */.z3(`  finfocus estimate command FAILED with exit code ${output.exitCode}`);
             const envelope = (0,errors/* parseErrorEnvelope */.a)(output.stderr);
             if (envelope) {
                 throw new Error((0,errors/* formatEnvelopeError */.u)(envelope, output.exitCode));
@@ -37971,15 +37945,15 @@ class Analyzer {
         try {
             const report = JSON.parse(output.stdout);
             if (debug) {
-                main_core/* info */.pq(`  Parsed estimate successfully`);
-                main_core/* info */.pq(`  Total change: ${report.totalChange} ${report.modified.currency}`);
-                main_core/* info */.pq(`  Deltas: ${report.deltas.length}`);
+                lib_core/* info */.pq(`  Parsed estimate successfully`);
+                lib_core/* info */.pq(`  Total change: ${report.totalChange} ${report.modified.currency}`);
+                lib_core/* info */.pq(`  Deltas: ${report.deltas.length}`);
             }
             return report;
         }
         catch (err) {
-            main_core/* error */.z3(`  Failed to parse finfocus estimate output as JSON`);
-            main_core/* error */.z3(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
+            lib_core/* error */.z3(`  Failed to parse finfocus estimate output as JSON`);
+            lib_core/* error */.z3(`  Parse error: ${err instanceof Error ? err.message : String(err)}`);
             throw new Error(`Failed to parse finfocus estimate JSON output.\n` +
                 `Error: ${err instanceof Error ? err.message : String(err)}\n` +
                 `Raw output: ${output.stdout.substring(0, 500)}...`, { cause: err });
@@ -37991,40 +37965,40 @@ class Analyzer {
             parsed = JSON.parse(raw);
         }
         catch (err) {
-            main_core/* warning */.$e(`Invalid estimate-spec JSON: ${err instanceof Error ? err.message : String(err)}. ` +
+            lib_core/* warning */.$e(`Invalid estimate-spec JSON: ${err instanceof Error ? err.message : String(err)}. ` +
                 `Skipping what-if estimate.`);
             return undefined;
         }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            main_core/* warning */.$e('Invalid estimate-spec: must be a JSON object. Skipping what-if estimate.');
+            lib_core/* warning */.$e('Invalid estimate-spec: must be a JSON object. Skipping what-if estimate.');
             return undefined;
         }
         const spec = parsed;
         if (typeof spec.provider !== 'string' || spec.provider.trim() === '') {
-            main_core/* warning */.$e('Invalid estimate-spec: "provider" must be a non-empty string. Skipping what-if estimate.');
+            lib_core/* warning */.$e('Invalid estimate-spec: "provider" must be a non-empty string. Skipping what-if estimate.');
             return undefined;
         }
         if (typeof spec.resource_type !== 'string' || spec.resource_type.trim() === '') {
-            main_core/* warning */.$e('Invalid estimate-spec: "resource_type" must be a non-empty string. Skipping what-if estimate.');
+            lib_core/* warning */.$e('Invalid estimate-spec: "resource_type" must be a non-empty string. Skipping what-if estimate.');
             return undefined;
         }
         if (spec.properties !== undefined) {
             if (!spec.properties ||
                 typeof spec.properties !== 'object' ||
                 Array.isArray(spec.properties)) {
-                main_core/* warning */.$e('Invalid estimate-spec: "properties" must be an object of string values. ' +
+                lib_core/* warning */.$e('Invalid estimate-spec: "properties" must be an object of string values. ' +
                     'Skipping what-if estimate.');
                 return undefined;
             }
             for (const value of Object.values(spec.properties)) {
                 if (typeof value !== 'string') {
-                    main_core/* warning */.$e('Invalid estimate-spec: "properties" values must be strings. Skipping what-if estimate.');
+                    lib_core/* warning */.$e('Invalid estimate-spec: "properties" values must be strings. Skipping what-if estimate.');
                     return undefined;
                 }
             }
         }
         if (spec.region !== undefined && typeof spec.region !== 'string') {
-            main_core/* warning */.$e('Invalid estimate-spec: "region" must be a string. Skipping what-if estimate.');
+            lib_core/* warning */.$e('Invalid estimate-spec: "region" must be a string. Skipping what-if estimate.');
             return undefined;
         }
         return spec;
@@ -38086,81 +38060,81 @@ class Analyzer {
     async setupAnalyzerMode(config) {
         const debug = config?.debug === true;
         if (debug)
-            main_core/* info */.pq(`=== Analyzer: Setting up analyzer mode ===`);
+            lib_core/* info */.pq(`=== Analyzer: Setting up analyzer mode ===`);
         else
-            main_core/* info */.pq(`Setting up finfocus analyzer mode...`);
+            lib_core/* info */.pq(`Setting up finfocus analyzer mode...`);
         // 1. Get finfocus version for metadata
         let version = '0.0.0-dev';
         try {
-            const versionOutput = await main_exec/* getExecOutput */.H('finfocus', ['--version'], {
+            const versionOutput = await lib_exec/* getExecOutput */.H('finfocus', ['--version'], {
                 silent: true,
                 ignoreReturnCode: true,
             });
             version = versionOutput.stdout.trim().match(/v?[\d.]+/)?.[0] || version;
         }
         catch (e) {
-            main_core/* debug */.Yz(`Failed to get version: ${e instanceof Error ? e.message : String(e)}`);
+            lib_core/* debug */.Yz(`Failed to get version: ${e instanceof Error ? e.message : String(e)}`);
         }
         if (debug)
-            main_core/* info */.pq(`  Using version: ${version}`);
+            lib_core/* info */.pq(`  Using version: ${version}`);
         // 2. Define Policy Pack Directory
         const policyPackDir = external_path_.join(external_os_.homedir(), '.finfocus', 'analyzer');
         if (debug)
-            main_core/* info */.pq(`  Policy Pack directory: ${policyPackDir}`);
+            lib_core/* info */.pq(`  Policy Pack directory: ${policyPackDir}`);
         if (!external_fs_.existsSync(policyPackDir)) {
             if (debug)
-                main_core/* info */.pq(`  Creating policy pack directory...`);
+                lib_core/* info */.pq(`  Creating policy pack directory...`);
             external_fs_.mkdirSync(policyPackDir, { recursive: true });
         }
         // 3. Create PulumiPolicy.yaml
         const policyYamlPath = external_path_.join(policyPackDir, 'PulumiPolicy.yaml');
         if (debug)
-            main_core/* info */.pq(`  Writing PulumiPolicy.yaml to: ${policyYamlPath}`);
+            lib_core/* info */.pq(`  Writing PulumiPolicy.yaml to: ${policyYamlPath}`);
         // The runtime 'finfocus' tells Pulumi to look for 'pulumi-analyzer-policy-finfocus'
         const policyYamlContent = `runtime: finfocus\nname: finfocus\nversion: ${version}\n`;
         external_fs_.writeFileSync(policyYamlPath, policyYamlContent);
         // 4. Locate and Copy Binary
         const finfocusBinary = await this.findBinary('finfocus', debug);
         if (debug)
-            main_core/* info */.pq(`  Source binary: ${finfocusBinary}`);
+            lib_core/* info */.pq(`  Source binary: ${finfocusBinary}`);
         // The binary MUST be named 'pulumi-analyzer-policy-finfocus' for the 'finfocus' runtime
         const policyBinaryPath = external_path_.join(policyPackDir, 'pulumi-analyzer-policy-finfocus');
         if (debug)
-            main_core/* info */.pq(`  Installing policy binary to: ${policyBinaryPath}`);
+            lib_core/* info */.pq(`  Installing policy binary to: ${policyBinaryPath}`);
         external_fs_.copyFileSync(finfocusBinary, policyBinaryPath);
         external_fs_.chmodSync(policyBinaryPath, 0o755);
         // 5. Configure Environment
         // - Add to PATH so Pulumi can find the binary named 'pulumi-analyzer-policy-finfocus'
         if (debug) {
-            main_core/* info */.pq(`  Adding ${policyPackDir} to PATH`);
-            main_core/* addPath */.fM(policyPackDir);
+            lib_core/* info */.pq(`  Adding ${policyPackDir} to PATH`);
+            lib_core/* addPath */.fM(policyPackDir);
         }
         else {
-            main_core/* addPath */.fM(policyPackDir);
+            lib_core/* addPath */.fM(policyPackDir);
         }
         // - Export environment variables to trigger automatic loading in subsequent steps
         // PULUMI_POLICY_PACK is the environment variable equivalent of the --policy-pack flag
         if (debug) {
-            main_core/* info */.pq(`  Exporting PULUMI_POLICY_PACK=${policyPackDir}`);
-            main_core/* exportVariable */.dN('PULUMI_POLICY_PACK', policyPackDir);
-            main_core/* exportVariable */.dN('PULUMI_POLICY_PACKS', policyPackDir);
-            main_core/* exportVariable */.dN('PULUMI_POLICY_PACK_PATH', policyPackDir);
+            lib_core/* info */.pq(`  Exporting PULUMI_POLICY_PACK=${policyPackDir}`);
+            lib_core/* exportVariable */.dN('PULUMI_POLICY_PACK', policyPackDir);
+            lib_core/* exportVariable */.dN('PULUMI_POLICY_PACKS', policyPackDir);
+            lib_core/* exportVariable */.dN('PULUMI_POLICY_PACK_PATH', policyPackDir);
         }
         else {
-            main_core/* exportVariable */.dN('PULUMI_POLICY_PACK', policyPackDir);
-            main_core/* exportVariable */.dN('PULUMI_POLICY_PACKS', policyPackDir);
-            main_core/* exportVariable */.dN('PULUMI_POLICY_PACK_PATH', policyPackDir);
+            lib_core/* exportVariable */.dN('PULUMI_POLICY_PACK', policyPackDir);
+            lib_core/* exportVariable */.dN('PULUMI_POLICY_PACKS', policyPackDir);
+            lib_core/* exportVariable */.dN('PULUMI_POLICY_PACK_PATH', policyPackDir);
         }
         // - Export log level if provided
         if (config?.logLevel) {
             if (debug)
-                main_core/* info */.pq(`  Exporting FINFOCUS_LOG_LEVEL=${config.logLevel}`);
-            main_core/* exportVariable */.dN('FINFOCUS_LOG_LEVEL', config.logLevel);
+                lib_core/* info */.pq(`  Exporting FINFOCUS_LOG_LEVEL=${config.logLevel}`);
+            lib_core/* exportVariable */.dN('FINFOCUS_LOG_LEVEL', config.logLevel);
         }
         // Set output for use in subsequent steps
-        main_core/* setOutput */.uH('policy-pack-path', policyPackDir);
+        lib_core/* setOutput */.uH('policy-pack-path', policyPackDir);
         if (debug)
-            main_core/* info */.pq(`  Analyzer (Policy Pack) setup complete.`);
+            lib_core/* info */.pq(`  Analyzer (Policy Pack) setup complete.`);
     }
     calculateBudgetStatus(config, report) {
         // Return undefined if budget is not configured
@@ -38169,7 +38143,7 @@ class Analyzer {
         }
         const debug = config?.debug === true;
         if (debug) {
-            main_core/* info */.pq('=== Calculating budget status ===');
+            lib_core/* info */.pq('=== Calculating budget status ===');
         }
         // Extract projected monthly cost from report
         const projectedCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
@@ -38177,24 +38151,24 @@ class Analyzer {
         const period = config.budgetPeriod || 'monthly';
         const amount = config.budgetAmount;
         if (debug) {
-            main_core/* info */.pq(`  Budget amount: ${amount} ${currency}/${period}`);
-            main_core/* info */.pq(`  Projected cost: ${projectedCost} ${currency}`);
+            lib_core/* info */.pq(`  Budget amount: ${amount} ${currency}/${period}`);
+            lib_core/* info */.pq(`  Projected cost: ${projectedCost} ${currency}`);
         }
         // Calculate spent, remaining, and percentage
         const spent = projectedCost;
         const remaining = amount - spent;
         const percentUsed = amount > 0 ? (spent / amount) * 100 : 0;
         if (debug) {
-            main_core/* info */.pq(`  Spent: ${spent.toFixed(2)} ${currency}`);
-            main_core/* info */.pq(`  Remaining: ${remaining.toFixed(2)} ${currency}`);
-            main_core/* info */.pq(`  Percent used: ${percentUsed.toFixed(1)}%`);
+            lib_core/* info */.pq(`  Spent: ${spent.toFixed(2)} ${currency}`);
+            lib_core/* info */.pq(`  Remaining: ${remaining.toFixed(2)} ${currency}`);
+            lib_core/* info */.pq(`  Percent used: ${percentUsed.toFixed(1)}%`);
         }
         // Parse and evaluate alerts
         const alertsConfig = this.parseAlerts(config.budgetAlerts);
         const alerts = alertsConfig.map((alert) => {
             const triggered = percentUsed >= alert.threshold;
             if (debug && triggered) {
-                main_core/* info */.pq(`  Alert triggered: ${alert.threshold}% (${alert.type})`);
+                lib_core/* info */.pq(`  Alert triggered: ${alert.threshold}% (${alert.type})`);
             }
             return {
                 threshold: alert.threshold,
@@ -38225,28 +38199,28 @@ class Analyzer {
         try {
             const parsed = JSON.parse(alertsInput);
             if (!Array.isArray(parsed)) {
-                main_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
+                lib_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
                 return defaultAlerts;
             }
             const validAlerts = parsed.filter((alert) => {
                 if (typeof alert.threshold !== 'number' || alert.threshold <= 0) {
-                    main_core/* warning */.$e(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
+                    lib_core/* warning */.$e(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
                     return false;
                 }
                 if (alert.type !== 'actual' && alert.type !== 'forecasted') {
-                    main_core/* warning */.$e(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
+                    lib_core/* warning */.$e(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
                     return false;
                 }
                 return true;
             });
             if (validAlerts.length === 0) {
-                main_core/* warning */.$e('No valid alerts found. Using default alerts.');
+                lib_core/* warning */.$e('No valid alerts found. Using default alerts.');
                 return defaultAlerts;
             }
             return validAlerts;
         }
         catch (err) {
-            main_core/* warning */.$e(`Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`);
+            lib_core/* warning */.$e(`Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`);
             return defaultAlerts;
         }
     }
@@ -38319,23 +38293,23 @@ class Analyzer {
             };
         }
         catch (err) {
-            main_core/* debug */.Yz(`Failed to parse budget status from output: ${err instanceof Error ? err.message : String(err)}`);
+            lib_core/* debug */.Yz(`Failed to parse budget status from output: ${err instanceof Error ? err.message : String(err)}`);
             return undefined;
         }
     }
     async findBinary(name, debug) {
         if (debug)
-            main_core/* info */.pq(`  Finding binary: ${name}`);
-        const output = await main_exec/* getExecOutput */.H('which', [name], {
+            lib_core/* info */.pq(`  Finding binary: ${name}`);
+        const output = await lib_exec/* getExecOutput */.H('which', [name], {
             silent: !debug,
             ignoreReturnCode: true,
         });
         if (debug) {
-            main_core/* info */.pq(`  which exit code: ${output.exitCode}`);
-            main_core/* info */.pq(`  which output: ${output.stdout.trim()}`);
+            lib_core/* info */.pq(`  which exit code: ${output.exitCode}`);
+            lib_core/* info */.pq(`  which output: ${output.stdout.trim()}`);
         }
         if (output.exitCode !== 0) {
-            main_core/* error */.z3(`  Binary not found in PATH`);
+            lib_core/* error */.z3(`  Binary not found in PATH`);
             throw new Error(`Could not find ${name} binary in PATH`);
         }
         return output.stdout.trim();
@@ -39097,10 +39071,8 @@ class Context {
 //# sourceMappingURL=context.js.map
 // EXTERNAL MODULE: ./node_modules/@actions/http-client/lib/index.js
 var lib = __nccwpck_require__(4844);
-// EXTERNAL MODULE: ./node_modules/undici/index.js
-var undici = __nccwpck_require__(6752);
 ;// CONCATENATED MODULE: ./node_modules/@actions/github/lib/internal/utils.js
-var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
+var utils_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
@@ -39130,7 +39102,7 @@ function getProxyAgentDispatcher(destinationUrl) {
 }
 function getProxyFetch(destinationUrl) {
     const httpDispatcher = getProxyAgentDispatcher(destinationUrl);
-    const proxyFetch = (url, opts) => __awaiter(this, void 0, void 0, function* () {
+    const proxyFetch = (url, opts) => utils_awaiter(this, void 0, void 0, function* () {
         return (0,undici.fetch)(url, Object.assign(Object.assign({}, opts), { dispatcher: httpDispatcher }));
     });
     return proxyFetch;
@@ -39320,13 +39292,13 @@ function Collection() {
 var dist_bundle_VERSION = "0.0.0-development";
 
 // pkg/dist-src/defaults.js
-var userAgent = `octokit-endpoint.js/${dist_bundle_VERSION} ${getUserAgent()}`;
+var dist_bundle_userAgent = `octokit-endpoint.js/${dist_bundle_VERSION} ${getUserAgent()}`;
 var DEFAULTS = {
   method: "GET",
   baseUrl: "https://api.github.com",
   headers: {
     accept: "application/vnd.github.v3+json",
-    "user-agent": userAgent
+    "user-agent": dist_bundle_userAgent
   },
   mediaType: {
     format: ""
@@ -39334,7 +39306,7 @@ var DEFAULTS = {
 };
 
 // pkg/dist-src/util/lowercase-keys.js
-function lowercaseKeys(object) {
+function dist_bundle_lowercaseKeys(object) {
   if (!object) {
     return {};
   }
@@ -39386,7 +39358,7 @@ function merge(defaults, route, options) {
   } else {
     options = Object.assign({}, route);
   }
-  options.headers = lowercaseKeys(options.headers);
+  options.headers = dist_bundle_lowercaseKeys(options.headers);
   removeUndefinedProperties(options);
   removeUndefinedProperties(options.headers);
   const mergedOptions = mergeDeep(defaults || {}, options);
@@ -44052,7 +44024,7 @@ class Commenter {
         const octokit = getOctokit(token);
         const context = github_context;
         if (!context.payload.pull_request) {
-            main_core/* info */.pq('Not a pull request, skipping comment.');
+            lib_core/* info */.pq('Not a pull request, skipping comment.');
             return;
         }
         const prNumber = context.payload.pull_request.number;
@@ -44064,7 +44036,7 @@ ${formatCommentBody(report, config, recommendationsReport, actualCostReport, sus
         });
         const existingComment = comments.find((c) => c.body?.includes(this.marker));
         if (existingComment) {
-            main_core/* info */.pq(`Updating existing comment ${existingComment.id}`);
+            lib_core/* info */.pq(`Updating existing comment ${existingComment.id}`);
             await octokit.rest.issues.updateComment({
                 ...context.repo,
                 comment_id: existingComment.id,
@@ -44072,7 +44044,7 @@ ${formatCommentBody(report, config, recommendationsReport, actualCostReport, sus
             });
         }
         else {
-            main_core/* info */.pq('Creating new comment');
+            lib_core/* info */.pq('Creating new comment');
             await octokit.rest.issues.createComment({
                 ...context.repo,
                 issue_number: prNumber,
@@ -44181,22 +44153,22 @@ class ConfigManager {
     async writeConfig(config) {
         const debug = config?.debug === true;
         if (!config.budgetAmount || config.budgetAmount <= 0) {
-            main_core/* warning */.$e('Budget amount is not configured or invalid. Skipping budget configuration.');
+            lib_core/* warning */.$e('Budget amount is not configured or invalid. Skipping budget configuration.');
             return;
         }
         if (debug) {
-            main_core/* info */.pq('=== ConfigManager: Writing budget configuration ===');
-            main_core/* info */.pq(`  Budget amount: ${config.budgetAmount}`);
-            main_core/* info */.pq(`  Currency: ${config.budgetCurrency || 'USD'}`);
-            main_core/* info */.pq(`  Period: ${config.budgetPeriod || 'monthly'}`);
+            lib_core/* info */.pq('=== ConfigManager: Writing budget configuration ===');
+            lib_core/* info */.pq(`  Budget amount: ${config.budgetAmount}`);
+            lib_core/* info */.pq(`  Currency: ${config.budgetCurrency || 'USD'}`);
+            lib_core/* info */.pq(`  Period: ${config.budgetPeriod || 'monthly'}`);
         }
         const budgetConfig = this.parseBudgetConfig(config);
         const document = this.mergeBudget(this.readDocument(), budgetConfig);
         this.writeDocument(document);
         if (debug)
-            main_core/* info */.pq('  Budget configuration written successfully');
+            lib_core/* info */.pq('  Budget configuration written successfully');
         else
-            main_core/* info */.pq('Budget configuration created successfully');
+            lib_core/* info */.pq('Budget configuration created successfully');
     }
     /**
      * Opt in to Jev recommendation scoring. finfocus reads `scoring.enabled` and
@@ -44210,7 +44182,7 @@ class ConfigManager {
         }
         const document = this.readDocument();
         if ('scoring' in document) {
-            main_core/* info */.pq(`scoring section already present in ${CONFIG_FILE}; leaving it unchanged`);
+            lib_core/* info */.pq(`scoring section already present in ${CONFIG_FILE}; leaving it unchanged`);
             return;
         }
         document.scoring = {
@@ -44219,7 +44191,7 @@ class ConfigManager {
             identifier_mode: 'pseudonymized',
         };
         this.writeDocument(document);
-        main_core/* info */.pq('Jev scoring configuration written (scoring.plugin: jev)');
+        lib_core/* info */.pq('Jev scoring configuration written (scoring.plugin: jev)');
     }
     /**
      * Directory finfocus reads, in the same order as ResolveConfigDir:
@@ -44241,7 +44213,7 @@ class ConfigManager {
             }
         }
         catch (error) {
-            main_core/* debug */.Yz(`os.homedir() failed: ${error instanceof Error ? error.message : String(error)}. Using ./.finfocus.`);
+            lib_core/* debug */.Yz(`os.homedir() failed: ${error instanceof Error ? error.message : String(error)}. Using ./.finfocus.`);
         }
         return external_path_.join(process.cwd(), '.finfocus');
     }
@@ -44299,7 +44271,7 @@ class ConfigManager {
                 external_fs_.unlinkSync(temporary);
             }
             catch (unlinkError) {
-                main_core/* debug */.Yz(`Failed to remove temporary config file: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
+                lib_core/* debug */.Yz(`Failed to remove temporary config file: ${unlinkError instanceof Error ? unlinkError.message : String(unlinkError)}`);
             }
             throw new Error(`Failed to write ${target}: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
         }
@@ -44319,7 +44291,7 @@ class ConfigManager {
     validatePeriod(period) {
         const validPeriods = ['monthly', 'quarterly', 'yearly'];
         if (!validPeriods.includes(period)) {
-            main_core/* warning */.$e(`Invalid budget period "${period}". Supported: ${validPeriods.join(', ')}. Defaulting to "monthly".`);
+            lib_core/* warning */.$e(`Invalid budget period "${period}". Supported: ${validPeriods.join(', ')}. Defaulting to "monthly".`);
             return 'monthly';
         }
         return period;
@@ -44335,28 +44307,28 @@ class ConfigManager {
         try {
             const parsed = JSON.parse(alertsInput);
             if (!Array.isArray(parsed)) {
-                main_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
+                lib_core/* warning */.$e('Budget alerts must be an array. Using default alerts.');
                 return defaultAlerts;
             }
             const validAlerts = parsed.filter((alert) => {
                 if (typeof alert.threshold !== 'number' || alert.threshold <= 0) {
-                    main_core/* warning */.$e(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
+                    lib_core/* warning */.$e(`Invalid alert threshold: ${alert.threshold}. Skipping.`);
                     return false;
                 }
                 if (alert.type !== 'actual' && alert.type !== 'forecasted') {
-                    main_core/* warning */.$e(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
+                    lib_core/* warning */.$e(`Invalid alert type: ${alert.type}. Must be "actual" or "forecasted". Skipping.`);
                     return false;
                 }
                 return true;
             });
             if (validAlerts.length === 0) {
-                main_core/* warning */.$e('No valid alerts found. Using default alerts.');
+                lib_core/* warning */.$e('No valid alerts found. Using default alerts.');
                 return defaultAlerts;
             }
             return validAlerts;
         }
         catch (err) {
-            main_core/* warning */.$e(`Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`);
+            lib_core/* warning */.$e(`Failed to parse budget alerts JSON: ${err instanceof Error ? err.message : String(err)}. Using default alerts.`);
             return defaultAlerts;
         }
     }
@@ -44370,7 +44342,7 @@ function objectField(parent, key) {
         return { ...value };
     }
     if (value !== undefined) {
-        main_core/* warning */.$e(`${key} in the finfocus config is not an object. Replacing it so the budget can be saved.`);
+        lib_core/* warning */.$e(`${key} in the finfocus config is not an object. Replacing it so the budget can be saved.`);
     }
     return {};
 }
@@ -44394,29 +44366,29 @@ function parseBoolean(value, defaultValue) {
     return normalized === 'true' || normalized === 'yes' || normalized === '1';
 }
 function logEnvironment() {
-    main_core/* info */.pq('=== Environment Diagnostics ===');
-    main_core/* info */.pq(`Node version: ${process.version}`);
-    main_core/* info */.pq(`Platform: ${process.platform}`);
-    main_core/* info */.pq(`Architecture: ${process.arch}`);
-    main_core/* info */.pq(`CWD: ${process.cwd()}`);
-    main_core/* info */.pq(`HOME: ${process.env.HOME || process.env.USERPROFILE || 'unknown'}`);
-    main_core/* info */.pq(`PATH: ${process.env.PATH?.split(':').slice(0, 5).join(':') || 'unknown'}...`);
+    lib_core/* info */.pq('=== Environment Diagnostics ===');
+    lib_core/* info */.pq(`Node version: ${process.version}`);
+    lib_core/* info */.pq(`Platform: ${process.platform}`);
+    lib_core/* info */.pq(`Architecture: ${process.arch}`);
+    lib_core/* info */.pq(`CWD: ${process.cwd()}`);
+    lib_core/* info */.pq(`HOME: ${process.env.HOME || process.env.USERPROFILE || 'unknown'}`);
+    lib_core/* info */.pq(`PATH: ${process.env.PATH?.split(':').slice(0, 5).join(':') || 'unknown'}...`);
     const relevantEnvVars = Object.keys(process.env)
         .filter((k) => k.startsWith('INPUT_') || k.startsWith('GITHUB_') || k.startsWith('RUNNER_'))
         .sort();
-    main_core/* info */.pq('=== Relevant Environment Variables ===');
+    lib_core/* info */.pq('=== Relevant Environment Variables ===');
     for (const key of relevantEnvVars) {
         const value = process.env[key];
         if (key.includes('TOKEN') || key.includes('SECRET')) {
-            main_core/* info */.pq(`  ${key}: [REDACTED]`);
+            lib_core/* info */.pq(`  ${key}: [REDACTED]`);
         }
         else {
-            main_core/* info */.pq(`  ${key}: ${value}`);
+            lib_core/* info */.pq(`  ${key}: ${value}`);
         }
     }
 }
 function logInputs() {
-    main_core/* info */.pq('=== Action Inputs (raw) ===');
+    lib_core/* info */.pq('=== Action Inputs (raw) ===');
     const inputs = [
         'pulumi_plan_json',
         'github_token',
@@ -44435,27 +44407,27 @@ function logInputs() {
         'actual_costs_group_by',
     ];
     for (const input of inputs) {
-        const value = main_core/* getInput */.V4(input);
+        const value = lib_core/* getInput */.V4(input);
         if (input === 'github_token') {
-            main_core/* info */.pq(`  ${input}: ${value ? '[PROVIDED]' : '[EMPTY]'}`);
+            lib_core/* info */.pq(`  ${input}: ${value ? '[PROVIDED]' : '[EMPTY]'}`);
         }
         else {
-            main_core/* info */.pq(`  ${input}: "${value}"`);
+            lib_core/* info */.pq(`  ${input}: "${value}"`);
         }
     }
 }
 function logAnalyzerOutput() {
     const logPath = '/tmp/finfocus-analyzer.log';
     if (external_fs_.existsSync(logPath)) {
-        main_core/* startGroup */.Oh('🔍 Finfocus Analyzer Logs');
+        lib_core/* startGroup */.Oh('🔍 Finfocus Analyzer Logs');
         try {
             const logs = external_fs_.readFileSync(logPath, 'utf8');
-            main_core/* info */.pq(logs);
+            lib_core/* info */.pq(logs);
         }
         catch (err) {
-            main_core/* info */.pq(`Failed to read analyzer logs: ${err}`);
+            lib_core/* info */.pq(`Failed to read analyzer logs: ${err}`);
         }
-        main_core/* endGroup */.N4();
+        lib_core/* endGroup */.N4();
     }
 }
 /**
@@ -44469,66 +44441,67 @@ async function run() {
     const startTime = Date.now();
     let config;
     try {
-        main_core/* info */.pq('🚀 Starting finfocus-action');
+        lib_core/* info */.pq('🚀 Starting finfocus-action');
         // Parse config first to know if we are in debug mode
-        const pulumiPlanJsonPath = main_core/* getInput */.V4('pulumi_plan_json') || 'plan.json';
-        const githubToken = main_core/* getInput */.V4('github_token');
-        const finfocusVersion = main_core/* getInput */.V4('finfocus_version') || 'latest';
-        const installPluginsRaw = main_core/* getInput */.V4('install_plugins') || '';
+        const pulumiPlanJsonPath = lib_core/* getInput */.V4('pulumi_plan_json') || 'plan.json';
+        const githubToken = lib_core/* getInput */.V4('github_token');
+        const finfocusVersion = lib_core/* getInput */.V4('finfocus_version') || 'latest';
+        const installPluginsRaw = lib_core/* getInput */.V4('install_plugins') || '';
         const installPlugins = installPluginsRaw
             .split(',')
             .map((p) => p.trim())
             .filter((p) => p.length > 0);
-        const behaviorOnErrorRaw = main_core/* getInput */.V4('behavior_on_error');
+        const behaviorOnErrorRaw = lib_core/* getInput */.V4('behavior_on_error');
         const behaviorOnError = behaviorOnErrorRaw || 'fail';
-        const postCommentRaw = main_core/* getInput */.V4('post_comment');
+        const postCommentRaw = lib_core/* getInput */.V4('post_comment');
         const postComment = parseBoolean(postCommentRaw, true);
-        const thresholdRaw = main_core/* getInput */.V4('fail_on_cost_increase');
+        const thresholdRaw = lib_core/* getInput */.V4('fail_on_cost_increase');
         const threshold = thresholdRaw || null;
-        const analyzerModeRaw = main_core/* getInput */.V4('analyzer_mode');
+        const failOnBudgetBreach = parseBoolean(lib_core/* getInput */.V4('fail_on_budget_breach'), false);
+        const analyzerModeRaw = lib_core/* getInput */.V4('analyzer_mode');
         const analyzerMode = parseBoolean(analyzerModeRaw, false);
-        const detailedCommentRaw = main_core/* getInput */.V4('detailed_comment');
+        const detailedCommentRaw = lib_core/* getInput */.V4('detailed_comment');
         const detailedComment = parseBoolean(detailedCommentRaw, false);
-        const includeRecommendationsRaw = main_core/* getInput */.V4('include_recommendations');
+        const includeRecommendationsRaw = lib_core/* getInput */.V4('include_recommendations');
         const includeRecommendations = parseBoolean(includeRecommendationsRaw, true);
-        const logLevel = main_core/* getInput */.V4('log_level') || 'error';
-        const debugRaw = main_core/* getInput */.V4('debug');
+        const logLevel = lib_core/* getInput */.V4('log_level') || 'error';
+        const debugRaw = lib_core/* getInput */.V4('debug');
         const debug = parseBoolean(debugRaw, false);
-        const includeActualCostsRaw = main_core/* getInput */.V4('include_actual_costs');
+        const includeActualCostsRaw = lib_core/* getInput */.V4('include_actual_costs');
         const includeActualCosts = parseBoolean(includeActualCostsRaw, false);
-        const actualCostsPeriod = main_core/* getInput */.V4('actual_costs_period') || '7d';
-        const pulumiStateJsonPath = main_core/* getInput */.V4('pulumi_state_json') || '';
-        const terraformStatePath = main_core/* getInput */.V4('terraform_state') || '';
-        const actualCostsGroupBy = main_core/* getInput */.V4('actual_costs_group_by') || 'provider';
-        const includeSustainabilityRaw = main_core/* getInput */.V4('include_sustainability');
+        const actualCostsPeriod = lib_core/* getInput */.V4('actual_costs_period') || '7d';
+        const pulumiStateJsonPath = lib_core/* getInput */.V4('pulumi_state_json') || '';
+        const terraformStatePath = lib_core/* getInput */.V4('terraform_state') || '';
+        const actualCostsGroupBy = lib_core/* getInput */.V4('actual_costs_group_by') || 'provider';
+        const includeSustainabilityRaw = lib_core/* getInput */.V4('include_sustainability');
         const includeSustainability = parseBoolean(includeSustainabilityRaw, true);
-        const utilizationRate = main_core/* getInput */.V4('utilization_rate') || '1.0';
-        const sustainabilityEquivalentsRaw = main_core/* getInput */.V4('sustainability_equivalents');
+        const utilizationRate = lib_core/* getInput */.V4('utilization_rate') || '1.0';
+        const sustainabilityEquivalentsRaw = lib_core/* getInput */.V4('sustainability_equivalents');
         const sustainabilityEquivalents = parseBoolean(sustainabilityEquivalentsRaw, true);
-        const failOnCarbonIncreaseRaw = main_core/* getInput */.V4('fail_on_carbon_increase');
+        const failOnCarbonIncreaseRaw = lib_core/* getInput */.V4('fail_on_carbon_increase');
         const failOnCarbonIncrease = failOnCarbonIncreaseRaw || null;
-        const budgetAmountRaw = main_core/* getInput */.V4('budget_amount');
+        const budgetAmountRaw = lib_core/* getInput */.V4('budget_amount');
         const budgetAmount = budgetAmountRaw ? parseFloat(budgetAmountRaw) : undefined;
-        const budgetCurrency = main_core/* getInput */.V4('budget_currency') || 'USD';
-        const budgetPeriod = main_core/* getInput */.V4('budget_period') || 'monthly';
-        const budgetAlerts = main_core/* getInput */.V4('budget_alerts') || '';
-        const estimateSpec = main_core/* getInput */.V4('estimate_spec') || '';
-        const includeClusterCosts = parseBoolean(main_core/* getInput */.V4('include_cluster_costs'), false);
-        const clusterGroupBy = main_core/* getInput */.V4('cluster_group_by') || 'namespace';
-        const clusterNamespace = main_core/* getInput */.V4('cluster_namespace') || '';
-        const clusterContext = main_core/* getInput */.V4('cluster_context') || '';
-        const clusterSelector = main_core/* getInput */.V4('cluster_selector') || '';
-        const enableJevScoring = parseBoolean(main_core/* getInput */.V4('enable_jev_scoring'), false);
-        const includeDismissedRecommendations = parseBoolean(main_core/* getInput */.V4('include_dismissed_recommendations'), false);
-        const dismissRecommendations = main_core/* getInput */.V4('dismiss_recommendations') || '';
-        const snoozeRecommendations = main_core/* getInput */.V4('snooze_recommendations') || '';
-        const stateOnly = parseBoolean(main_core/* getInput */.V4('state_only'), false);
-        const resourceFilters = (0,display/* parseResourceFilters */.Pq)(main_core/* getInput */.V4('resource_filter'));
-        const groupBy = (0,display/* parseGroupBy */.eh)(main_core/* getInput */.V4('group_by'));
-        const minCostThreshold = (0,display/* parseMinCostThreshold */.yi)(main_core/* getInput */.V4('min_cost_threshold'));
-        const maxResourcesDisplayed = (0,display/* parseMaxResourcesDisplayed */.qr)(main_core/* getInput */.V4('max_resources_displayed'));
-        const showOnlyChanges = parseBoolean(main_core/* getInput */.V4('show_only_changes'), false);
-        const sortBy = (0,display/* parseSortBy */.Lh)(main_core/* getInput */.V4('sort_by'));
+        const budgetCurrency = lib_core/* getInput */.V4('budget_currency') || 'USD';
+        const budgetPeriod = lib_core/* getInput */.V4('budget_period') || 'monthly';
+        const budgetAlerts = lib_core/* getInput */.V4('budget_alerts') || '';
+        const estimateSpec = lib_core/* getInput */.V4('estimate_spec') || '';
+        const includeClusterCosts = parseBoolean(lib_core/* getInput */.V4('include_cluster_costs'), false);
+        const clusterGroupBy = lib_core/* getInput */.V4('cluster_group_by') || 'namespace';
+        const clusterNamespace = lib_core/* getInput */.V4('cluster_namespace') || '';
+        const clusterContext = lib_core/* getInput */.V4('cluster_context') || '';
+        const clusterSelector = lib_core/* getInput */.V4('cluster_selector') || '';
+        const enableJevScoring = parseBoolean(lib_core/* getInput */.V4('enable_jev_scoring'), false);
+        const includeDismissedRecommendations = parseBoolean(lib_core/* getInput */.V4('include_dismissed_recommendations'), false);
+        const dismissRecommendations = lib_core/* getInput */.V4('dismiss_recommendations') || '';
+        const snoozeRecommendations = lib_core/* getInput */.V4('snooze_recommendations') || '';
+        const stateOnly = parseBoolean(lib_core/* getInput */.V4('state_only'), false);
+        const resourceFilters = (0,display/* parseResourceFilters */.Pq)(lib_core/* getInput */.V4('resource_filter'));
+        const groupBy = (0,display/* parseGroupBy */.eh)(lib_core/* getInput */.V4('group_by'));
+        const minCostThreshold = (0,display/* parseMinCostThreshold */.yi)(lib_core/* getInput */.V4('min_cost_threshold'));
+        const maxResourcesDisplayed = (0,display/* parseMaxResourcesDisplayed */.qr)(lib_core/* getInput */.V4('max_resources_displayed'));
+        const showOnlyChanges = parseBoolean(lib_core/* getInput */.V4('show_only_changes'), false);
+        const sortBy = (0,display/* parseSortBy */.Lh)(lib_core/* getInput */.V4('sort_by'));
         config = {
             pulumiPlanJsonPath,
             githubToken,
@@ -44537,6 +44510,7 @@ async function run() {
             behaviorOnError,
             postComment,
             threshold,
+            failOnBudgetBreach,
             analyzerMode,
             detailedComment,
             includeRecommendations,
@@ -44574,172 +44548,173 @@ async function run() {
             sortBy,
         };
         if (config.debug) {
-            main_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
+            lib_core/* info */.pq(`Timestamp: ${new Date().toISOString()}`);
             logEnvironment();
             logInputs();
-            main_core/* info */.pq('=== Parsing Configuration ===');
-            main_core/* info */.pq(`  pulumi-plan-json resolved to: "${pulumiPlanJsonPath}"`);
-            main_core/* info */.pq(`  github-token: ${githubToken ? '[PROVIDED]' : '[EMPTY]'}`);
-            main_core/* info */.pq(`  finfocus-version resolved to: "${finfocusVersion}"`);
-            main_core/* info */.pq(`  install-plugins raw: "${installPluginsRaw}"`);
-            main_core/* info */.pq(`  install-plugins parsed: [${installPlugins.map((p) => `"${p}"`).join(', ')}]`);
-            main_core/* info */.pq(`  behavior-on-error: "${behaviorOnError}"`);
-            main_core/* info */.pq(`  post-comment raw: "${postCommentRaw}" -> parsed: ${postComment}`);
-            main_core/* info */.pq(`  fail-on-cost-increase: "${threshold}"`);
-            main_core/* info */.pq(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
-            main_core/* info */.pq(`  detailed-comment raw: "${detailedCommentRaw}" -> parsed: ${detailedComment}`);
-            main_core/* info */.pq(`  include-recommendations raw: "${includeRecommendationsRaw}" -> parsed: ${includeRecommendations}`);
-            main_core/* info */.pq(`  log-level: "${logLevel}"`);
-            main_core/* info */.pq(`  debug raw: "${debugRaw}" -> parsed: ${debug}`);
-            main_core/* info */.pq(`  include-actual-costs raw: "${includeActualCostsRaw}" -> parsed: ${includeActualCosts}`);
-            main_core/* info */.pq(`  actual-costs-period: "${actualCostsPeriod}"`);
-            main_core/* info */.pq(`  pulumi-state-json: "${pulumiStateJsonPath}"`);
-            main_core/* info */.pq(`  actual-costs-group-by: "${actualCostsGroupBy}"`);
-            main_core/* info */.pq(`  include-sustainability raw: "${includeSustainabilityRaw}" -> parsed: ${includeSustainability}`);
-            main_core/* info */.pq(`  utilization-rate: "${utilizationRate}"`);
-            main_core/* info */.pq(`  sustainability-equivalents raw: "${sustainabilityEquivalentsRaw}" -> parsed: ${sustainabilityEquivalents}`);
-            main_core/* info */.pq(`  fail-on-carbon-increase: "${failOnCarbonIncrease}"`);
+            lib_core/* info */.pq('=== Parsing Configuration ===');
+            lib_core/* info */.pq(`  pulumi-plan-json resolved to: "${pulumiPlanJsonPath}"`);
+            lib_core/* info */.pq(`  github-token: ${githubToken ? '[PROVIDED]' : '[EMPTY]'}`);
+            lib_core/* info */.pq(`  finfocus-version resolved to: "${finfocusVersion}"`);
+            lib_core/* info */.pq(`  install-plugins raw: "${installPluginsRaw}"`);
+            lib_core/* info */.pq(`  install-plugins parsed: [${installPlugins.map((p) => `"${p}"`).join(', ')}]`);
+            lib_core/* info */.pq(`  behavior-on-error: "${behaviorOnError}"`);
+            lib_core/* info */.pq(`  post-comment raw: "${postCommentRaw}" -> parsed: ${postComment}`);
+            lib_core/* info */.pq(`  fail-on-cost-increase: "${threshold}"`);
+            lib_core/* info */.pq(`  fail-on-budget-breach: ${failOnBudgetBreach}`);
+            lib_core/* info */.pq(`  analyzer-mode raw: "${analyzerModeRaw}" -> parsed: ${analyzerMode}`);
+            lib_core/* info */.pq(`  detailed-comment raw: "${detailedCommentRaw}" -> parsed: ${detailedComment}`);
+            lib_core/* info */.pq(`  include-recommendations raw: "${includeRecommendationsRaw}" -> parsed: ${includeRecommendations}`);
+            lib_core/* info */.pq(`  log-level: "${logLevel}"`);
+            lib_core/* info */.pq(`  debug raw: "${debugRaw}" -> parsed: ${debug}`);
+            lib_core/* info */.pq(`  include-actual-costs raw: "${includeActualCostsRaw}" -> parsed: ${includeActualCosts}`);
+            lib_core/* info */.pq(`  actual-costs-period: "${actualCostsPeriod}"`);
+            lib_core/* info */.pq(`  pulumi-state-json: "${pulumiStateJsonPath}"`);
+            lib_core/* info */.pq(`  actual-costs-group-by: "${actualCostsGroupBy}"`);
+            lib_core/* info */.pq(`  include-sustainability raw: "${includeSustainabilityRaw}" -> parsed: ${includeSustainability}`);
+            lib_core/* info */.pq(`  utilization-rate: "${utilizationRate}"`);
+            lib_core/* info */.pq(`  sustainability-equivalents raw: "${sustainabilityEquivalentsRaw}" -> parsed: ${sustainabilityEquivalents}`);
+            lib_core/* info */.pq(`  fail-on-carbon-increase: "${failOnCarbonIncrease}"`);
         }
         if (config.debug) {
-            main_core/* info */.pq('=== Checking Plan File ===');
+            lib_core/* info */.pq('=== Checking Plan File ===');
             if (external_fs_.existsSync(config.pulumiPlanJsonPath)) {
                 const stats = external_fs_.statSync(config.pulumiPlanJsonPath);
-                main_core/* info */.pq(`  Plan file exists: ${config.pulumiPlanJsonPath}`);
-                main_core/* info */.pq(`  Plan file size: ${stats.size} bytes`);
+                lib_core/* info */.pq(`  Plan file exists: ${config.pulumiPlanJsonPath}`);
+                lib_core/* info */.pq(`  Plan file size: ${stats.size} bytes`);
                 if (stats.size > 0 && stats.size < 10000) {
                     const content = external_fs_.readFileSync(config.pulumiPlanJsonPath, 'utf8');
-                    main_core/* info */.pq(`  Plan file content (first 1000 chars):\n${content.substring(0, 1000)}`);
+                    lib_core/* info */.pq(`  Plan file content (first 1000 chars):\n${content.substring(0, 1000)}`);
                 }
                 else if (stats.size === 0) {
-                    main_core/* warning */.$e('  Plan file is EMPTY!');
+                    lib_core/* warning */.$e('  Plan file is EMPTY!');
                 }
                 else {
-                    main_core/* info */.pq(`  Plan file too large to display (${stats.size} bytes)`);
+                    lib_core/* info */.pq(`  Plan file too large to display (${stats.size} bytes)`);
                 }
             }
             else {
-                main_core/* warning */.$e(`  Plan file NOT FOUND: ${config.pulumiPlanJsonPath}`);
-                main_core/* info */.pq(`  Current directory contents:`);
+                lib_core/* warning */.$e(`  Plan file NOT FOUND: ${config.pulumiPlanJsonPath}`);
+                lib_core/* info */.pq(`  Current directory contents:`);
                 const files = external_fs_.readdirSync('.');
                 for (const file of files) {
                     const stat = external_fs_.statSync(file);
-                    main_core/* info */.pq(`    ${file} (${stat.isDirectory() ? 'dir' : stat.size + ' bytes'})`);
+                    lib_core/* info */.pq(`    ${file} (${stat.isDirectory() ? 'dir' : stat.size + ' bytes'})`);
                 }
             }
         }
-        const installer = new install/* Installer */.PQ();
+        const installer = new Installer();
         const pluginManager = new PluginManager();
         const analyzer = new Analyzer();
         const commenter = new Commenter();
-        main_core/* info */.pq('');
-        main_core/* startGroup */.Oh('📦 Installing finfocus');
+        lib_core/* info */.pq('');
+        lib_core/* startGroup */.Oh('📦 Installing finfocus');
         const installStartTime = Date.now();
         const binaryPath = await installer.install(config.finfocusVersion, config);
         if (config.debug) {
-            main_core/* info */.pq(`Installed finfocus at: ${binaryPath}`);
-            main_core/* info */.pq(`Installation took: ${Date.now() - installStartTime}ms`);
+            lib_core/* info */.pq(`Installed finfocus at: ${binaryPath}`);
+            lib_core/* info */.pq(`Installation took: ${Date.now() - installStartTime}ms`);
         }
-        main_core/* endGroup */.N4();
+        lib_core/* endGroup */.N4();
         if (config.installPlugins.length > 0) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🔌 Installing plugins');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🔌 Installing plugins');
             const pluginStartTime = Date.now();
             await pluginManager.installPlugins(config.installPlugins, config);
             if (config.debug) {
-                main_core/* info */.pq(`Plugin installation took: ${Date.now() - pluginStartTime}ms`);
+                lib_core/* info */.pq(`Plugin installation took: ${Date.now() - pluginStartTime}ms`);
             }
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
         else {
             if (config.debug)
-                main_core/* info */.pq('No plugins to install (install-plugins is empty)');
+                lib_core/* info */.pq('No plugins to install (install-plugins is empty)');
         }
         // Setup budget configuration if budget amount is provided
         const configManager = new ConfigManager();
         if (config.budgetAmount && config.budgetAmount > 0) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📊 Setting up budget configuration');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('📊 Setting up budget configuration');
             await configManager.writeConfig(config);
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
         if (config.enableJevScoring) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🧮 Enabling Jev recommendation scoring');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🧮 Enabling Jev recommendation scoring');
             await configManager.writeScoringConfig(config);
             if (!process.env.TYPESAFE_API_KEY) {
-                main_core/* warning */.$e('enable-jev-scoring is set but TYPESAFE_API_KEY is not in the environment. ' +
+                lib_core/* warning */.$e('enable-jev-scoring is set but TYPESAFE_API_KEY is not in the environment. ' +
                     'The jev plugin returns UNAUTHENTICATED and recommendations stay unscored.');
             }
             const jevRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'jev');
             if (!jevRequested) {
-                main_core/* warning */.$e('enable-jev-scoring needs the jev plugin. Add jev to install-plugins if it is not already installed.');
+                lib_core/* warning */.$e('enable-jev-scoring needs the jev plugin. Add jev to install-plugins if it is not already installed.');
             }
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
         if (config.analyzerMode) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🔍 Setting up Analyzer Mode');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🔍 Setting up Analyzer Mode');
             await analyzer.setupAnalyzerMode(config);
-            main_core/* endGroup */.N4();
-            main_core/* info */.pq('✅ Analyzer mode configured. Run "pulumi preview" to see cost estimates.');
+            lib_core/* endGroup */.N4();
+            lib_core/* info */.pq('✅ Analyzer mode configured. Run "pulumi preview" to see cost estimates.');
             if (config.debug)
-                main_core/* info */.pq(`Total execution time: ${Date.now() - startTime}ms`);
+                lib_core/* info */.pq(`Total execution time: ${Date.now() - startTime}ms`);
             return;
         }
         let stateOnlyReport;
         if (config.stateOnly) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📋 Running state-only overview');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('📋 Running state-only overview');
             stateOnlyReport = await analyzer.runStateOnly(config);
-            main_core/* info */.pq(`📋 State-only projected monthly: ${stateOnlyReport.summary.projectedMonthly} ${stateOnlyReport.summary.currency}`);
-            main_core/* setOutput */.uH('state-projected-monthly', stateOnlyReport.summary.projectedMonthly.toString());
-            main_core/* endGroup */.N4();
+            lib_core/* info */.pq(`📋 State-only projected monthly: ${stateOnlyReport.summary.projectedMonthly} ${stateOnlyReport.summary.currency}`);
+            lib_core/* setOutput */.uH('state-projected-monthly', stateOnlyReport.summary.projectedMonthly.toString());
+            lib_core/* endGroup */.N4();
         }
         const planFileExists = external_fs_.existsSync(config.pulumiPlanJsonPath);
         const runProjected = Boolean(config.terraformStatePath) || planFileExists || !config.stateOnly;
-        main_core/* info */.pq('');
-        main_core/* startGroup */.Oh('💰 Running cost analysis');
+        lib_core/* info */.pq('');
+        lib_core/* startGroup */.Oh('💰 Running cost analysis');
         const analysisStartTime = Date.now();
         let report;
         if (runProjected) {
             report = await analyzer.runAnalysis(config.pulumiPlanJsonPath, config);
         }
         else if (stateOnlyReport) {
-            main_core/* info */.pq('No Pulumi plan or Terraform state file is present. Using the state-only overview as the cost total.');
+            lib_core/* info */.pq('No Pulumi plan or Terraform state file is present. Using the state-only overview as the cost total.');
             report = reportFromStateOnly(stateOnlyReport);
         }
         else {
             throw new Error('state-only did not produce an overview report.');
         }
         if (config.debug) {
-            main_core/* info */.pq(`Analysis took: ${Date.now() - analysisStartTime}ms`);
+            lib_core/* info */.pq(`Analysis took: ${Date.now() - analysisStartTime}ms`);
         }
         // Extract values from report - handle both new and legacy formats
         const totalMonthlyCost = report.summary?.totalMonthly ?? report.projected_monthly_cost ?? 0;
         const currency = report.summary?.currency ?? report.currency ?? 'USD';
         if (config.debug) {
             const resourceCount = report.resources?.length ?? report.summary?.resources?.length ?? 0;
-            main_core/* info */.pq(`Analysis result summary:`);
-            main_core/* info */.pq(`  totalMonthly: ${totalMonthlyCost}`);
-            main_core/* info */.pq(`  currency: ${currency}`);
-            main_core/* info */.pq(`  resourceCount: ${resourceCount}`);
+            lib_core/* info */.pq(`Analysis result summary:`);
+            lib_core/* info */.pq(`  totalMonthly: ${totalMonthlyCost}`);
+            lib_core/* info */.pq(`  currency: ${currency}`);
+            lib_core/* info */.pq(`  resourceCount: ${resourceCount}`);
             if (report.summary?.byProvider) {
-                main_core/* info */.pq(`  byProvider: ${JSON.stringify(report.summary.byProvider)}`);
+                lib_core/* info */.pq(`  byProvider: ${JSON.stringify(report.summary.byProvider)}`);
             }
             if (report.summary?.byService) {
-                main_core/* info */.pq(`  byService: ${JSON.stringify(report.summary.byService)}`);
+                lib_core/* info */.pq(`  byService: ${JSON.stringify(report.summary.byService)}`);
             }
-            main_core/* info */.pq(`  diff: ${report.diff ? JSON.stringify(report.diff) : 'null'}`);
+            lib_core/* info */.pq(`  diff: ${report.diff ? JSON.stringify(report.diff) : 'null'}`);
         }
-        main_core/* endGroup */.N4();
-        main_core/* setOutput */.uH('total-monthly-cost', totalMonthlyCost.toString());
-        main_core/* setOutput */.uH('currency', currency);
-        main_core/* info */.pq(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
+        lib_core/* endGroup */.N4();
+        lib_core/* setOutput */.uH('total-monthly-cost', totalMonthlyCost.toString());
+        lib_core/* setOutput */.uH('currency', currency);
+        lib_core/* info */.pq(`📊 Projected monthly cost: ${totalMonthlyCost} ${currency}`);
         // Set unpriced resource count (v0.4.1)
         const unpricedCount = report.errors?.length ?? 0;
-        main_core/* setOutput */.uH('unpriced-resource-count', unpricedCount.toString());
+        lib_core/* setOutput */.uH('unpriced-resource-count', unpricedCount.toString());
         if (unpricedCount > 0) {
-            main_core/* info */.pq(`⚠️  ${unpricedCount} resource(s) could not be priced`);
+            lib_core/* info */.pq(`⚠️  ${unpricedCount} resource(s) could not be priced`);
         }
         if (report.diff) {
             // Handle both new v0.4.1 format and legacy format using type guard
@@ -44750,137 +44725,155 @@ async function run() {
             else {
                 monthlyChange = report.diff.monthly_cost_change ?? 0;
             }
-            main_core/* setOutput */.uH('cost-diff', monthlyChange.toString());
-            main_core/* info */.pq(`📈 Cost change: ${monthlyChange} ${currency}`);
+            lib_core/* setOutput */.uH('cost-diff', monthlyChange.toString());
+            lib_core/* info */.pq(`📈 Cost change: ${monthlyChange} ${currency}`);
         }
         let sustainabilityReport;
         if (config.includeSustainability) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🌱 Running sustainability analysis');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🌱 Running sustainability analysis');
             const { totalCO2e, totalCO2eDiff, carbonIntensity } = analyzer.calculateSustainabilityMetrics(report);
             sustainabilityReport = {
                 totalCO2e,
                 totalCO2eDiff,
                 carbonIntensity,
             };
-            main_core/* setOutput */.uH('total-carbon-footprint', totalCO2e.toString());
-            main_core/* setOutput */.uH('carbon-intensity', carbonIntensity.toString());
-            main_core/* info */.pq(`🌱 Total Carbon Footprint: ${totalCO2e.toFixed(2)} kgCO2e/month`);
-            main_core/* info */.pq(`🌱 Carbon Intensity: ${carbonIntensity.toFixed(2)} gCO2e/USD`);
-            main_core/* endGroup */.N4();
+            lib_core/* setOutput */.uH('total-carbon-footprint', totalCO2e.toString());
+            lib_core/* setOutput */.uH('carbon-intensity', carbonIntensity.toString());
+            lib_core/* info */.pq(`🌱 Total Carbon Footprint: ${totalCO2e.toFixed(2)} kgCO2e/month`);
+            lib_core/* info */.pq(`🌱 Carbon Intensity: ${carbonIntensity.toFixed(2)} gCO2e/USD`);
+            lib_core/* endGroup */.N4();
         }
         let clusterReport;
         if (config.includeClusterCosts) {
             const kubernetesRequested = config.installPlugins.some((plugin) => plugin.split('@')[0] === 'kubernetes');
             if (!kubernetesRequested) {
-                main_core/* warning */.$e('include-cluster-costs needs the kubernetes plugin and a kubeconfig on the runner. ' +
+                lib_core/* warning */.$e('include-cluster-costs needs the kubernetes plugin and a kubeconfig on the runner. ' +
                     'Add kubernetes to install-plugins if it is not already installed.');
             }
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('☸️ Running cluster cost allocation');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('☸️ Running cluster cost allocation');
             clusterReport = await analyzer.runCluster(config);
-            main_core/* setOutput */.uH('cluster-total-cost', clusterReport.total.toString());
-            main_core/* info */.pq(`☸️ Cluster cost (${clusterReport.group_by}): ${clusterReport.total} ${clusterReport.currency}`);
-            main_core/* endGroup */.N4();
+            lib_core/* setOutput */.uH('cluster-total-cost', clusterReport.total.toString());
+            lib_core/* info */.pq(`☸️ Cluster cost (${clusterReport.group_by}): ${clusterReport.total} ${clusterReport.currency}`);
+            lib_core/* endGroup */.N4();
         }
         let recommendationsReport;
         if (config.dismissRecommendations || config.snoozeRecommendations) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🙈 Applying recommendation dismissals');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🙈 Applying recommendation dismissals');
             const planForDismissal = planFileExists ? config.pulumiPlanJsonPath : undefined;
             await analyzer.applyRecommendationLifecycle(planForDismissal, config);
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
         if (config.includeRecommendations && (planFileExists || !config.stateOnly)) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('💡 Running cost recommendations');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('💡 Running cost recommendations');
             const recommendationsStartTime = Date.now();
             recommendationsReport = await analyzer.runRecommendations(config.pulumiPlanJsonPath, config);
             if (config.debug) {
-                main_core/* info */.pq(`Recommendations took: ${Date.now() - recommendationsStartTime}ms`);
+                lib_core/* info */.pq(`Recommendations took: ${Date.now() - recommendationsStartTime}ms`);
             }
             const achievableSavings = calculateAchievableSavings(recommendationsReport.recommendations);
-            main_core/* setOutput */.uH('total-savings', achievableSavings.toString());
-            main_core/* setOutput */.uH('recommendation-count', recommendationsReport.summary.total_count.toString());
-            main_core/* info */.pq(`💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`);
-            main_core/* endGroup */.N4();
+            lib_core/* setOutput */.uH('total-savings', achievableSavings.toString());
+            lib_core/* setOutput */.uH('recommendation-count', recommendationsReport.summary.total_count.toString());
+            lib_core/* info */.pq(`💰 Potential monthly savings: ${achievableSavings} ${recommendationsReport.summary.currency}`);
+            lib_core/* endGroup */.N4();
         }
         else if (config.includeRecommendations && config.stateOnly && !planFileExists) {
-            main_core/* info */.pq('Skipping recommendations: state-only mode has no Pulumi plan, and cost recommendations requires --pulumi-json.');
+            lib_core/* info */.pq('Skipping recommendations: state-only mode has no Pulumi plan, and cost recommendations requires --pulumi-json.');
         }
         let estimateReport;
         if (config.estimateSpec) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🔮 Running what-if cost estimate');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🔮 Running what-if cost estimate');
             const estimateStartTime = Date.now();
             estimateReport = await analyzer.runEstimate(config);
             if (config.debug) {
-                main_core/* info */.pq(`Estimate took: ${Date.now() - estimateStartTime}ms`);
+                lib_core/* info */.pq(`Estimate took: ${Date.now() - estimateStartTime}ms`);
             }
             if (estimateReport) {
-                main_core/* info */.pq(`🔮 What-if estimate change: ${estimateReport.totalChange} ${estimateReport.modified.currency}`);
+                lib_core/* info */.pq(`🔮 What-if estimate change: ${estimateReport.totalChange} ${estimateReport.modified.currency}`);
             }
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
         let actualCostReport;
         if (config.includeActualCosts) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📉 Running actual cost analysis');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('📉 Running actual cost analysis');
             const actualStart = Date.now();
             actualCostReport = await analyzer.runActualCosts(config);
             if (config.debug) {
-                main_core/* info */.pq(`Actual costs took: ${Date.now() - actualStart}ms`);
+                lib_core/* info */.pq(`Actual costs took: ${Date.now() - actualStart}ms`);
             }
-            main_core/* setOutput */.uH('actual-total-cost', actualCostReport.total.toString());
-            main_core/* setOutput */.uH('actual-cost-period', `${actualCostReport.startDate} to ${actualCostReport.endDate}`);
-            main_core/* info */.pq(`📉 Actual Cost (${actualCostReport.startDate} to ${actualCostReport.endDate}): ${actualCostReport.total} ${actualCostReport.currency}`);
-            main_core/* endGroup */.N4();
+            lib_core/* setOutput */.uH('actual-total-cost', actualCostReport.total.toString());
+            lib_core/* setOutput */.uH('actual-cost-period', `${actualCostReport.startDate} to ${actualCostReport.endDate}`);
+            lib_core/* info */.pq(`📉 Actual Cost (${actualCostReport.startDate} to ${actualCostReport.endDate}): ${actualCostReport.total} ${actualCostReport.currency}`);
+            lib_core/* endGroup */.N4();
         }
         // Calculate budget status if budget is configured
         let budgetStatus;
         if (config.budgetAmount && config.budgetAmount > 0) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('📊 Calculating budget status');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('📊 Calculating budget status');
             budgetStatus = analyzer.calculateBudgetStatus(config, report);
             if (config.debug && budgetStatus) {
-                main_core/* info */.pq(`📊 Budget status calculated: ${JSON.stringify(budgetStatus)}`);
+                lib_core/* info */.pq(`📊 Budget status calculated: ${JSON.stringify(budgetStatus)}`);
             }
             if (budgetStatus) {
-                main_core/* setOutput */.uH('budget-spent', budgetStatus.spent?.toString() || '0');
-                main_core/* setOutput */.uH('budget-remaining', budgetStatus.remaining?.toString() || '0');
-                main_core/* setOutput */.uH('budget-percent-used', budgetStatus.percentUsed?.toString() || '0');
-                main_core/* info */.pq(`📊 Budget: ${budgetStatus.spent?.toFixed(2)}/${budgetStatus.amount?.toFixed(2)} ${budgetStatus.currency} (${budgetStatus.percentUsed?.toFixed(1)}%)`);
+                lib_core/* setOutput */.uH('budget-spent', budgetStatus.spent?.toString() || '0');
+                lib_core/* setOutput */.uH('budget-remaining', budgetStatus.remaining?.toString() || '0');
+                lib_core/* setOutput */.uH('budget-percent-used', budgetStatus.percentUsed?.toString() || '0');
+                lib_core/* info */.pq(`📊 Budget: ${budgetStatus.spent?.toFixed(2)}/${budgetStatus.amount?.toFixed(2)} ${budgetStatus.currency} (${budgetStatus.percentUsed?.toFixed(1)}%)`);
             }
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
         if (config.postComment && config.githubToken) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('💬 Posting PR comment');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('💬 Posting PR comment');
             const commentStartTime = Date.now();
             const commentReport = (0,display/* annotateReportFromPlan */.MH)(report, config.pulumiPlanJsonPath, config.showOnlyChanges === true || (config.groupBy ?? '').startsWith('tag:'));
             await commenter.upsertComment(commentReport, config.githubToken, config, recommendationsReport, actualCostReport, sustainabilityReport, budgetStatus, estimateReport, clusterReport, stateOnlyReport);
             if (config.debug) {
-                main_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
+                lib_core/* info */.pq(`Comment posting took: ${Date.now() - commentStartTime}ms`);
             }
-            main_core/* endGroup */.N4();
+            lib_core/* endGroup */.N4();
         }
-        if (config.threshold && report.diff) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🛡️ Checking cost guardrails');
-            const { checkBudgetThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
-            const thresholdResult = await checkBudgetThreshold(config, report);
-            if (!thresholdResult.passed) {
-                const errorMessage = config.debug
-                    ? `${thresholdResult.message} (exit code: ${thresholdResult.exitCode ?? 'N/A'})`
-                    : thresholdResult.message;
-                throw new Error(errorMessage);
+        if (config.threshold) {
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🛡️ Checking cost increase');
+            if (!report.diff) {
+                lib_core/* warning */.$e('fail-on-cost-increase is set but the report has no cost diff. Skipping the cost increase check.');
             }
-            main_core/* info */.pq(`✅ Cost within threshold: ${config.threshold}`);
-            main_core/* endGroup */.N4();
+            else {
+                const { checkBudgetThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
+                const thresholdResult = checkBudgetThreshold(config, report);
+                if (!thresholdResult.passed) {
+                    throw new Error(thresholdResult.message);
+                }
+                lib_core/* info */.pq(`✅ Cost increase within ${config.threshold}`);
+            }
+            lib_core/* endGroup */.N4();
+        }
+        if (config.failOnBudgetBreach) {
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🛡️ Checking budget breach');
+            if (!config.budgetAmount || config.budgetAmount <= 0) {
+                lib_core/* warning */.$e('fail-on-budget-breach is set but budget-amount is missing. The budget check was skipped.');
+            }
+            else {
+                const { checkBudgetThresholdWithExitCodes } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
+                const budgetResult = await checkBudgetThresholdWithExitCodes(config);
+                if (!budgetResult.passed) {
+                    throw new Error(budgetResult.message);
+                }
+                lib_core/* info */.pq('✅ Budget within the configured amount');
+            }
+            lib_core/* endGroup */.N4();
         }
         if (config.failOnCarbonIncrease && sustainabilityReport) {
-            main_core/* info */.pq('');
-            main_core/* startGroup */.Oh('🌱 Checking sustainability guardrails');
+            lib_core/* info */.pq('');
+            lib_core/* startGroup */.Oh('🌱 Checking sustainability guardrails');
             const { checkCarbonThreshold } = await __nccwpck_require__.e(/* import() */ 617).then(__nccwpck_require__.bind(__nccwpck_require__, 6617));
             // Calculate base total for percent check
             const baseTotal = sustainabilityReport.totalCO2e - sustainabilityReport.totalCO2eDiff;
@@ -44888,45 +44881,45 @@ async function run() {
             if (failed) {
                 throw new Error(`Carbon footprint increase of ${sustainabilityReport.totalCO2eDiff.toFixed(2)} kgCO2e exceeds threshold ${config.failOnCarbonIncrease}`);
             }
-            main_core/* info */.pq(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
-            main_core/* endGroup */.N4();
+            lib_core/* info */.pq(`✅ Carbon footprint within threshold: ${config.failOnCarbonIncrease}`);
+            lib_core/* endGroup */.N4();
         }
-        main_core/* info */.pq('');
-        main_core/* info */.pq('✅ finfocus-action completed successfully');
+        lib_core/* info */.pq('');
+        lib_core/* info */.pq('✅ finfocus-action completed successfully');
         if (config.debug)
-            main_core/* info */.pq(`Total execution time: ${Date.now() - startTime}ms`);
+            lib_core/* info */.pq(`Total execution time: ${Date.now() - startTime}ms`);
     }
     catch (error) {
         if (config?.debug) {
-            main_core/* info */.pq('');
-            main_core/* info */.pq('=== ERROR OCCURRED ===');
-            main_core/* info */.pq(`Total execution time before error: ${Date.now() - startTime}ms`);
-            const behavior = main_core/* getInput */.V4('behavior-on-error') || 'fail';
-            main_core/* info */.pq(`Error behavior setting: ${behavior}`);
+            lib_core/* info */.pq('');
+            lib_core/* info */.pq('=== ERROR OCCURRED ===');
+            lib_core/* info */.pq(`Total execution time before error: ${Date.now() - startTime}ms`);
+            const behavior = lib_core/* getInput */.V4('behavior-on-error') || 'fail';
+            lib_core/* info */.pq(`Error behavior setting: ${behavior}`);
         }
         if (error instanceof Error) {
             if (config?.debug) {
-                main_core/* info */.pq(`Error name: ${error.name}`);
-                main_core/* info */.pq(`Error message: ${error.message}`);
-                main_core/* info */.pq(`Error stack:\n${error.stack}`);
+                lib_core/* info */.pq(`Error name: ${error.name}`);
+                lib_core/* info */.pq(`Error message: ${error.message}`);
+                lib_core/* info */.pq(`Error stack:\n${error.stack}`);
             }
-            const behavior = main_core/* getInput */.V4('behavior-on-error') || 'fail';
+            const behavior = lib_core/* getInput */.V4('behavior-on-error') || 'fail';
             if (behavior === 'warn') {
-                main_core/* warning */.$e(`⚠️ ${error.message}`);
+                lib_core/* warning */.$e(`⚠️ ${error.message}`);
             }
             else if (behavior === 'silent') {
-                main_core/* info */.pq(`Silent error (not failing): ${error.message}`);
+                lib_core/* info */.pq(`Silent error (not failing): ${error.message}`);
             }
             else {
-                main_core/* setFailed */.C1(`❌ ${error.message}`);
+                lib_core/* setFailed */.C1(`❌ ${error.message}`);
             }
         }
         else {
             if (config?.debug) {
-                main_core/* info */.pq(`Unknown error type: ${typeof error}`);
-                main_core/* info */.pq(`Error value: ${String(error)}`);
+                lib_core/* info */.pq(`Unknown error type: ${typeof error}`);
+                lib_core/* info */.pq(`Error value: ${String(error)}`);
             }
-            main_core/* setFailed */.C1(`❌ Unknown error: ${String(error)}`);
+            lib_core/* setFailed */.C1(`❌ Unknown error: ${String(error)}`);
         }
     }
     finally {

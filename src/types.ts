@@ -6,6 +6,8 @@ export interface ActionConfiguration {
   behaviorOnError: 'fail' | 'warn' | 'silent';
   postComment: boolean;
   threshold: string | null;
+  /** Fail the job when finfocus reports a budget breach (exit code 10). */
+  failOnBudgetBreach?: boolean;
   analyzerMode: boolean;
   detailedComment: boolean;
   includeRecommendations: boolean;
