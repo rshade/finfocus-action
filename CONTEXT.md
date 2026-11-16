@@ -1,12 +1,15 @@
 # finfocus-action Context & Boundaries
 
+<!-- markdownlint-configure-file { "MD013": { "tables": false } } -->
+
 ## Core Architectural Identity
 
 **finfocus-action** is a **GitHub Actions integration layer** that brings cloud
 cost and sustainability insights into pull request workflows. It orchestrates
-the [finfocus CLI](https://github.com/rshade/finfocus) to analyze Pulumi
-infrastructure-as-code plans and surfaces actionable cost estimates,
-recommendations, and environmental impact metrics directly in PR comments.
+the [finfocus CLI](https://github.com/rshade/finfocus) to analyze Pulumi plans
+(and, through finfocus, Pulumi or Terraform state) and surfaces cost estimates,
+recommendations, budget status, and environmental impact metrics in PR
+comments, step outputs, and report artifacts.
 
 **Key Principle**: This action is a **thin orchestration wrapper**—it handles
 GitHub integration (PR comments, guardrails, workflow outputs) while delegating
@@ -17,35 +20,66 @@ all cost analysis, pricing logic, and domain expertise to the finfocus CLI.
 ### What This Action Does NOT Do
 
 | Boundary | Rationale |
-|----------|-----------|
+| --- | --- |
 | ❌ **Does NOT call cloud provider APIs directly** | Delegates to finfocus CLI; avoids credential management complexity |
-| ❌ **Does NOT implement cost calculation logic** | finfocus CLI owns all pricing models; action just formats output |
+| ❌ **Does NOT implement cost calculation logic** | finfocus CLI owns all pricing models; action only does arithmetic on finfocus numbers (see below) |
 | ❌ **Does NOT manage infrastructure** | Purely analytical; reads plans but never creates/modifies/deletes resources |
-| ❌ **Does NOT persist state between runs** | Stateless except for tool caching; no databases, no storage |
-| ❌ **Does NOT run Pulumi commands** | Expects pre-generated plan.json from upstream workflow steps |
-| ❌ **Does NOT enforce budgets** | Writes budget config; finfocus CLI enforces; action reports status |
-| ❌ **Does NOT calculate carbon footprint** | Reads `carbon_footprint` from finfocus; displays equivalents |
-| ❌ **Does NOT approve/reject PRs** | Posts comments; guardrails fail workflow if thresholds exceeded |
+| ❌ **Does NOT persist state between runs** | No databases or storage; runner-local files only (see exceptions below) |
+| ❌ **Does NOT run Pulumi commands** | Expects pre-generated plan.json from upstream workflow steps; analyzer mode only exports `PULUMI_POLICY_PACK` |
+| ❌ **Does NOT enforce budgets itself** | Writes budget config; finfocus decides a breach via `--exit-on-threshold`; action reports status |
+| ❌ **Does NOT calculate carbon footprint** | Reads `carbon_footprint` from finfocus; sums, normalizes units, displays equivalents |
+| ❌ **Does NOT approve/reject PRs** | Posts comments; guardrails fail the workflow if thresholds are exceeded |
 | ❌ **Does NOT query billing APIs** | finfocus plugins handle cloud billing authentication |
 | ❌ **Does NOT provide custom pricing engines** | Extensibility via finfocus plugins, not action code |
 
+### Arithmetic vs. Cost Logic
+
+The "no cost calculation" boundary is about **where numbers come from**, not
+whether the action may add them up. Every number the action works with must
+originate in finfocus output or in a user input.
+
+| ✅ Allowed (arithmetic on finfocus output) | ❌ Not allowed (cost logic) |
+| --- | --- |
+| Summing per-resource carbon and normalizing `g`/`kg`/`t` units | Emission factors or grid-intensity models |
+| Ratios such as carbon intensity or budget percent used | Unit prices, rate tables, or SKU lookups |
+| Comparing a finfocus diff against a user threshold (`fail-on-cost-increase`) | Pricing a resource finfocus left unpriced |
+| Grouping, sorting, filtering, and capping comment rows | Replacing the finfocus projected total with a recomputed one |
+| Projecting a total with a growth rate (`include-forecast`) | Inventing history to derive a growth rate |
+
+The projected monthly total shown and exported is always the CLI total, even
+when `min-cost-threshold`, `max-resources-displayed`, or `show-only-changes`
+hide rows from the comment.
+
 ### What This Action DOES
 
-- **Install & Cache**: Downloads finfocus binary from GitHub releases
-- **Configure**: Writes budget YAML config when budget inputs provided
-- **Orchestrate**: Invokes `finfocus cost projected`, `recommendations`,
-  `actual` commands
-- **Format**: Generates markdown tables, TUI-style budget boxes, progress bars
+- **Install & Cache**: Downloads the finfocus binary from GitHub releases and
+  caches it with `@actions/tool-cache`; installs registry or
+  `github.com/owner/repo` plugins through `finfocus plugin install`
+- **Configure**: Merges `cost.budgets.global` and Jev `scoring` keys into
+  finfocus `config.hujson` (`$FINFOCUS_HOME`, else `$PULUMI_HOME/finfocus`,
+  else `~/.finfocus`), preserving every other key, including
+  `installed_plugins`
+- **Orchestrate**: Invokes `finfocus cost projected`, `cost recommendations`
+  (plus `dismiss`/`snooze`), `cost actual`, `cost estimate`, `cost cluster`,
+  and `overview --state-only`
+- **Format**: Generates markdown tables, TUI-style budget boxes, progress bars,
+  and plugin decline notes
 - **Comment**: Upserts PR comments with cost analysis (via GitHub API)
-- **Guard**: Fails workflow if cost/carbon thresholds exceeded
-- **Export**: Provides action outputs for downstream workflow consumption
+- **Guard**: Fails the workflow when `fail-on-cost-increase`,
+  `fail-on-budget-breach`, or `fail-on-carbon-increase` is exceeded
+- **Export**: Sets step outputs and, with `generate-artifact`, writes a JSON or
+  NDJSON report that the composite step uploads with `actions/upload-artifact`
 
 ## Data Source of Truth
 
 **Upstream (Inputs)**:
 
 - **Pulumi Plan JSON**: Generated by upstream workflow (`pulumi preview --json`)
-- **Pulumi State JSON**: Optional, for state-based cost estimation
+- **Pulumi or Terraform State**: Optional, for `cost actual`, state-only
+  overview, or `--terraform-state` projections
+- **Estimate Spec**: Optional single-resource what-if input for `cost estimate`
+- **Kubeconfig**: Optional, read by the finfocus kubernetes plugin for
+  `cost cluster`
 - **Action Inputs**: Configuration from workflow YAML (thresholds, features,
   plugins)
 
@@ -54,13 +88,15 @@ all cost analysis, pricing logic, and domain expertise to the finfocus CLI.
 - **Cloud Pricing**: finfocus plugins (aws-public, gcp-plugin, etc.)
 - **Billing Data**: Cloud provider APIs (via finfocus plugin credentials)
 - **Carbon Intensity**: Sustainability metrics from finfocus resource analysis
+- **Recommendation Scores**: The Jev scoring plugin, when enabled
 
 **Outputs**:
 
 - **PR Comments**: Markdown-formatted cost analysis in GitHub
 - **Action Outputs**: Structured data for downstream jobs (cost, savings,
-  carbon)
-- **Workflow Failure**: Exit code 1 if guardrails triggered
+  carbon, budget, cluster, forecast)
+- **Report Artifact**: JSON or NDJSON report, uploaded by the composite step
+- **Workflow Failure**: `core.setFailed` when a guardrail is exceeded
 
 ## Interaction Model
 
@@ -69,8 +105,8 @@ all cost analysis, pricing logic, and domain expertise to the finfocus CLI.
 ```text
 GitHub Workflow (YAML)
   └─> finfocus-action (this project)
-       ├─ Inputs: plan.json path, thresholds, features
-       └─ Environment: GITHUB_TOKEN, plugin credentials
+       ├─ Inputs: plan.json path, state paths, thresholds, features
+       └─ Environment: GITHUB_TOKEN, plugin credentials, TYPESAFE_API_KEY (Jev)
 ```
 
 ### Outbound Interfaces
@@ -78,8 +114,12 @@ GitHub Workflow (YAML)
 ```text
 finfocus-action
   ├─> finfocus CLI (local subprocess)
-  │    ├─ Commands: cost projected, recommendations, actual
-  │    └─ Plugins: aws-public, gcp-plugin, vantage, kubecost
+  │    ├─ Commands: cost projected | recommendations | actual | estimate
+  │    │            | cluster, overview --state-only, plugin install | list
+  │    └─ Plugins: aws-public, gcp-plugin, kubernetes, jev, vantage, kubecost
+  │
+  ├─> GitHub Releases API (unauthenticated fetch)
+  │    └─ Resolve finfocus-version: latest
   │
   ├─> GitHub API (via @actions/github)
   │    ├─ Read: PR number, existing comments
@@ -88,6 +128,7 @@ finfocus-action
   └─> GitHub Actions Runtime (via @actions/core)
        ├─ Inputs: Read workflow configuration
        ├─ Outputs: Export cost metrics for downstream
+       ├─ Artifacts: Composite step runs actions/upload-artifact
        └─ Failures: Set exit code for guardrails
 ```
 
@@ -106,7 +147,8 @@ Install finfocus → Setup Pulumi policy pack → Skip PR comment
 ```
 
 Analyzer mode integrates finfocus as a Pulumi policy analyzer, running during
-`pulumi preview` instead of as a separate step.
+`pulumi preview` instead of as a separate step. The action writes the policy
+pack and exports `PULUMI_POLICY_PACK`; the user's own `pulumi preview` runs it.
 
 ## Verification: Does a Feature Violate Boundaries?
 
@@ -120,12 +162,17 @@ Use this checklist to evaluate new feature proposals:
   integration)
 - ✅ Installs new finfocus plugin (plugin owns logic, action orchestrates)
 - ✅ Writes config file for finfocus to read (config delegation pattern)
+- ✅ Reads PR labels or collaborator permissions to decide whether a guardrail
+  fails the job (GitHub integration; read-only; re-checked every run)
+- ✅ Aggregates or compares numbers finfocus already reported (see Arithmetic
+  vs. Cost Logic)
 
 ### 🚫 Violates Boundaries - Consider Alternatives
 
 | Proposed Feature | Violation | Alternative |
-|------------------|-----------|-------------|
+| --- | --- | --- |
 | "Calculate custom pricing rules in TypeScript" | ❌ Implements cost logic in action | ✅ Create finfocus plugin |
+| "Price unpriced resources with a fallback rate table" | ❌ Implements cost logic in action | ✅ Report `unpriced-resource-count`; add pricing to a plugin |
 | "Query AWS Cost Explorer directly" | ❌ Calls cloud APIs | ✅ Use finfocus plugin with credentials |
 | "Store historical cost data in S3" | ❌ Persists state | ✅ Downstream workflow job stores artifacts |
 | "Run `pulumi preview` automatically" | ❌ Manages infrastructure | ✅ Document upstream workflow step |
@@ -140,7 +187,7 @@ Extensibility **should** happen through:
    recommendations
 2. **Action Inputs** - Configure existing features without code changes
 3. **Formatter Functions** - Customize PR comment appearance (stay in
-   formatter.ts)
+   formatter.ts and display.ts)
 4. **Workflow Composition** - Chain actions for advanced pipelines
 
 Extensibility **should NOT** require:
@@ -149,21 +196,12 @@ Extensibility **should NOT** require:
 - Modifying analyze.ts to add pricing intelligence
 - Implementing cloud provider SDKs in the action codebase
 
-## Market Context & Differentiation
+## Differentiation
 
-**Similar Tools**:
-
-- [Infracost](https://github.com/infracost/actions) - Terraform-focused,
-  1100+ resources, 2-second estimates
-- [Cloudcostify/pulumi-cost-estimation-cli](https://github.com/Cloudcostify/pulumi-cost-estimation-cli) -
-  Pulumi CLI competitor
-
-**finfocus-action Differentiation**:
-
-- **Pulumi-Native**: First-class Pulumi support (vs Terraform-first tools)
+- **Pulumi-Native**: First-class Pulumi support
 - **Analyzer Mode**: Integrates as Pulumi policy pack for inline enforcement
 - **Sustainability**: Carbon footprint + environmental equivalents
-- **Budget Tracking**: Month-to-date awareness, threshold alerts
+- **Budget Tracking**: Budget status and threshold alerts in the PR comment
 - **Actual Costs**: Compare projected vs real spending via state/billing APIs
 - **Plugin Ecosystem**: Extensible via finfocus plugins (not hardcoded
   providers)
@@ -184,7 +222,9 @@ Extensibility **should NOT** require:
 **Trade-offs**:
 
 - Requires binary download step (mitigated by caching)
-- Two release streams to coordinate (documented in ROADMAP.md)
+- Two release streams to coordinate. The contract job in
+  `.github/workflows/test.yml` runs `scripts/contract.sh` and the built action
+  against real finfocus releases to catch CLI drift
 
 ### Why No State Persistence?
 
@@ -193,21 +233,28 @@ durable systems:
 
 - **Historical Data**: Store in S3, BigQuery, or FinOps platforms (via
   downstream jobs)
-- **Budget Tracking**: Read from finfocus config, let CLI enforce
+- **Budget Tracking**: Write finfocus config each run, let the CLI enforce
 - **Trend Analysis**: Fetch via `cost actual` from billing APIs (no local DB)
 
-**Exception**: Tool caching (`@actions/tool-cache`) for performance, not
-semantic state.
+**Exceptions** (runner-local, not semantic state):
+
+- Tool caching (`@actions/tool-cache`) for performance
+- finfocus `config.hujson` and plugins under the finfocus home, plus the
+  analyzer policy pack. On GitHub-hosted runners these vanish with the job; on
+  self-hosted runners they survive between jobs, so the action must never rely
+  on a value left by an earlier run
 
 ## Version Compatibility
 
-| finfocus-action | Requires finfocus CLI | Key Compatibility Notes |
-|-----------------|----------------------|-------------------------|
+| finfocus-action | finfocus CLI | Key Compatibility Notes |
+| --- | --- | --- |
 | v1.x | v0.1.3+ | Sustainability metrics, recommendations, actual costs |
-| v2.x (future) | v0.3.0+ (planned) | Budget health, FOCUS export, time-series forecasting |
+| v2.x | v0.4.0+ (contract-tested on v0.4.0, v0.4.3, v0.5.1) | estimate, cluster, Jev, dismissals, Terraform state, state-only overview, `config.hujson` budgets |
 
-When finfocus CLI adds breaking changes, action should gracefully degrade or
-version-gate features.
+Exit-code budget checks need finfocus v0.2.5+; older versions fall back to
+JSON parsing. finfocus v0.4.0 removed `budget status`, so budget health and
+scoped budgets are no longer available. When finfocus CLI adds breaking
+changes, the action should gracefully degrade or version-gate features.
 
 ## Summary
 

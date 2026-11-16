@@ -10,133 +10,38 @@ GitHub Pull Request comments. It wraps the
 [finfocus](https://github.com/rshade/finfocus) CLI to bring FinOps and GreenOps
 practices into the PR workflow.
 
-## Completed Work
+Shipped releases: v1.1.0 and v1.2.x (2026-Q1), v2.0.0 and v2.1.0 (2026-Q4).
+The contract job verifies the action against finfocus v0.4.0, v0.4.3, and
+v0.5.1.
 
-### v1.0.0 - Foundation (January 2026)
+## Immediate Focus
 
-Initial release with core functionality:
+- [ ] #139 Let a PR label bypass the fail-on-* gates, with a recorded marker [L]
 
-- [x] #1 - GitHub Action scaffolding with TypeScript
-- [x] Cross-platform binary installation (linux, macos, windows; amd64, arm64)
-- [x] PR commenting engine with sticky comments (upsert behavior)
-- [x] Basic cost guardrails (`fail-on-cost-increase` threshold)
-- [x] Pulumi Analyzer integration mode (`analyzer-mode: true`)
-- [x] Plugin installation support (`install-plugins` input)
-- [x] Provider breakdown in PR comments
+  The action is the only place a cost, budget, or carbon gate is actually
+  enforced, so a sanctioned bypass belongs here rather than in the finfocus CLI
+  (rshade/finfocus#365 was closed for that reason). A PR label is applied by
+  someone with triage or write access, which is a different permission from
+  editing the workflow, and it is re-checked on every run. This delivers the
+  "budget override mechanism via PR labels" deliverable from the original
+  v1.2.0 plan.
 
-### v1.1.0 - Enhanced Analysis (January 2026)
-
-- [x] #15 - Cost optimization recommendations in PR comments
-- [x] #16 - Historical cost tracking with `finfocus cost actual`
-- [x] #17 - Sustainability/carbon footprint metrics (GreenOps)
-- [x] #18 - Budget thresholds and cost governance controls
-- [x] Carbon guardrails (`fail-on-carbon-increase` threshold)
-- [x] Environmental impact equivalents (trees, miles, electricity days)
-- [x] Resource-level sustainability breakdown
-- [x] TUI-style budget display with Unicode box-drawing characters
-
-## Current Focus
-
-### v1.2.0 - Cost Governance & Filtering
-
-Focus: Budget controls, filtering, and better cost breakdowns.
-
-| Issue | Title | Status | Priority |
-|-------|-------|--------|----------|
-| #20 | Resource filtering and grouping options | Open | High |
-| #46 | Budget health suite integration (finfocus v0.2.5) | Open | High |
-| #47 | Scoped budgets (per-provider, per-type, per-tag) | Open | High |
-| #48 | Native exit codes for budget guardrails | Open | High |
-
-**Key deliverables:**
-
-- Percentage-based thresholds (`fail-on-cost-increase: 20%`)
-- Monthly budget limits with warning mode
-- Budget override mechanism via PR labels
-- Budget utilization tracking and alerts
-- Budget health scoring and forecasting (v0.2.5 unblocked)
-- Per-provider, per-type, and per-tag budget scopes (v0.2.6 unblocked)
-- Filter costs by resource type, tag, or provider
-- Group-by options (provider, service, type, tag)
-- Show-only-changes mode for focused PR comments
-- Min-cost threshold to hide low-value resources
-
-**Technical Notes:**
-
-- Budget tracking uses config delegation pattern (writes YAML, finfocus
-  enforces)
-- Filter syntax follows finfocus CLI conventions (`type=aws:ec2/*`,
-  `tag:env=prod`)
-- Grouping respects CONTEXT.md boundaries (no custom aggregation logic)
-- Budget health uses native finfocus exit codes for threshold enforcement
+  - New inputs `bypass-label` (off by default) and `bypass-min-permission`
+  - Evaluate all three gates, collect failures, then fail closed unless the
+    labeling user meets the permission bar
+  - One bypass marker rendered to the job log, step summary, PR comment, and
+    outputs (`gate-bypassed`, `gate-bypass-actor`, `gate-failures`)
+  - `behavior-on-error` failures are never bypassed
 
 ## Near-Term Vision
 
-### v1.3.0 - Interoperability & Artifacts
+No issues are planned for the next release yet. Candidates come from Future
+Vision below once they have an issue.
 
-Focus: Enable downstream integrations and data export.
+## Future Vision (Long-Term)
 
-| Issue | Title | Status | Priority |
-|-------|-------|--------|----------|
-| #21 | JSON/artifact output for downstream processing | Open | Medium |
-| #49 | NDJSON format and pagination for large reports | Open | Medium |
-
-**Key deliverables:**
-
-- Generate structured JSON reports with full metadata
-- GitHub artifact upload for cost reports
-- New outputs: `report-json`, `summary-json`, `recommendations-json`,
-  `sustainability-json`
-- Support for NDJSON streaming format (v0.2.5 unblocked)
-- Pagination for large cost reports (`max-resources` limit)
-- Workflow-consumable outputs for downstream jobs
-- Artifact retention policy configuration
-
-**Use Cases:**
-
-- Feed cost data to Grafana, Datadog, or custom dashboards
-- Store historical snapshots in S3, BigQuery, or databases
-- Trigger PagerDuty/Slack alerts based on cost changes
-- Integrate with FinOps platforms (Vantage, Kubecost, CloudHealth)
-
-**Technical Notes:**
-
-- Uses `@actions/artifact` for artifact upload
-- JSON schema includes workflow metadata (PR, commit, branch, timestamp)
-- Respects "no state persistence" boundary (artifacts are read-only outputs)
-
-### v1.4.0 - Forecasting & Trends
-
-Focus: Predictive cost intelligence.
-
-| Issue | Title | Status | Priority |
-|-------|-------|--------|----------|
-| #19 | Cost forecasting and trend analysis | Open | Medium |
-
-**Key deliverables:**
-
-- Month-over-month growth rate calculation
-- 3-month and 6-month cost projections
-- Trend direction detection (increasing/decreasing/stable)
-- Budget runway calculation (months until budget exceeded)
-- ASCII sparkline visualization in PR comments
-- Support for linear, exponential, and average growth models
-
-**Dependencies:**
-
-- Requires historical cost data (via `cost actual` or stored snapshots)
-- Future: Will benefit from finfocus-core Cost Time Machine features (#364)
-
-**Technical Notes:**
-
-- Forecasts shown as estimates with accuracy disclaimers
-- Budget runway integrates with v1.2.0 budget tracking
-- Graceful handling when insufficient historical data available
-
-## Backlog / Icebox
-
-Ideas not yet prioritized (require further research or upstream finfocus
-features):
+Ideas not yet prioritized. None has an issue yet; most need research or an
+upstream finfocus feature first.
 
 ### Developer Experience
 
@@ -154,9 +59,13 @@ features):
 - **Baseline Comparisons**: Compare against specific baseline files (not just
   preview state)
 - **Compliance Reports**: Export to PDF/CSV for audit purposes
-- **External Budget APIs**: Integration with AWS Budgets, Azure Cost Management
+- **External Budget APIs**: Integration with AWS Budgets, Azure Cost
+  Management. *Boundary: the action calls no cloud APIs; needs a finfocus
+  plugin.*
 - **Team Attribution**: Cost allocation by team/owner tags
-- **Approval Workflows**: Required cost review before merge
+- **Approval Workflows**: Required cost review before merge. *Boundary: the
+  action does not approve PRs; use a required check plus the #139 bypass
+  label.*
 
 ### Ecosystem
 
@@ -171,31 +80,112 @@ features):
 
 ### Advanced Analytics
 
-- **Anomaly Detection**: Flag unusual cost spikes or drops
-- **What-If Scenarios**: Simulate cost impact of configuration changes
-- **Resource Rightsizing**: Intelligent instance type recommendations
-- **Commitment Analysis**: RI/savings plan utilization tracking
+- **Anomaly Detection**: Flag unusual cost spikes or drops. *Boundary: needs
+  history the action may not persist; source it from `cost actual`.*
+- **What-If Scenarios**: Simulate cost impact of configuration changes.
+  Single-resource estimates shipped in #89 (`estimate-spec`); plan-based
+  `--modify` is not exposed
+- **Resource Rightsizing**: Intelligent instance type recommendations.
+  *Boundary: recommendation logic belongs in finfocus plugins; the action
+  displays it.*
+- **Commitment Analysis**: RI/savings plan utilization tracking. *Boundary:
+  billing data comes through a finfocus plugin.*
+
+## Completed Milestones
+
+### 2026-Q4
+
+- [x] #112 `docs`: README pins and what-if $0.00 baseline fixed.
+  Closed 2026-10-22. [S]
+- [x] #111 `sustainability`: carbon 1000x too high; carbon gate never fired.
+  Closed 2026-10-22. [S]
+- [x] #110 `guardrails`: fail-on-cost-increase value was ignored.
+  Closed 2026-10-22. [M]
+- [x] #109 `budget`: write budget to config.hujson so thresholds fire.
+  Closed 2026-10-22. [M]
+- [x] #88 `ci`: contract job runs action against real finfocus releases.
+  Closed 2026-10-22. [M]
+- [x] #87 `guardrails`: v0.4.0 exit codes no longer misread as breaches.
+  Closed 2026-10-22. [M]
+- [x] #86 `budget`: drop nonexistent `budget status` health and scoped budgets.
+  Closed 2026-10-22. [M]
+- [x] #49 `output`: NDJSON artifact format and display cap.
+  Closed 2026-10-22. [M]
+- [x] #21 `output`: JSON artifact output for downstream processing.
+  Closed 2026-10-22. [M]
+- [x] #19 `forecast`: cost forecasting and trend analysis.
+  Closed 2026-10-22. [M]
+- [x] #20 `display`: resource filtering and comment grouping options.
+  Closed 2026-10-05. [M]
+- [x] #89 `analyze`: expose finfocus v0.3.0-v0.4.0 features.
+  Closed 2026-10-05. [L]
+- [x] #76 `examples`: migrate finfocus-demo into examples (not planned).
+  Closed 2026-10-03. [M]
+
+### 2026-Q1
+
+- [x] #58 `ci`: release-please changelog duplication and dist timing.
+  Closed 2026-02-05. [S]
+- [x] #47 `budget`: scoped budgets per provider, type, and tag.
+  Closed 2026-02-04. [L]
+- [x] #46 `budget`: budget health suite from finfocus v0.2.5.
+  Closed 2026-02-03. [L]
+- [x] #48 `guardrails`: finfocus native exit codes for budget thresholds.
+  Closed 2026-02-03. [M]
+- [x] #50 `docs`: roadmap dependency status for v0.2.5/v0.2.6.
+  Closed 2026-02-02. [S]
+- [x] #18 `budget`: budget thresholds and cost governance controls.
+  Closed 2026-01-21. [L]
+- [x] #17 `sustainability`: carbon footprint metrics (GreenOps).
+  Closed 2026-01-14. [M]
+- [x] #16 `analyze`: historical cost tracking with `cost actual`.
+  Closed 2026-01-13. [M]
+- [x] #15 `analyze`: cost optimization recommendations in PR comments.
+  Closed 2026-01-13. [M]
+- [x] #1 `action`: finfocus-action GitHub Action scaffolding.
+  Closed 2026-01-09. [L]
+
+## Boundary Safeguards
+
+From [CONTEXT.md](./CONTEXT.md). A roadmap item that crosses one of these
+belongs in the finfocus CLI or a plugin instead:
+
+- Does NOT call cloud provider or billing APIs directly
+- Does NOT implement cost calculation or carbon footprint logic
+- Does NOT manage infrastructure or run Pulumi commands
+- Does NOT persist state between runs (tool caching only)
+- Does NOT enforce budgets itself: it writes config and finfocus enforces
+- Does NOT approve or reject PRs: guardrails fail the workflow
+- Does NOT provide custom pricing engines: extend through finfocus plugins
 
 ## Dependencies on finfocus CLI
 
 Some roadmap items depend on upstream finfocus features:
 
-| Roadmap Item | finfocus Dependency | Status |
-|--------------|---------------------|--------|
-| FOCUS format export | finfocus #382 (JSON-LD export) | Planned |
-| Advanced forecasting | finfocus #364 (Cost Time Machine) | ✅ Available v0.2.5 |
-| Per-provider budgets | finfocus #263 (Budget scoping) | ✅ Available v0.2.6 |
-| Budget health | finfocus #267 (Budget health) | ✅ Available v0.2.5 |
-| Budget exit codes | finfocus #496 (Native exit codes) | ✅ Available v0.2.5 |
-| NDJSON streaming | finfocus #488 (NDJSON output) | ✅ Available v0.2.5 |
-| OpenCost mapping | finfocus #383 (OpenCost compatibility) | Planned |
+| Roadmap Item | finfocus Issue | Status |
+| --- | --- | --- |
+| FOCUS format export | #382 JSON-LD export | Planned |
+| OpenCost mapping | #383 OpenCost | Planned |
+| Advanced forecasting | #364 Cost Time Machine | Available v0.2.5 (note 1) |
+| Budget exit codes | #496 Native exit codes | Shipped (note 2) |
+| NDJSON streaming | #488 NDJSON output | Shipped (#49) |
+| Budget health | #267 Budget health | Removed in v0.4.0 (#86) |
+| Per-provider budgets | #263 Budget scoping | Removed in v0.4.0 (#86) |
+
+Issue numbers in this table are in the finfocus repository.
+
+1. The action has no historical cost series, so its forecast growth rate is 0
+   and every model holds the current monthly total.
+2. The action passes `--exit-on-threshold --exit-code 10`; exit 10 is
+   action-owned.
 
 ## Maintenance
 
 ### Ongoing
 
-- [x] #4 - Dependency Dashboard (Renovate) - Automated dependency updates
-- Regular finfocus CLI version updates
+- Renovate Dependency Dashboard (#4) keeps dependencies current. It is excluded
+  from roadmap tracking with `roadmap/exclude`.
+- Regular finfocus CLI version updates, verified by the contract job
 - TypeScript/ESLint/Jest version compatibility
 - GitHub Actions toolkit updates
 - Security vulnerability monitoring
@@ -206,8 +196,8 @@ Some roadmap items depend on upstream finfocus features:
 
 - **Major (v2.0)**: Breaking changes to inputs/outputs or finfocus CLI
   compatibility
-- **Minor (v1.x)**: New features, backward-compatible enhancements
-- **Patch (v1.x.y)**: Bug fixes, dependency updates, documentation
+- **Minor (v2.x)**: New features, backward-compatible enhancements
+- **Patch (v2.x.y)**: Bug fixes, dependency updates, documentation
 
 **Release Cadence:**
 
@@ -221,29 +211,23 @@ Some roadmap items depend on upstream finfocus features:
 1. Check [CONTEXT.md](./CONTEXT.md) to ensure your idea fits within boundaries
 2. Open an issue describing the feature and use case
 3. Reference this roadmap section in discussions
-4. PRs welcome for items in "Current Focus" or "Near-Term Vision"
-5. For "Backlog" items, discuss prioritization in issue comments
+4. PRs welcome for items in "Immediate Focus" or "Near-Term Vision"
+5. For "Future Vision" items, discuss prioritization in issue comments
 
 ## Roadmap Sync
 
 This roadmap is synchronized with GitHub issues and labels:
 
-- `roadmap/current` - Items in "Current Focus" section
-- `roadmap/next` - Items in "Near-Term Vision" section
-- `roadmap/future` - Items in "Backlog / Icebox" section
+- `roadmap/current` - Items in "Immediate Focus"
+- `roadmap/next` - Items in "Near-Term Vision"
+- `roadmap/future` - Items in "Future Vision (Long-Term)"
+- `roadmap/exclude` - Bot-managed or operational issues kept off the roadmap
+- `effort/small`, `effort/medium`, `effort/large` - Level of effort, shown as
+  `[S]`, `[M]`, `[L]`
 
 Use `/roadmap sync` to update labels and detect discrepancies.
 
-## Market Context
-
-**Competitors:**
-
-- [Infracost](https://www.infracost.io/) (Terraform, 1100+ resources, 2-second
-  estimates)
-- [Cloudcostify](https://github.com/Cloudcostify/pulumi-cost-estimation-cli)
-  (Pulumi CLI competitor)
-
-**Our Differentiation:**
+## Differentiation
 
 - Pulumi-native with analyzer integration
 - Sustainability-first (carbon footprint as primary feature)
