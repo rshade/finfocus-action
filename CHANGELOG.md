@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.1](https://github.com/rshade/finfocus-action/compare/v2.1.0...v2.1.1) (2026-11-19)
+
+
+### Documentation
+
+* fix registry plugin names in setup examples ([#147](https://github.com/rshade/finfocus-action/issues/147)) ([f0d78ff](https://github.com/rshade/finfocus-action/commit/f0d78fff275e8b272f550d350b191f97e60c4882))
+* sync roadmap with shipped releases and refresh CONTEXT.md bound… ([#143](https://github.com/rshade/finfocus-action/issues/143)) ([c00ad83](https://github.com/rshade/finfocus-action/commit/c00ad839581f62e59fd0e91ab67621e1a5eb184e))
+* track finfocus v0.5.x catch-up issues and correct CLAUDE.md ([#154](https://github.com/rshade/finfocus-action/issues/154)) ([4d5c10a](https://github.com/rshade/finfocus-action/commit/4d5c10a046878c82f328b123d27543a8908d7df0))
+
 ## [2.1.0](https://github.com/rshade/finfocus-action/compare/v2.0.0...v2.1.0) (2026-10-22)
 
 
