@@ -149,12 +149,16 @@ main.ts
 - **Exit code support**: for budget thresholds the action runs `finfocus cost projected
   --pulumi-json <plan> --exit-on-threshold --exit-code 10`. Exit 10 is action-owned; finfocus v0.4.0
   exits 1 (`internal_error`) or 2 (`validation_error`) on failures, and the action surfaces the
-  error envelope `message` for those. The action auto-detects version and falls back to JSON parsing
-  for versions < 0.2.5.
-- **finfocus v0.5.1** is the latest stable GitHub release (published 2026-10-21). v0.5.0 was
-  published 2026-10-19. v0.4.3 was the release checked for issue #89. `scripts/contract.sh`
-  passes against the official v0.4.0, v0.4.3, and v0.5.1 binaries. The contract job's `latest`
-  matrix entry resolves to v0.5.1. Do not verify flags against the sibling finfocus checkout
+  error envelope `message` for those. `src/main.ts` always takes the exit-code path:
+  `getFinfocusVersion()` and `supportsExitCodes()` in `src/install.ts` have no callers, so nothing
+  in `src/` detects the CLI version today. Version-gated features must wire that call in first.
+- **finfocus v0.5.9** is the latest stable GitHub release (published 2026-11-19 UTC). v0.5.x
+  shipped roughly weekly from v0.5.0 (2026-10-19), so re-check `gh release list --repo
+  rshade/finfocus` instead of trusting this line. v0.4.3 was the release checked for issue #89.
+  `scripts/contract.sh` passes against the official v0.4.0, v0.4.3, and v0.5.1 binaries, and
+  the contract job's `latest` entry passed against v0.5.9 on `main` (db08af0). v0.5.0 renamed
+  the `jev` scoring plugin to `scorer` and replaced `TYPESAFE_API_KEY` with `SCORER_API_KEY`;
+  the action still writes `scoring.plugin: jev`. The contract job does not exercise scoring. Do not verify flags against the sibling finfocus checkout
   when that tree is a dirty feature branch. v0.4.3 `cost projected` JSON adds `diff` and
   `errors` under `.finfocus`. v0.5.1 adds `diff` and `profile` there. Those keys are additive.
   `--state-only` exists on `finfocus overview` only.

@@ -33,14 +33,28 @@ v0.5.1.
     outputs (`gate-bypassed`, `gate-bypass-actor`, `gate-failures`)
   - `behavior-on-error` failures are never bypassed
 
+- [ ] #148 Debug logs the Terraform state file; budget gate reads plan.json [S]
+
+  With `debug: true` the action prints the Terraform state file, which holds
+  sensitive values in plain text, to the job log. The budget gate also runs
+  `--pulumi-json` for `terraform-state` users. The shared input resolver it
+  adds is the base for #150.
+
 ## Near-Term Vision
 
-No issues are planned for the next release yet. Candidates come from Future
-Vision below once they have an issue.
+finfocus shipped v0.5.0 through v0.5.9 between 2026-10-19 and 2026-11-19.
+These issues catch the action up with it. Each needs a version gate, and none
+of the gates work until #149 wires in CLI version detection, which nothing in
+`src/` calls today.
+
+- [ ] #149 Scoring stays unscored on finfocus v0.5+ with the `scorer` plugin [M]
+- [ ] #150 Price Terraform and OpenTofu plans (`terraform-plan-json`) [M]
+- [ ] #151 Delegate `include-forecast` to `finfocus cost forecast` [M]
+- [ ] #152 Opt-in cost anomalies section via `finfocus cost anomalies` [M]
 
 ## Future Vision (Long-Term)
 
-Ideas not yet prioritized. None has an issue yet; most need research or an
+Ideas not yet prioritized. Most have no issue yet and need research or an
 upstream finfocus feature first.
 
 ### Developer Experience
@@ -80,8 +94,9 @@ upstream finfocus feature first.
 
 ### Advanced Analytics
 
-- **Anomaly Detection**: Flag unusual cost spikes or drops. *Boundary: needs
-  history the action may not persist; source it from `cost actual`.*
+- [ ] #153 Scheduled drift report to step summary and one tracking issue [L]
+- **Anomaly Detection**: Flag unusual cost spikes or drops. Tracked in #152;
+  finfocus `cost anomalies` owns the history, so the action keeps none.
 - **What-If Scenarios**: Simulate cost impact of configuration changes.
   Single-resource estimates shipped in #89 (`estimate-spec`); plan-based
   `--modify` is not exposed
@@ -95,6 +110,8 @@ upstream finfocus feature first.
 
 ### 2026-Q4
 
+- [x] #146 `docs`: README setup examples use registry plugin names.
+  Closed 2026-11-19. [S]
 - [x] #112 `docs`: README pins and what-if $0.00 baseline fixed.
   Closed 2026-10-22. [S]
 - [x] #111 `sustainability`: carbon 1000x too high; carbon gate never fired.
