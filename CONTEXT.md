@@ -85,7 +85,7 @@ hide rows from the comment.
 
 **Authoritative Data Sources (via finfocus)**:
 
-- **Cloud Pricing**: finfocus plugins (aws-public, gcp-plugin, etc.)
+- **Cloud Pricing**: finfocus plugins (aws-public, azure-public, etc.)
 - **Billing Data**: Cloud provider APIs (via finfocus plugin credentials)
 - **Carbon Intensity**: Sustainability metrics from finfocus resource analysis
 - **Recommendation Scores**: The Jev scoring plugin, when enabled
@@ -116,7 +116,7 @@ finfocus-action
   ├─> finfocus CLI (local subprocess)
   │    ├─ Commands: cost projected | recommendations | actual | estimate
   │    │            | cluster, overview --state-only, plugin install | list
-  │    └─ Plugins: aws-public, gcp-plugin, kubernetes, jev, vantage, kubecost
+  │    └─ Plugins: aws-public, azure-public, kubernetes, scorer, vantage, opencost
   │
   ├─> GitHub Releases API (unauthenticated fetch)
   │    └─ Resolve finfocus-version: latest

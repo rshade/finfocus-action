@@ -35,7 +35,7 @@ posts a comment to the PR.
     include-sustainability: true # Enable carbon footprint metrics
     fail-on-cost-increase: '100USD' # Fail if cost increase > $100
     fail-on-carbon-increase: '10kg' # Fail if carbon increase > 10kg
-    install-plugins: aws-plugin
+    install-plugins: aws-public
 ```
 
 ### Configuration with Actual Costs

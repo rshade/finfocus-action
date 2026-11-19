@@ -15,7 +15,7 @@ inputs:
     required: false
     default: 'latest'
   install-plugins:
-    description: 'Comma-separated plugins to install. Registry names (aws-public, kubernetes, jev, kubecost, and name@version) are checked against `finfocus plugin list --available`. github.com/owner/repo specifiers are also accepted. kubernetes feeds cost cluster. jev scores recommendations and needs TYPESAFE_API_KEY.'
+    description: 'Comma-separated plugins to install. Registry names (aws-public, kubernetes, scorer, opencost) are checked against `finfocus plugin list --available`. Use name@version to pin a registry plugin. github.com/owner/repo specifiers are also accepted. kubernetes feeds cluster costs.'
     required: false
     default: ''
   behavior-on-error:
